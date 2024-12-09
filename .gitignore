@@ -1,1 +1,4 @@
 cyf/project/server/conf/conf.ini
+# 密钥
+cyf/project/server/conf/key.*
+cyf/project/client/conf/key.*
