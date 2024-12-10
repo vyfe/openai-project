@@ -1,5 +1,6 @@
 import configparser
 import json
+import logging
 import os.path
 import random
 import sqlitelog
@@ -16,6 +17,8 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini')
 url_list = conf['api']['api_host'].split(',')
+user_list = {li for li in conf['common']['users'].split(',')}
+model_list = {model_name for model_name in conf['model']}
 url = url_list[random.randint(0, len(url_list) - 1)]
 client=OpenAI(
     api_key=conf['api']['api_key'],
@@ -30,8 +33,7 @@ def allowed_file(filename):
 def health_check():
     print(request.values)
     try:
-        data = request.get_json()
-        return json.dumps(data), 200
+        return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
         return 'Not OK', 500
 
@@ -63,7 +65,7 @@ def upload():
         filename = secure_filename(file.filename)
         file.save(os.path.join(conf["common"]["upload_dir"], filename))
         # 加密混淆或定期清理？
-        return f'文件服务器地址/{filename}', 200
+        return f'/dont_guess/upload/{filename}', 200
     else:
         # 上传文件并返回url的接口
         return "文件格式问题", 500
@@ -76,25 +78,29 @@ def dialog():
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
         user = request.values.get('user')
-        # 用户白名单先入配置
-        print(f"user:c{user}")
-        # TODO 需要客户端支持多轮对话
+        model = request.values.get('model')
+        # 用户白名单、model名根据配置检查
+        logging.info(f"user:{user}， model: {model}")
+        if user not in user_list or model not in model_list:
+            return "not supported user or model", 500
+        # TODO 客户端支持多轮对话
         dialogs = request.values.get('dialog')
         dialogvo=[ChatCompletionUserMessageParam(role="user", content=dialogs)]
         # 功能测试
         result = client.chat.completions.create(
-            model='gpt-3.5-turbo',
+            model=model,
             messages=dialogvo,
             max_completion_tokens=1000
         )
-        # TODO 省资源，需要截断会话?
+        # TODO 需要统计token数（使用tiktoken），并截断的会话?
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
-        sqlitelog.set_log(user, tokens, json.dumps(result.to_dict()))
-        # 5 dialog组装：问题+答案
-        sqlitelog.set_dialog(user, dialogs,
+        print(result)
+        sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
+        # 5 dialog组装：上下文+本次问题，返回答案
+        sqlitelog.set_dialog(user, dialogs, model,
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
-        return result.choices[0].message.content, 200
+        return result.choices[0].message.to_dict(), 200
     except json.JSONDecodeError:
         return 'Not OK', 500
 
@@ -104,4 +110,4 @@ if __name__ == '__main__':
     # 上传文件夹初始化
     # if not os.path.exists(conf["common"]["upload_dir"]):
     #     os.makedirs(conf["common"]["upload_dir"])
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=39997)

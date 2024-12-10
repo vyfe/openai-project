@@ -13,7 +13,7 @@ _location = os.path.dirname(__file__)
 
 import client_support
 
-_bgcolor = '#dcdad5'
+_bgcolor = 'gray82'
 _fgcolor = 'black'
 _tabfg1 = 'black'
 _tabfg2 = 'white'
@@ -26,10 +26,10 @@ def _style_code():
     global _style_code_ran
     if _style_code_ran: return
     try: client_support.root.tk.call('source',
-                os.path.join(_location, 'themes', 'clam.tcl'))
+                os.path.join(_location, 'waldorf.tcl'))
     except: pass
     style = ttk.Style()
-    style.theme_use('clam')
+    style.theme_use('waldorf')
     style.configure('.', font = "TkDefaultFont")
     _style_code_ran = 1
 
@@ -42,12 +42,15 @@ class Toplevel1:
         top.minsize(120, 1)
         top.maxsize(2564, 1421)
         top.resizable(1,  1)
-        top.title("陪聊助手beta")
-        top.configure(background="#dcdad5")
-        top.configure(highlightbackground="#dcdad5")
+        top.title("陪聊助手beta V0.1")
+        top.configure(background="gray82")
+        top.configure(highlightbackground="gray82")
         top.configure(highlightcolor="black")
 
         self.top = top
+        self.user_name = tk.StringVar()
+        self.server_select = tk.StringVar()
+        self.model_select = tk.StringVar()
 
         _style_code()
         self.TSizegrip1 = ttk.Sizegrip(self.top)
@@ -74,39 +77,55 @@ class Toplevel1:
         self.TFrame1.configure(borderwidth="2")
         self.TFrame1.configure(relief="groove")
 
-        self.label1111 = ttk.Label(self.TFrame1)
-        self.label1111.place(relx=0.074, rely=0.023, height=22, width=118)
-        self.label1111.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.label1111.configure(relief="flat")
-        self.label1111.configure(text='''你的用户名''')
-        self.label1111.configure(compound='left')
-        self.label1111_tooltip = \
-        ToolTip(self.label1111, '''2222''')
+        self.userTag = ttk.Label(self.TFrame1)
+        self.userTag.place(relx=0.074, rely=0.023, height=22, width=118)
+        self.userTag.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.userTag.configure(relief="flat")
+        self.userTag.configure(text='''用户名''')
+        self.userTag.configure(compound='left')
+        self.userTag_tooltip = \
+        ToolTip(self.userTag, '''2222''')
 
-        self.label1111_1 = ttk.Label(self.TFrame1)
-        self.label1111_1.place(relx=0.074, rely=0.138, height=22, width=128)
-        self.label1111_1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.label1111_1.configure(relief="flat")
-        self.label1111_1.configure(text='''服务器地址(带端口号）''')
-        self.label1111_1.configure(compound='left')
-        self.label1111_1_tooltip = \
-        ToolTip(self.label1111_1, '''2222''')
-
-        self.TEntry2 = ttk.Entry(self.TFrame1)
-        self.TEntry2.place(relx=0.074, rely=0.069, relheight=0.053
+        self.userEntry = ttk.Entry(self.TFrame1)
+        self.userEntry.place(relx=0.074, rely=0.069, relheight=0.053
                 , relwidth=0.859)
-        self.TEntry2.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TEntry2.configure(cursor="ibeam")
+        self.userEntry.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.userEntry.configure(cursor="ibeam")
+        self.userEntry.configure(textvariable=self.user_name)
 
+        self.serverTag = ttk.Label(self.TFrame1)
+        self.serverTag.place(relx=0.074, rely=0.138, height=22, width=98)
+        self.serverTag.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.serverTag.configure(relief="flat")
+        self.serverTag.configure(text='''选择服务器''')
+        self.serverTag.configure(compound='left')
+        self.serverTag_tooltip = \
+        ToolTip(self.serverTag, '''2222''')
 
-        self.TEntry2_1 = ttk.Entry(self.TFrame1)
-        self.TEntry2_1.place(relx=0.074, rely=0.207, relheight=0.053
-                , relwidth=0.859)
-        self.TEntry2_1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TEntry2_1.configure(cursor="ibeam")
+        self.serverCombobox = ttk.Combobox(self.TFrame1)
+        self.serverCombobox.place(relx=0.074, rely=0.207, relheight=0.053
+                , relwidth=0.822)
+        self.serverCombobox.configure(font="-family {Microsoft YaHei UI} -size 7")
+        self.serverCombobox.configure(textvariable=self.server_select)
+        self.serverCombobox.configure(takefocus="")
+
+        self.modelCombobox = ttk.Combobox(self.TFrame1)
+        self.modelCombobox.place(relx=0.074, rely=0.345, relheight=0.053
+                , relwidth=0.822)
+        self.modelCombobox.configure(font="-family {Microsoft YaHei UI} -size 7")
+        self.modelCombobox.configure(textvariable=self.model_select)
+
+        self.modelTag = ttk.Label(self.TFrame1)
+        self.modelTag.place(relx=0.074, rely=0.276, height=22, width=108)
+        self.modelTag.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.modelTag.configure(relief="flat")
+        self.modelTag.configure(text='''模型''')
+        self.modelTag.configure(compound='left')
+        self.modelTag_tooltip = \
+        ToolTip(self.modelTag, '''2222''')
 
         self.TLabel2 = ttk.Label(self.TFrame1)
-        self.TLabel2.place(relx=0.074, rely=0.598, height=31, width=79)
+        self.TLabel2.place(relx=0.074, rely=0.575, height=31, width=79)
         self.TLabel2.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2.configure(relief="flat")
         self.TLabel2.configure(wraplength="70")
@@ -114,7 +133,7 @@ class Toplevel1:
         self.TLabel2.configure(compound='left')
 
         self.TLabel2_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1.place(relx=0.074, rely=0.644, height=31, width=109)
+        self.TLabel2_1.place(relx=0.074, rely=0.644, height=21, width=109)
         self.TLabel2_1.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2_1.configure(relief="flat")
         self.TLabel2_1.configure(text='''1.输入用户名和IP''')
@@ -138,6 +157,7 @@ class Toplevel1:
         self.TButton1 = ttk.Button(self.top)
         self.TButton1.place(relx=0.817, rely=0.822, height=37, width=87)
         self.TButton1.configure(text='''发送''')
+        self.TButton1.configure(command=client_support.send_chat_pre)
         self.TButton1.configure(compound='left')
         self.TButton1.configure(cursor="boat")
 
@@ -148,19 +168,20 @@ class Toplevel1:
         self.TButton2.configure(compound='left')
         self.TButton2.configure(cursor="bogosity")
 
-        self.Scrolledtext1 = ScrolledText(self.top)
-        self.Scrolledtext1.place(relx=0.283, rely=0.022, relheight=0.753
-                , relwidth=0.688)
-        self.Scrolledtext1.configure(background="#dcdad5")
-        self.Scrolledtext1.configure(font="TkTextFont")
-        self.Scrolledtext1.configure(foreground="black")
-        self.Scrolledtext1.configure(highlightbackground="#dcdad5")
-        self.Scrolledtext1.configure(highlightcolor="black")
-        self.Scrolledtext1.configure(insertbackground="black")
-        self.Scrolledtext1.configure(insertborderwidth="3")
-        self.Scrolledtext1.configure(selectbackground="#d9d9d9")
-        self.Scrolledtext1.configure(selectforeground="black")
-        self.Scrolledtext1.configure(wrap="none", state="disabled")
+        self.result_text = ScrolledText(self.top)
+        self.result_text.place(relx=0.283, rely=0.022, relheight=0.753
+                               , relwidth=0.688)
+        self.result_text.configure(background="#dcdad5")
+        self.result_text.configure(font="TkTextFont")
+        self.result_text.configure(foreground="black")
+        self.result_text.configure(highlightbackground="#dcdad5")
+        self.result_text.configure(highlightcolor="black")
+        self.result_text.configure(insertbackground="black")
+        self.result_text.configure(insertborderwidth="3")
+        self.result_text.configure(selectbackground="#d9d9d9")
+        self.result_text.configure(selectforeground="black")
+        self.result_text.configure(wrap=tk.WORD)
+
         # 输入框
         self.speakBox = tk.Text(self.top)
         self.speakBox.place(relx=0.283, rely=0.822, relheight=0.162

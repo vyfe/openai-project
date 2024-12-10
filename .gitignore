@@ -1,4 +1,4 @@
-cyf/project/server/conf/conf.ini
+/cyf/project/*/conf/conf.ini
 # 密钥
-cyf/project/server/conf/key.*
-cyf/project/client/conf/key.*
+/cyf/project/*/conf/key.*
+/cyf/project/server/log.db

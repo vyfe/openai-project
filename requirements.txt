@@ -1,5 +1,6 @@
 Flask==3.0.3
 Flask-sock==0.7.0
+requests
 openai
 peewee
 cryptography
