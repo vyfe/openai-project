@@ -10,8 +10,6 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam
 from werkzeug.utils import secure_filename
 
-from cyf.project.server.sqlitelog import set_log
-
 app = Flask(__name__)
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 conf = configparser.ConfigParser()
@@ -35,7 +33,7 @@ def health_check():
     try:
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
-        return 'Not OK', 500
+        return {"msg": "json no ok"}, 500
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
@@ -47,28 +45,28 @@ def data_check():
         else:
             return sqlitelog.message_query(request.values.get('info')), 200
     except json.JSONDecodeError:
-        return 'Not OK', 500
+        return {"msg": "json no ok"}, 500
 
 
 @app.route('/never_guess_my_usage/download',  methods=['POST'])
 def upload():
     # 检查请求中是否包含文件部分
     if 'file' not in request.files:
-        return "", 200
+        return {"msg": "no file"}, 200
     file = request.files['file']
     if file.filename == '':
-        return "", 200
+        return {"msg": "no filename"}, 200
     if file.content_length > 20 * 1024 * 1024:
-        return "文件超过20M", 500
+        return {"msg": "more than 20M"}, 500
     # 检查文件是否符合条件
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         file.save(os.path.join(conf["common"]["upload_dir"], filename))
         # 加密混淆或定期清理？
-        return f'/dont_guess/upload/{filename}', 200
+        return {"content": f'/dont_guess/upload/{filename}'}, 200
     else:
         # 上传文件并返回url的接口
-        return "文件格式问题", 500
+        return {"msg": "文件格式问题"}, 500
 
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
 def dialog():
@@ -82,10 +80,17 @@ def dialog():
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if user not in user_list or model not in model_list:
-            return "not supported user or model", 500
+            return {"msg": "not supported user or model"}, 500
         # TODO 客户端支持多轮对话
         dialogs = request.values.get('dialog')
-        dialogvo=[ChatCompletionUserMessageParam(role="user", content=dialogs)]
+        # 对话模式 single=单条 multi=上下文
+        dialog_mode = request.values.get('dialog_mode', 'single')
+        if dialog_mode == 'single':
+            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+        elif dialog_mode == 'multi':
+            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+        else:
+            return {"msg": "not supported dialog_mode"}, 500
         # 功能测试
         result = client.chat.completions.create(
             model=model,
@@ -102,7 +107,7 @@ def dialog():
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
         return result.choices[0].message.to_dict(), 200
     except json.JSONDecodeError:
-        return 'Not OK', 500
+        return {"msg": "api return json not ok"}, 500
 
 if __name__ == '__main__':
     # 若不存在sqlite3 db，初始化

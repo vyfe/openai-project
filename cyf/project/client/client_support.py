@@ -72,13 +72,13 @@ def upload_file():
     with open(file_path, 'rb') as file:
         files = {'file': file}
         response = requests.post( f"http://{host}{upload_prefix}", files=files)
-    if response.status_code == 200:
-        url_suffix = response.text
-        url = f"http://{host}{url_suffix}"
-    else:
+    result_json = json.loads(response.text)
+    if "msg" in result_json:
         print(response)
-        show_err("上传失败，爬爬爬")
+        show_err("上传失败，爬爬爬:" + result_json["msg"])
         return
+    url_suffix = result_json["content"]
+    url = f"http://{host}{url_suffix}"
     _w1.speakBox.configure(state="normal")
     # 输入框头部插入url
     _w1.speakBox.insert("1.0", url + " ")
@@ -86,6 +86,7 @@ def upload_file():
 
 @catch_exceptions
 def send_chat_pre():
+    # after用于单独执行请求返回的渲染
     global root
     send_content = _w1.speakBox.get("1.0", END)
     _w1.result_text.insert(END, "提问：" + send_content + "\n")
@@ -100,6 +101,7 @@ def send_chat(send):
     # dialogs历史上下文，加上本次的user chat
     send = _w1.speakBox.get("1.0", END)
     dialogs.append(ChatCompletionUserMessageParam(role="user", content=send))
+    # host处理
     host = _w1.server_select.get().split("|")[1]
     data = {
         "user": _w1.user_name.get(),
@@ -109,7 +111,11 @@ def send_chat(send):
     response = requests.post(f"http://{host}{chat_suf}", data)
     print(response)
     # 结果序列化存到dialog中
-    dialogs.append(json.loads(response.text))
+    result_json = json.loads(response.text)
+    if "msg" in result_json:
+        show_err(result_json["msg"])
+        return
+    dialogs.append(result_json)
     _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
     return
 
