@@ -7,11 +7,11 @@
 import configparser
 import functools
 import json
-import logging
+import os
 import sys
 import tkinter as tk
 import traceback
-from time import sleep
+import webbrowser
 from tkinter import filedialog, messagebox
 from tkinter.constants import *
 
@@ -20,18 +20,31 @@ from openai.types.chat import ChatCompletionUserMessageParam
 
 from cyf.project.client import client
 
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 _debug = True # False to eliminate debug printing from callback functions.
 conf = configparser.ConfigParser()
-conf.read('conf/conf.ini')
+# 针对打包文件获取路径
+conf.read(resource_path('conf/conf.ini'), encoding="UTF-8")
 upload_prefix = conf["common"]["upload_pre"]
 chat_suf = conf["common"]["chat_suf"]
 model_list = [model_name for model_name in conf['model']]
 server_list = [server_name + "|" + conf['server'][server_name] for server_name in conf['server']]
 # 待上传文件地址
 file_path = ""
+# dialog缓存
+dialog_new = True
 # 暂存服务端回传的会话dict，用于构造对话dialog
 dialogs = []
-
 
 
 def main(*args):
@@ -46,6 +59,8 @@ def main(*args):
     # 下拉框初始化
     _w1.serverCombobox.configure(values=server_list)
     _w1.modelCombobox.configure(values=model_list)
+    _w1.serverCombobox.current(0)
+    _w1.modelCombobox.current(0)
     root.mainloop()
 
 def catch_exceptions(func):
@@ -67,7 +82,7 @@ def upload_file():
         return
     print(f"已选择文件: {file_path}")
     _w1.speakBox.configure(state="disabled")
-    host = _w1.server_select.get()
+    host = _w1.server_select.get().split("|")[1]
     # api执行上传，
     with open(file_path, 'rb') as file:
         files = {'file': file}
@@ -81,7 +96,10 @@ def upload_file():
     url = f"http://{host}{url_suffix}"
     _w1.speakBox.configure(state="normal")
     # 输入框头部插入url
-    _w1.speakBox.insert("1.0", url + " ")
+    _w1.speakBox.insert("1.0", url, "file_url")
+    # 超链接
+    _w1.speakBox.tag_bind('link', '<Button-1>', lambda evt: webbrowser.open(url))
+    _w1.speakBox.insert(END, " ")
     messagebox.showinfo("ojbk", f"您的文件已上传:{file_path}, url:{url}, 注意保密哦")
 
 @catch_exceptions
@@ -95,7 +113,7 @@ def send_chat_pre():
 @catch_exceptions
 def send_chat(send):
     # 接口内容组织&请求&返回
-    global _w1, host
+    global _w1, host, dialog_new
     print(f"model: {_w1.model_select.get()}, server:{_w1.server_select.get()}, user:{_w1.user_name.get()}")
     print(f"send chat content: {send}")
     # dialogs历史上下文，加上本次的user chat
@@ -106,18 +124,36 @@ def send_chat(send):
     data = {
         "user": _w1.user_name.get(),
         "model": _w1.model_select.get(),
-        "dialog": send
     }
+    if not dialog_new:
+        data["dialog_mode"] = "multi"
+        data["dialog"] = json.dumps(dialogs)
+    else:
+        dialog_new = False
+        data["dialog"] = send
     response = requests.post(f"http://{host}{chat_suf}", data)
     print(response)
-    # 结果序列化存到dialog中
     result_json = json.loads(response.text)
+    # result_json = {"role": "assistant", "content": "mock数据"}
     if "msg" in result_json:
         show_err(result_json["msg"])
         return
+    # 结果序列化存到dialog中
     dialogs.append(result_json)
     _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
     return
+
+@catch_exceptions
+def refresh():
+    global _w1, dialogs
+    _w1.result_text.delete("1.0", END)
+    dialogs = []
+    return
+
+@catch_exceptions
+def get_dialog_his():
+    global _w1, dialogs
+    messagebox.showinfo("晚点支持")
 
 def show_err(user_err: str):
     messagebox.showerror("有问题", f"报了个错: {user_err}")

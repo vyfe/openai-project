@@ -26,7 +26,7 @@ def _style_code():
     global _style_code_ran
     if _style_code_ran: return
     try: client_support.root.tk.call('source',
-                os.path.join(_location, 'waldorf.tcl'))
+                client_support.resource_path('waldorf.tcl'))
     except: pass
     style = ttk.Style()
     style.theme_use('waldorf')
@@ -38,11 +38,11 @@ class Toplevel1:
         '''This class configures and populates the toplevel window.
            top is the toplevel containing window.'''
 
-        top.geometry("600x450+980+330")
+        top.geometry("1000x450+980+330")
         top.minsize(120, 1)
         top.maxsize(2564, 1421)
         top.resizable(1,  1)
-        top.title("陪聊助手beta V0.1")
+        top.title("陪聊助手beta V0.1.1")
         top.configure(background="gray82")
         top.configure(highlightbackground="gray82")
         top.configure(highlightcolor="black")
@@ -63,6 +63,7 @@ class Toplevel1:
         self.TLabel1.configure(text='''请输入发送内容''')
         self.TLabel1.configure(compound='left')
 
+        # 分割线1
         self.TSeparator1 = ttk.Separator(self.top)
         self.TSeparator1.place(relx=0.267, rely=0.0,  relheight=1.022)
         self.TSeparator1.configure(orient="vertical")
@@ -81,7 +82,7 @@ class Toplevel1:
         self.userTag.place(relx=0.074, rely=0.023, height=22, width=118)
         self.userTag.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.userTag.configure(relief="flat")
-        self.userTag.configure(text='''用户名''')
+        self.userTag.configure(text='''用户名：''')
         self.userTag.configure(compound='left')
         self.userTag_tooltip = \
         ToolTip(self.userTag, '''2222''')
@@ -97,7 +98,7 @@ class Toplevel1:
         self.serverTag.place(relx=0.074, rely=0.138, height=22, width=98)
         self.serverTag.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.serverTag.configure(relief="flat")
-        self.serverTag.configure(text='''选择服务器''')
+        self.serverTag.configure(text='''选择服务器：''')
         self.serverTag.configure(compound='left')
         self.serverTag_tooltip = \
         ToolTip(self.serverTag, '''2222''')
@@ -105,24 +106,24 @@ class Toplevel1:
         self.serverCombobox = ttk.Combobox(self.TFrame1)
         self.serverCombobox.place(relx=0.074, rely=0.207, relheight=0.053
                 , relwidth=0.822)
-        self.serverCombobox.configure(font="-family {Microsoft YaHei UI} -size 7")
+        self.serverCombobox.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.serverCombobox.configure(textvariable=self.server_select)
         self.serverCombobox.configure(takefocus="")
 
         self.modelCombobox = ttk.Combobox(self.TFrame1)
         self.modelCombobox.place(relx=0.074, rely=0.345, relheight=0.053
                 , relwidth=0.822)
-        self.modelCombobox.configure(font="-family {Microsoft YaHei UI} -size 7")
+        self.modelCombobox.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.modelCombobox.configure(textvariable=self.model_select)
 
         self.modelTag = ttk.Label(self.TFrame1)
         self.modelTag.place(relx=0.074, rely=0.276, height=22, width=108)
         self.modelTag.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.modelTag.configure(relief="flat")
-        self.modelTag.configure(text='''模型''')
+        self.modelTag.configure(text='''选择模型：''')
         self.modelTag.configure(compound='left')
         self.modelTag_tooltip = \
-        ToolTip(self.modelTag, '''2222''')
+        ToolTip(self.modelTag, '''默认使用gpt4o-mini''')
 
         self.TLabel2 = ttk.Label(self.TFrame1)
         self.TLabel2.place(relx=0.074, rely=0.575, height=31, width=79)
@@ -133,33 +134,48 @@ class Toplevel1:
         self.TLabel2.configure(compound='left')
 
         self.TLabel2_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1.place(relx=0.074, rely=0.644, height=21, width=109)
+        self.TLabel2_1.place(relx=0.074, rely=0.644, height=21, width=169)
         self.TLabel2_1.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2_1.configure(relief="flat")
-        self.TLabel2_1.configure(text='''1.输入用户名和IP''')
+        self.TLabel2_1.configure(text='''1.输入用户名,选择服务器与模型''')
         self.TLabel2_1.configure(compound='left')
 
         self.TLabel2_1_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1_1.place(relx=0.074, rely=0.69, height=31, width=109)
+        self.TLabel2_1_1.place(relx=0.074, rely=0.69, height=31, width=169)
         self.TLabel2_1_1.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2_1_1.configure(relief="flat")
-        self.TLabel2_1_1.configure(text='''2.右侧输入，点发送''')
+        self.TLabel2_1_1.configure(text='''2.右侧输入后，点发送''')
         self.TLabel2_1_1.configure(compound='left')
 
         self.TLabel2_1_1_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1_1_1.place(relx=0.074, rely=0.759, height=91, width=119)
+        self.TLabel2_1_1_1.place(relx=0.074, rely=0.759, height=91, width=169)
         self.TLabel2_1_1_1.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2_1_1_1.configure(relief="flat")
-        self.TLabel2_1_1_1.configure(wraplength="110")
+        self.TLabel2_1_1_1.configure(wraplength="169")
         self.TLabel2_1_1_1.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送''')
         self.TLabel2_1_1_1.configure(compound='left')
 
+        # 右下角按钮
         self.TButton1 = ttk.Button(self.top)
         self.TButton1.place(relx=0.817, rely=0.822, height=37, width=87)
         self.TButton1.configure(text='''发送''')
         self.TButton1.configure(command=client_support.send_chat_pre)
         self.TButton1.configure(compound='left')
         self.TButton1.configure(cursor="boat")
+
+        self.TButton3 = ttk.Button(self.top)
+        self.TButton3.place(relx=0.908, rely=0.822, height=37, width=87)
+        self.TButton3.configure(text='''新建对话''')
+        self.TButton3.configure(command=client_support.refresh)
+        self.TButton3.configure(compound='left')
+        self.TButton3.configure(cursor="clock")
+
+        self.TButton4 = ttk.Button(self.top)
+        self.TButton4.place(relx=0.908, rely=0.911, height=37, width=87)
+        self.TButton4.configure(text='''刷新对话历史''')
+        self.TButton4.configure(command=client_support.get_dialog_his)
+        self.TButton4.configure(compound='left')
+        self.TButton4.configure(cursor="man")
 
         self.TButton2 = ttk.Button(self.top)
         self.TButton2.place(relx=0.817, rely=0.911, height=37, width=87)

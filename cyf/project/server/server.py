@@ -3,6 +3,8 @@ import json
 import logging
 import os.path
 import random
+import time
+
 import sqlitelog
 
 from flask import Flask, request
@@ -60,10 +62,13 @@ def upload():
         return {"msg": "more than 20M"}, 500
     # 检查文件是否符合条件
     if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file.save(os.path.join(conf["common"]["upload_dir"], filename))
+        filename = str(time.time()) + "-" + secure_filename(file.filename)
+        file_fullname = os.path.join(conf["common"]["upload_dir"], filename)
+        file.save(file_fullname)
+        os.chmod(file_fullname, 0o755)
+        # file.save(filename)
         # 加密混淆或定期清理？
-        return {"content": f'/dont_guess/upload/{filename}'}, 200
+        return {"content": f':4567/download/{filename}'}, 200
     else:
         # 上传文件并返回url的接口
         return {"msg": "文件格式问题"}, 500
@@ -88,14 +93,14 @@ def dialog():
         if dialog_mode == 'single':
             dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
         elif dialog_mode == 'multi':
-            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+            dialogvo = json.loads(dialogs)
         else:
             return {"msg": "not supported dialog_mode"}, 500
         # 功能测试
         result = client.chat.completions.create(
             model=model,
             messages=dialogvo,
-            max_completion_tokens=1000
+            max_completion_tokens=8192
         )
         # TODO 需要统计token数（使用tiktoken），并截断的会话?
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
@@ -105,7 +110,8 @@ def dialog():
         # 5 dialog组装：上下文+本次问题，返回答案
         sqlitelog.set_dialog(user, dialogs, model,
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
-        return result.choices[0].message.to_dict(), 200
+        # 仅返回role和content
+        return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 500
 
