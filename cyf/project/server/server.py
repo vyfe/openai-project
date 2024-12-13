@@ -20,6 +20,19 @@ url_list = conf['api']['api_host'].split(',')
 user_list = {li for li in conf['common']['users'].split(',')}
 model_list = {model_name for model_name in conf['model']}
 url = url_list[random.randint(0, len(url_list) - 1)]
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,  # 设置日志级别
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # 设置日志格式
+    datefmt='%Y-%m-%d %H:%M:%S',  # 设置时间格式
+    filename='app.log',  # 设置日志文件名
+    filemode='w'  # 设置写入模式为覆盖
+)
+
+# 创建一个日志记录器
+logger = logging.getLogger(__name__)
+
 client=OpenAI(
     api_key=conf['api']['api_key'],
     base_url=url
@@ -31,7 +44,7 @@ def allowed_file(filename):
 
 @app.route('/test', )
 def health_check():
-    print(request.values)
+    logger.info(request.values)
     try:
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
@@ -39,7 +52,7 @@ def health_check():
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
-    print(request.values)
+    logger.info(request.values)
     try:
         if request.values.get('param'):
             param = request.values.get('param').split(",")
@@ -76,7 +89,7 @@ def upload():
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
 def dialog():
     # 对话接口
-    print(request.values)
+    logger.info(request.values)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
@@ -105,7 +118,7 @@ def dialog():
         # TODO 需要统计token数（使用tiktoken），并截断的会话?
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
-        print(result)
+        logger.info(result)
         sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
         sqlitelog.set_dialog(user, dialogs, model,

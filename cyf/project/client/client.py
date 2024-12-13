@@ -34,7 +34,7 @@ def _style_code():
     _style_code_ran = 1
 
 class Toplevel1:
-    def __init__(self, top=None):
+    def __init__(self, top=None, title=None):
         '''This class configures and populates the toplevel window.
            top is the toplevel containing window.'''
 
@@ -42,7 +42,7 @@ class Toplevel1:
         top.minsize(120, 1)
         top.maxsize(2564, 1421)
         top.resizable(1,  1)
-        top.title("陪聊助手beta V0.1.1")
+        top.title(title)
         top.configure(background="gray82")
         top.configure(highlightbackground="gray82")
         top.configure(highlightcolor="black")
@@ -152,7 +152,7 @@ class Toplevel1:
         self.TLabel2_1_1_1.configure(font="-family {Microsoft YaHei UI} -size 9")
         self.TLabel2_1_1_1.configure(relief="flat")
         self.TLabel2_1_1_1.configure(wraplength="169")
-        self.TLabel2_1_1_1.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送''')
+        self.TLabel2_1_1_1.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送（仅gpt4o-all支持文件分析）''')
         self.TLabel2_1_1_1.configure(compound='left')
 
         # 右下角按钮
@@ -190,8 +190,6 @@ class Toplevel1:
         self.result_text.configure(background="#dcdad5")
         self.result_text.configure(font="TkTextFont")
         self.result_text.configure(foreground="black")
-        self.result_text.configure(highlightbackground="#dcdad5")
-        self.result_text.configure(highlightcolor="black")
         self.result_text.configure(insertbackground="black")
         self.result_text.configure(insertborderwidth="3")
         self.result_text.configure(selectbackground="#d9d9d9")

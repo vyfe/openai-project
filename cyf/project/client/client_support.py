@@ -37,6 +37,8 @@ conf = configparser.ConfigParser()
 conf.read(resource_path('conf/conf.ini'), encoding="UTF-8")
 upload_prefix = conf["common"]["upload_pre"]
 chat_suf = conf["common"]["chat_suf"]
+version = conf["common"]["version"]
+
 model_list = [model_name for model_name in conf['model']]
 server_list = [server_name + "|" + conf['server'][server_name] for server_name in conf['server']]
 # 待上传文件地址
@@ -55,7 +57,7 @@ def main(*args):
     # Creates a toplevel widget.
     global _top1, _w1
     _top1 = root
-    _w1 = client.Toplevel1(_top1)
+    _w1 = client.Toplevel1(_top1, title=f"陪聊助手V{version}")
     # 下拉框初始化
     _w1.serverCombobox.configure(values=server_list)
     _w1.modelCombobox.configure(values=model_list)
@@ -140,14 +142,16 @@ def send_chat(send):
         return
     # 结果序列化存到dialog中
     dialogs.append(result_json)
-    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
+    # TODO 增加图片渲染环节
+    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n\n")
     return
 
 @catch_exceptions
 def refresh():
-    global _w1, dialogs
+    global _w1, dialogs, dialog_new
     _w1.result_text.delete("1.0", END)
     dialogs = []
+    dialog_new = True
     return
 
 @catch_exceptions

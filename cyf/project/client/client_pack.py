@@ -1,5 +1,11 @@
+import configparser
 import os
 from PyInstaller.__main__ import run
+
+conf = configparser.ConfigParser()
+# 针对打包文件获取路径
+conf.read('conf/conf.ini', encoding="UTF-8")
+version = conf["common"]["version"]
 
 # 打包客户端
 
@@ -30,6 +36,8 @@ def build_exe(script_name):
     opts = [
         '--onefile',
         '--windowed',
+        '--name',
+        f"Chat-V{version}"
     ]
 
     # 添加每个数据文件到参数列表
