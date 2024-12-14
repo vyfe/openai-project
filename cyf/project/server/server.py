@@ -15,10 +15,10 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 conf = configparser.ConfigParser()
-conf.read('conf/conf.ini')
+conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
 user_list = {li for li in conf['common']['users'].split(',')}
-model_list = {model_name for model_name in conf['model']}
+model_list = {model_name: conf['model'][model_name] for model_name in conf['model']}
 url = url_list[random.randint(0, len(url_list) - 1)]
 
 # 配置日志
@@ -105,13 +105,15 @@ def dialog():
         dialog_mode = request.values.get('dialog_mode', 'single')
         if dialog_mode == 'single':
             dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+            title=dialogs
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
+            title=dialogvo[0]["content"]
         else:
             return {"msg": "not supported dialog_mode"}, 500
         # 功能测试
         result = client.chat.completions.create(
-            model=model,
+            model=model_list[model],
             messages=dialogvo,
             max_completion_tokens=8192
         )
@@ -119,14 +121,41 @@ def dialog():
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
         logger.info(result)
-        sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
+        sqlitelog.set_log(user, tokens, model_list[model], json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
-        sqlitelog.set_dialog(user, dialogs, model,
+        sqlitelog.set_dialog(user, title, model_list[model],
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
         # 仅返回role和content
         return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 500
+
+@app.route('/never_guess_my_usage/split_pic', methods=['POST'])
+def dialog_pic():
+    # 图片对话接口
+    logger.info(request.values)
+    try:
+        # 上下文中获取最后一组图片+最后一次提示词，调用图片接口
+        # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
+        # 日志和对话单独记录，dialog中新增model-name字段？
+        return {"role": request.choices[0].message.role, "content": request.choices[0].message.content}, 200
+    except json.JSONDecodeError:
+        return {"msg": "api return json not ok"}, 500
+
+@app.route('/never_guess_my_usage/split_his', methods=['POST'])
+def dialog_his():
+    # 根据用户名获取3日内历史纪录，包含日期、标题、模型名
+    user = request.values.get('user')
+    logger.info(user)
+    return {"msg": "no dev"}, 500
+
+@app.route('/never_guess_my_usage/split_his', methods=['POST'])
+def dialog_content():
+    # 根据用户名+id获取历史纪录详情
+    user = request.values.get('user')
+    id = request.values.get('dialogId')
+    logger.info(user + id)
+    return {"msg": "no dev"}, 500
 
 if __name__ == '__main__':
     # 若不存在sqlite3 db，初始化

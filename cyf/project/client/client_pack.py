@@ -11,7 +11,7 @@ version = conf["common"]["version"]
 
 def find_data_files():
     # 定义需要包含的文件扩展名后缀
-    include_extensions = {'.ini', '.tcl', '.pub'}
+    include_extensions = {'.ini', '.tcl', '.pub', '.ttf', '.otf', '.ico', '.json'}
 
     # 要打包的文件
     data_files = []
@@ -25,6 +25,9 @@ def find_data_files():
                 target_path = os.path.dirname(relative_path)
                 data_files.append((relative_path, target_path))
 
+    # customTkinter样式文件也需要打包，所以手动加一项
+    data_files.append(
+        ("C:/Users/vyfe/AppData/Local/Programs/Python/Python313-32/Lib/site-packages/customtkinter/assets", "customtkinter/assets"))
     return data_files
 
 

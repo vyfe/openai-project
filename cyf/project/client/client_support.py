@@ -15,6 +15,7 @@ import webbrowser
 from tkinter import filedialog, messagebox
 from tkinter.constants import *
 
+import customtkinter
 import requests
 from openai.types.chat import ChatCompletionUserMessageParam
 
@@ -39,7 +40,7 @@ upload_prefix = conf["common"]["upload_pre"]
 chat_suf = conf["common"]["chat_suf"]
 version = conf["common"]["version"]
 
-model_list = [model_name for model_name in conf['model']]
+model_list = {model_name: conf['model'][model_name] for model_name in conf['model']}
 server_list = [server_name + "|" + conf['server'][server_name] for server_name in conf['server']]
 # 待上传文件地址
 file_path = ""
@@ -52,7 +53,7 @@ dialogs = []
 def main(*args):
     '''Main entry point for the application.'''
     global root
-    root = tk.Tk()
+    root = customtkinter.CTk()
     root.protocol( 'WM_DELETE_WINDOW' , root.destroy)
     # Creates a toplevel widget.
     global _top1, _w1
@@ -60,9 +61,10 @@ def main(*args):
     _w1 = client.Toplevel1(_top1, title=f"陪聊助手V{version}")
     # 下拉框初始化
     _w1.serverCombobox.configure(values=server_list)
-    _w1.modelCombobox.configure(values=model_list)
-    _w1.serverCombobox.current(0)
-    _w1.modelCombobox.current(0)
+    model_descs = list(model_list.keys())
+    _w1.modelCombobox.configure(values=model_descs)
+    _w1.serverCombobox.set(server_list[0])
+    _w1.modelCombobox.set(model_descs[0])
     root.mainloop()
 
 def catch_exceptions(func):
@@ -109,7 +111,9 @@ def send_chat_pre():
     # after用于单独执行请求返回的渲染
     global root
     send_content = _w1.speakBox.get("1.0", END)
-    _w1.result_text.insert(END, "提问：" + send_content + "\n")
+    _w1.result_text.configure(state="normal")
+    _w1.result_text.insert(END, "\n提问：" + send_content + "\n")
+    _w1.result_text.configure(state="disabled")
     root.after(1, send_chat, send_content)
 
 @catch_exceptions
@@ -135,6 +139,9 @@ def send_chat(send):
         data["dialog"] = send
     response = requests.post(f"http://{host}{chat_suf}", data)
     print(response)
+    if len(response.text) <= 0:
+        show_err("后端无返回，待会再试")
+        return
     result_json = json.loads(response.text)
     # result_json = {"role": "assistant", "content": "mock数据"}
     if "msg" in result_json:
@@ -143,13 +150,17 @@ def send_chat(send):
     # 结果序列化存到dialog中
     dialogs.append(result_json)
     # TODO 增加图片渲染环节
-    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n\n")
+    _w1.result_text.configure(state="normal")
+    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
+    _w1.result_text.configure(state="disabled")
     return
 
 @catch_exceptions
 def refresh():
     global _w1, dialogs, dialog_new
+    _w1.result_text.configure(state="normal")
     _w1.result_text.delete("1.0", END)
+    _w1.result_text.configure(state="disabled")
     dialogs = []
     dialog_new = True
     return
@@ -157,10 +168,15 @@ def refresh():
 @catch_exceptions
 def get_dialog_his():
     global _w1, dialogs
-    messagebox.showinfo("晚点支持")
+    messagebox.showinfo("晚点支持", "晚点支持")
+
+@catch_exceptions
+def check_to_save():
+    # TODO 单独给个checkBox，用于记住填写内容，写到_internal/_usermsg内
+    return
 
 def show_err(user_err: str):
-    messagebox.showerror("有问题", f"报了个错: {user_err}")
+    messagebox.showerror("问题", f"报错: {user_err}")
 
 
 if __name__ == '__main__':

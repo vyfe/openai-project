@@ -43,7 +43,7 @@ def set_log(user: str, usage: int, model: str, text: str):
 
 def set_dialog(user: str, model: str, dialog_name: str, context: str):
     time_str=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    Dialog.replace(username=user, modelname=model, dialog_name=dialog_name, start_time=time_str, context=context)
+    Dialog.replace(username=user, modelname=model, dialog_name=dialog_name, start_time=time_str, context=context).execute()
 
 def message_query(sql: str, params=None):
     return json.dumps(db.execute_sql(sql, params).fetchall())

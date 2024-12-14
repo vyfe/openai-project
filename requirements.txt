@@ -4,3 +4,4 @@ requests
 openai
 peewee
 cryptography
+customtkinter

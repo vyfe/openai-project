@@ -8,6 +8,11 @@
 import os.path
 import tkinter as tk
 import tkinter.ttk as ttk
+from tkinter import RIGHT, Y
+
+import customtkinter
+from click import style
+from customtkinter import CTkTextbox, ThemeManager
 
 _location = os.path.dirname(__file__)
 
@@ -15,192 +20,154 @@ import client_support
 
 _bgcolor = 'gray82'
 _fgcolor = 'black'
-_tabfg1 = 'black'
-_tabfg2 = 'white'
-_bgmode = 'light'
-_tabbg1 = '#d9d9d9'
-_tabbg2 = 'gray40'
 
-_style_code_ran = 0
-def _style_code():
-    global _style_code_ran
-    if _style_code_ran: return
-    try: client_support.root.tk.call('source',
-                client_support.resource_path('waldorf.tcl'))
-    except: pass
-    style = ttk.Style()
-    style.theme_use('waldorf')
-    style.configure('.', font = "TkDefaultFont")
-    _style_code_ran = 1
 
 class Toplevel1:
     def __init__(self, top=None, title=None):
         '''This class configures and populates the toplevel window.
            top is the toplevel containing window.'''
 
-        top.geometry("1000x450+980+330")
+        top.geometry("1200x450+980+330")
         top.minsize(120, 1)
         top.maxsize(2564, 1421)
         top.resizable(1,  1)
         top.title(title)
-        top.configure(background="gray82")
-        top.configure(highlightbackground="gray82")
-        top.configure(highlightcolor="black")
+        self.label_font = customtkinter.CTkFont(family="Microsoft YaHei", size=11, weight="bold")
+        self.title_font = customtkinter.CTkFont(family="Microsoft YaHei", size=14, weight="bold")
+        self.input_font = customtkinter.CTkFont(family="SimHei", size=13, weight="bold")
+        self.dialog_font = customtkinter.CTkFont(family="SimHei", size=12)
 
         self.top = top
         self.user_name = tk.StringVar()
         self.server_select = tk.StringVar()
         self.model_select = tk.StringVar()
 
-        _style_code()
         self.TSizegrip1 = ttk.Sizegrip(self.top)
-        self.TSizegrip1.place(anchor='se', relx=1.0, rely=1.0)
+        self.TSizegrip1.place(anchor='se', relx=5.0, rely=5.0)
+        self.TSizegrip1.configure(style="TFrame")
 
-        self.TLabel1 = ttk.Label(self.top)
-        self.TLabel1.place(relx=0.283, rely=0.778, height=21, width=109)
-        self.TLabel1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TLabel1.configure(relief="flat")
-        self.TLabel1.configure(text='''请输入发送内容''')
+        self.TLabel1 = customtkinter.CTkLabel(self.top, text='''请输入发送内容''', height=21, width=109, font=self.label_font)
+        self.TLabel1.place(relx=0.413, rely=0.778)
+        self.TLabel1.configure()
         self.TLabel1.configure(compound='left')
-
-        # 分割线1
-        self.TSeparator1 = ttk.Separator(self.top)
-        self.TSeparator1.place(relx=0.267, rely=0.0,  relheight=1.022)
-        self.TSeparator1.configure(orient="vertical")
 
         self.menubar = tk.Menu(top,font="TkMenuFont",bg='#dcdad5',fg=_fgcolor)
         top.configure(menu = self.menubar)
 
-        self.TFrame1 = ttk.Frame(self.top)
-        self.TFrame1.place(relx=0.033, rely=0.022, relheight=0.967
-                , relwidth=0.225)
-        self.TFrame1.configure(relief='groove')
-        self.TFrame1.configure(borderwidth="2")
-        self.TFrame1.configure(relief="groove")
+        self.TFrame1 = customtkinter.CTkFrame(self.top)
+        self.TFrame1.place(relx=0.033, rely=0.022, relheight=0.967, relwidth=0.185)
+        self.TFrame1.configure(border_width=1)
 
-        self.userTag = ttk.Label(self.TFrame1)
-        self.userTag.place(relx=0.074, rely=0.023, height=22, width=118)
-        self.userTag.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.userTag.configure(relief="flat")
-        self.userTag.configure(text='''用户名：''')
-        self.userTag.configure(compound='left')
-        self.userTag_tooltip = \
-        ToolTip(self.userTag, '''2222''')
+        self.userTag = customtkinter.CTkLabel(self.TFrame1, height=22, width=100, text='''用户名：''', font=self.label_font)
+        self.userTag.place(relx=0.1, rely=0.029)
+        self.userTag.configure(anchor='sw')
+        self.userTag_tooltip = ToolTip(self.userTag, '''请填写自己的用户名''')
 
-        self.userEntry = ttk.Entry(self.TFrame1)
-        self.userEntry.place(relx=0.074, rely=0.069, relheight=0.053
-                , relwidth=0.859)
-        self.userEntry.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.userEntry = customtkinter.CTkEntry(self.TFrame1,  height=22, width=100, font=self.input_font)
+        self.userEntry.place(relx=0.094, rely=0.089)
         self.userEntry.configure(cursor="ibeam")
         self.userEntry.configure(textvariable=self.user_name)
 
-        self.serverTag = ttk.Label(self.TFrame1)
-        self.serverTag.place(relx=0.074, rely=0.138, height=22, width=98)
-        self.serverTag.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.serverTag.configure(relief="flat")
-        self.serverTag.configure(text='''选择服务器：''')
-        self.serverTag.configure(compound='left')
-        self.serverTag_tooltip = \
-        ToolTip(self.serverTag, '''2222''')
+        self.serverTag = customtkinter.CTkLabel(self.TFrame1, height=22, width=100, text='''选择服务器：''', font=self.label_font)
+        self.serverTag.place(relx=0.1, rely=0.138)
+        self.serverTag.configure(anchor='sw')
+        self.serverTag_tooltip = ToolTip(self.serverTag, '''本地测试没事别选''')
 
-        self.serverCombobox = ttk.Combobox(self.TFrame1)
-        self.serverCombobox.place(relx=0.074, rely=0.207, relheight=0.053
-                , relwidth=0.822)
-        self.serverCombobox.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.serverCombobox.configure(textvariable=self.server_select)
-        self.serverCombobox.configure(takefocus="")
+        self.serverCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font, dropdown_font=self.label_font, variable=self.server_select)
+        self.serverCombobox.place(relx=0.1, rely=0.207, relheight=0.053, relwidth=0.822)
 
-        self.modelCombobox = ttk.Combobox(self.TFrame1)
-        self.modelCombobox.place(relx=0.074, rely=0.345, relheight=0.053
-                , relwidth=0.822)
-        self.modelCombobox.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.modelCombobox.configure(textvariable=self.model_select)
+        self.modelCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font, dropdown_font=self.label_font, variable=self.model_select)
+        self.modelCombobox.place(relx=0.1, rely=0.345, relheight=0.053, relwidth=0.822)
 
-        self.modelTag = ttk.Label(self.TFrame1)
-        self.modelTag.place(relx=0.074, rely=0.276, height=22, width=108)
-        self.modelTag.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.modelTag.configure(relief="flat")
-        self.modelTag.configure(text='''选择模型：''')
-        self.modelTag.configure(compound='left')
-        self.modelTag_tooltip = \
-        ToolTip(self.modelTag, '''默认使用gpt4o-mini''')
+        self.modelTag = customtkinter.CTkLabel(self.TFrame1, height=22, width=100, text='''选择模型(仅*-all模型支持文件类功能)：''', font=self.label_font)
+        self.modelTag.place(relx=0.1, rely=0.276)
+        self.serverTag.configure(anchor='sw')
+        self.modelTag_tooltip = ToolTip(self.modelTag, '''默认使用gpt4o-mini''')
 
-        self.TLabel2 = ttk.Label(self.TFrame1)
-        self.TLabel2.place(relx=0.074, rely=0.575, height=31, width=79)
-        self.TLabel2.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TLabel2.configure(relief="flat")
-        self.TLabel2.configure(wraplength="70")
-        self.TLabel2.configure(text='''使用说明：''')
-        self.TLabel2.configure(compound='left')
+        self.TLabel_Title = customtkinter.CTkLabel(self.TFrame1, height=31, width=100, font=self.title_font)
+        self.TLabel_Title.place(relx=0.1, rely=0.54)
+        self.TLabel_Title.configure(wraplength=100)
+        self.TLabel_Title.configure(text='''使用说明：''')
+        self.TLabel_Title.configure(anchor='sw')
 
-        self.TLabel2_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1.place(relx=0.074, rely=0.644, height=21, width=169)
-        self.TLabel2_1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TLabel2_1.configure(relief="flat")
-        self.TLabel2_1.configure(text='''1.输入用户名,选择服务器与模型''')
-        self.TLabel2_1.configure(compound='left')
+        self.TLabel_Content1 = customtkinter.CTkLabel(self.TFrame1, height=31, width=169, font=self.label_font)
+        self.TLabel_Content1.place(relx=0.074, rely=0.62)
+        self.TLabel_Content1.configure(text='''1.输入用户名,选择服务器与模型''')
+        self.TLabel_Content1.configure(anchor='sw')
 
-        self.TLabel2_1_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1_1.place(relx=0.074, rely=0.69, height=31, width=169)
-        self.TLabel2_1_1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TLabel2_1_1.configure(relief="flat")
-        self.TLabel2_1_1.configure(text='''2.右侧输入后，点发送''')
-        self.TLabel2_1_1.configure(compound='left')
+        self.TLabel_Content2 = customtkinter.CTkLabel(self.TFrame1, height=31, width=169, font=self.label_font)
+        self.TLabel_Content2.place(relx=0.074, rely=0.69)
+        self.TLabel_Content2.configure(anchor='sw')
+        self.TLabel_Content2.configure(text='''2.右侧输入后，点发送''')
 
-        self.TLabel2_1_1_1 = ttk.Label(self.TFrame1)
-        self.TLabel2_1_1_1.place(relx=0.074, rely=0.759, height=91, width=169)
-        self.TLabel2_1_1_1.configure(font="-family {Microsoft YaHei UI} -size 9")
-        self.TLabel2_1_1_1.configure(relief="flat")
-        self.TLabel2_1_1_1.configure(wraplength="169")
-        self.TLabel2_1_1_1.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送（仅gpt4o-all支持文件分析）''')
-        self.TLabel2_1_1_1.configure(compound='left')
+        self.TLabel_Content3 = customtkinter.CTkLabel(self.TFrame1, height=93, width=169, font=self.label_font)
+        self.TLabel_Content3.place(relx=0.074, rely=0.76)
+        self.TLabel_Content2.configure(anchor='sw')
+        self.TLabel_Content3.configure(wraplength=169)
+        self.TLabel_Content3.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送（仅gpt4o-all支持文件分析）''')
+        self.TLabel_Content3.configure(justify="left")
+
+        # 中间对话历史
+        self.TFrame2 = customtkinter.CTkFrame(self.top)
+        self.TFrame2.place(relx=0.235, rely=0.022, relheight=0.967, relwidth=0.165)
+        self.TFrame2.configure(border_width=1)
+
+        self.TFrame2Label1 = customtkinter.CTkLabel(self.TFrame2, height=22, width=100, text='''3日内历史对话：''',
+                                                    font=self.label_font)
+        self.TFrame2Label1.place(relx=0.1, rely=0.028)
+        self.TFrame2Label1.configure(anchor='sw')
+
+        self.DialogList = tk.Listbox(self.TFrame2)
+        self.DialogList.insert(1, "111")
+        self.DialogList.insert(2, "111")
+        self.DialogList.place(relx=0.1, rely=0.098, relwidth=0.8, relheight=0.81)
+        # ThemeManager中拉取颜色
+        self.DialogList.configure(background=ThemeManager.theme["CTkSegmentedButton"]["text_color"][1])
+        self.DialogList.configure(selectbackground=ThemeManager.theme["CTkSegmentedButton"]["selected_color"][0])
+
+        self.sbar = ttk.Scrollbar(self.DialogList, command=self.DialogList.yview, style="TFrame")
+        self.sbar.pack(side=RIGHT, fill=Y)
+        self.DialogList.configure(activestyle="dotbox", yscrollcommand=self.sbar.set)
 
         # 右下角按钮
-        self.TButton1 = ttk.Button(self.top)
-        self.TButton1.place(relx=0.817, rely=0.822, height=37, width=87)
-        self.TButton1.configure(text='''发送''')
-        self.TButton1.configure(command=client_support.send_chat_pre)
-        self.TButton1.configure(compound='left')
-        self.TButton1.configure(cursor="boat")
+        self.TButton_Send = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
+        self.TButton_Send.place(relx=0.817, rely=0.822)
+        self.TButton_Send.configure(text='''发送''')
+        self.TButton_Send.configure(fg_color="green")
+        self.TButton_Send.configure(hover_color="darkgreen")
+        self.TButton_Send.configure(command=client_support.send_chat_pre)
+        self.TButton_Send.configure(compound='left')
+        self.TButton_Send.configure(cursor="boat")
 
-        self.TButton3 = ttk.Button(self.top)
-        self.TButton3.place(relx=0.908, rely=0.822, height=37, width=87)
-        self.TButton3.configure(text='''新建对话''')
-        self.TButton3.configure(command=client_support.refresh)
-        self.TButton3.configure(compound='left')
-        self.TButton3.configure(cursor="clock")
+        self.TButton_Upload = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
+        self.TButton_Upload.place(relx=0.817, rely=0.911)
+        self.TButton_Upload.configure(command=client_support.upload_file)
+        self.TButton_Upload.configure(text='''上传文件''')
+        self.TButton_Upload.configure(fg_color="darkorange")
+        self.TButton_Upload.configure(compound='left')
+        self.TButton_Upload.configure(cursor="bogosity")
 
-        self.TButton4 = ttk.Button(self.top)
-        self.TButton4.place(relx=0.908, rely=0.911, height=37, width=87)
-        self.TButton4.configure(text='''刷新对话历史''')
-        self.TButton4.configure(command=client_support.get_dialog_his)
-        self.TButton4.configure(compound='left')
-        self.TButton4.configure(cursor="man")
+        self.TButton_Refresh = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
+        self.TButton_Refresh.place(relx=0.908, rely=0.822)
+        self.TButton_Refresh.configure(text='''新建对话''')
+        self.TButton_Refresh.configure(command=client_support.refresh)
+        self.TButton_Refresh.configure(compound='left')
+        self.TButton_Refresh.configure(cursor="clock")
 
-        self.TButton2 = ttk.Button(self.top)
-        self.TButton2.place(relx=0.817, rely=0.911, height=37, width=87)
-        self.TButton2.configure(command=client_support.upload_file)
-        self.TButton2.configure(text='''上传文件''')
-        self.TButton2.configure(compound='left')
-        self.TButton2.configure(cursor="bogosity")
+        self.TButton_NotSure = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
+        self.TButton_NotSure.place(relx=0.908, rely=0.911)
+        self.TButton_NotSure.configure(text='''功能待定''')
+        self.TButton_NotSure.configure(command=client_support.get_dialog_his)
+        self.TButton_NotSure.configure(compound='left')
+        self.TButton_NotSure.configure(cursor="man")
 
-        self.result_text = ScrolledText(self.top)
-        self.result_text.place(relx=0.283, rely=0.022, relheight=0.753
-                               , relwidth=0.688)
-        self.result_text.configure(background="#dcdad5")
-        self.result_text.configure(font="TkTextFont")
-        self.result_text.configure(foreground="black")
-        self.result_text.configure(insertbackground="black")
-        self.result_text.configure(insertborderwidth="3")
-        self.result_text.configure(selectbackground="#d9d9d9")
-        self.result_text.configure(selectforeground="black")
+        self.result_text = CTkTextbox(self.top, font=self.dialog_font, state="disabled")
+        self.result_text.place(relx=0.413, rely=0.022, relheight=0.753, relwidth=0.688)
         self.result_text.configure(wrap=tk.WORD)
 
         # 输入框
-        self.speakBox = tk.Text(self.top)
-        self.speakBox.place(relx=0.283, rely=0.822, relheight=0.162
-                            , relwidth=0.51)
-        self.speakBox.configure(font="-family {Microsoft YaHei UI} -size 9")
+        self.speakBox = CTkTextbox(self.top, font=self.dialog_font)
+        self.speakBox.place(relx=0.413, rely=0.822, relheight=0.162, relwidth=0.39)
         self.speakBox.configure(cursor="ibeam")
 
 from time import time
@@ -303,116 +270,8 @@ class ToolTip(tk.Toplevel):
         wid.config(justify=justifyd)
         wid.config(padx=padxd)
         wid.config(pady=padyd)
-#                   End of Class ToolTip
 
-# The following code is added to facilitate the Scrolled widgets you specified.
-class AutoScroll(object):
-    '''Configure the scrollbars for a widget.'''
-    def __init__(self, master):
-        #  Rozen. Added the try-except clauses so that this class
-        #  could be used for scrolled entry widget for which vertical
-        #  scrolling is not supported. 5/7/14.
-        try:
-            vsb = ttk.Scrollbar(master, orient='vertical', command=self.yview)
-        except:
-            pass
-        hsb = ttk.Scrollbar(master, orient='horizontal', command=self.xview)
-        try:
-            self.configure(yscrollcommand=self._autoscroll(vsb))
-        except:
-            pass
-        self.configure(xscrollcommand=self._autoscroll(hsb))
-        self.grid(column=0, row=0, sticky='nsew')
-        try:
-            vsb.grid(column=1, row=0, sticky='ns')
-        except:
-            pass
-        hsb.grid(column=0, row=1, sticky='ew')
-        master.grid_columnconfigure(0, weight=1)
-        master.grid_rowconfigure(0, weight=1)
-        # Copy geometry methods of master  (taken from ScrolledText.py)
-        methods = tk.Pack.__dict__.keys() | tk.Grid.__dict__.keys() \
-                  | tk.Place.__dict__.keys()
-        for meth in methods:
-            if meth[0] != '_' and meth not in ('config', 'configure'):
-                setattr(self, meth, getattr(master, meth))
 
-    @staticmethod
-    def _autoscroll(sbar):
-        '''Hide and show scrollbar as needed.'''
-        def wrapped(first, last):
-            first, last = float(first), float(last)
-            if first <= 0 and last >= 1:
-                sbar.grid_remove()
-            else:
-                sbar.grid()
-            sbar.set(first, last)
-        return wrapped
-
-    def __str__(self):
-        return str(self.master)
-
-def _create_container(func):
-    '''Creates a ttk Frame with a given master, and use this new frame to
-    place the scrollbars and the widget.'''
-    def wrapped(cls, master, **kw):
-        container = ttk.Frame(master)
-        container.bind('<Enter>', lambda e: _bound_to_mousewheel(e, container))
-        container.bind('<Leave>', lambda e: _unbound_to_mousewheel(e, container))
-        return func(cls, container, **kw)
-    return wrapped
-
-class ScrolledText(AutoScroll, tk.Text):
-    '''A standard Tkinter Text widget with scrollbars that will
-    automatically show/hide as needed.'''
-    @_create_container
-    def __init__(self, master, **kw):
-        tk.Text.__init__(self, master, **kw)
-        AutoScroll.__init__(self, master)
-
-import platform
-def _bound_to_mousewheel(event, widget):
-    child = widget.winfo_children()[0]
-    if platform.system() == 'Windows' or platform.system() == 'Darwin':
-        child.bind_all('<MouseWheel>', lambda e: _on_mousewheel(e, child))
-        child.bind_all('<Shift-MouseWheel>', lambda e: _on_shiftmouse(e, child))
-    else:
-        child.bind_all('<Button-4>', lambda e: _on_mousewheel(e, child))
-        child.bind_all('<Button-5>', lambda e: _on_mousewheel(e, child))
-        child.bind_all('<Shift-Button-4>', lambda e: _on_shiftmouse(e, child))
-        child.bind_all('<Shift-Button-5>', lambda e: _on_shiftmouse(e, child))
-
-def _unbound_to_mousewheel(event, widget):
-    if platform.system() == 'Windows' or platform.system() == 'Darwin':
-        widget.unbind_all('<MouseWheel>')
-        widget.unbind_all('<Shift-MouseWheel>')
-    else:
-        widget.unbind_all('<Button-4>')
-        widget.unbind_all('<Button-5>')
-        widget.unbind_all('<Shift-Button-4>')
-        widget.unbind_all('<Shift-Button-5>')
-
-def _on_mousewheel(event, widget):
-    if platform.system() == 'Windows':
-        widget.yview_scroll(-1*int(event.delta/120),'units')
-    elif platform.system() == 'Darwin':
-        widget.yview_scroll(-1*int(event.delta),'units')
-    else:
-        if event.num == 4:
-            widget.yview_scroll(-1, 'units')
-        elif event.num == 5:
-            widget.yview_scroll(1, 'units')
-
-def _on_shiftmouse(event, widget):
-    if platform.system() == 'Windows':
-        widget.xview_scroll(-1*int(event.delta/120), 'units')
-    elif platform.system() == 'Darwin':
-        widget.xview_scroll(-1*int(event.delta), 'units')
-    else:
-        if event.num == 4:
-            widget.xview_scroll(-1, 'units')
-        elif event.num == 5:
-            widget.xview_scroll(1, 'units')
 def start_up():
     client_support.main()
 
