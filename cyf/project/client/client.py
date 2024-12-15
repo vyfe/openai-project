@@ -173,7 +173,7 @@ class Toplevel1:
         self.TButton_NotSure.configure(cursor="man")
 
         self.result_text = CTkTextbox(self.top, font=self.dialog_font, state="disabled")
-        self.result_text.place(relx=0.413, rely=0.022, relheight=0.753, relwidth=0.688)
+        self.result_text.place(relx=0.413, rely=0.022, relheight=0.753, relwidth=0.578)
 
         # 输入区
         self.TLabel1 = customtkinter.CTkLabel(self.top, text='''请输入发送内容''', height=21, width=51, font=self.label_font)

@@ -1,0 +1,15 @@
+[common]
+upload_pre=/never_guess_my_usage/download
+chat_suf=/never_guess_my_usage/split
+pic_gen_suf=/never_guess_my_usage/split_pic
+version=0.1.2
+[server]
+服务器1=
+本地测试=127.0.0.1:39997
+[model]
+gpt-4o-mini=chat
+gpt-4o=chat
+gpt-4o-all=chat
+gpt-3.5-turbo=chat
+图像生成(dall-e)=pic
+图像生成(gpt-4o)=pic

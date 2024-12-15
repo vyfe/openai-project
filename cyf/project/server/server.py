@@ -79,7 +79,7 @@ def upload():
         return {"msg": "more than 20M"}, 500
     # 检查文件是否符合条件
     if file and allowed_file(file.filename):
-        filename = str(time.time()) + "-" + secure_filename(file.filename)
+        filename = str(time.time()) + "-" + file.filename
         file_fullname = os.path.join(conf["common"]["upload_dir"], filename)
         file.save(file_fullname)
         os.chmod(file_fullname, 0o755)

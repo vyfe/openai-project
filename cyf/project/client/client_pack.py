@@ -40,7 +40,7 @@ def build_exe(script_name):
         '--onefile',
         '--windowed',
         '--name',
-        f"Chat-V{version}"
+        f"Chat-Helper"
     ]
 
     # 添加每个数据文件到参数列表

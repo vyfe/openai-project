@@ -1,8 +1,15 @@
 [common]
 upload_dir=
-users=1,2,3
+users=
 [log]
-sqlite3_file=log.db
+sqlite3_file=
 [api]
 api_key=
 api_host=
+[model]
+gpt-4o-mini=gpt-4o-mini-2024-07-18
+gpt-4o=gpt-4o-2024-11-20
+gpt-4o-all=gpt-4o-all
+gpt-3.5-turbo=gpt-3.5-turbo
+图像生成(dall-e)=dall-e-3
+图像生成(gpt-4o)=gpt-4o-all
