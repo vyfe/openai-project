@@ -34,22 +34,18 @@ class Toplevel1:
         top.title(title)
         self.label_font = customtkinter.CTkFont(family="Microsoft YaHei", size=11, weight="bold")
         self.title_font = customtkinter.CTkFont(family="Microsoft YaHei", size=14, weight="bold")
-        self.input_font = customtkinter.CTkFont(family="SimHei", size=13, weight="bold")
+        self.input_font = customtkinter.CTkFont(family="Microsoft YaHei", size=11, weight="bold")
         self.dialog_font = customtkinter.CTkFont(family="SimHei", size=12)
 
         self.top = top
         self.user_name = tk.StringVar()
         self.server_select = tk.StringVar()
         self.model_select = tk.StringVar()
+        self.model_select.trace_add("write", client_support.switch_model_func)
 
         self.TSizegrip1 = ttk.Sizegrip(self.top)
         self.TSizegrip1.place(anchor='se', relx=5.0, rely=5.0)
         self.TSizegrip1.configure(style="TFrame")
-
-        self.TLabel1 = customtkinter.CTkLabel(self.top, text='''请输入发送内容''', height=21, width=109, font=self.label_font)
-        self.TLabel1.place(relx=0.413, rely=0.778)
-        self.TLabel1.configure()
-        self.TLabel1.configure(compound='left')
 
         self.menubar = tk.Menu(top,font="TkMenuFont",bg='#dcdad5',fg=_fgcolor)
         top.configure(menu = self.menubar)
@@ -73,10 +69,11 @@ class Toplevel1:
         self.serverTag.configure(anchor='sw')
         self.serverTag_tooltip = ToolTip(self.serverTag, '''本地测试没事别选''')
 
-        self.serverCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font, dropdown_font=self.label_font, variable=self.server_select)
+        self.serverCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font, dropdown_font=self.label_font, variable=self.server_select, state="readonly")
         self.serverCombobox.place(relx=0.1, rely=0.207, relheight=0.053, relwidth=0.822)
 
-        self.modelCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font, dropdown_font=self.label_font, variable=self.model_select)
+        self.modelCombobox = customtkinter.CTkComboBox(self.TFrame1, font=self.label_font,
+                                                       dropdown_font=self.label_font, variable=self.model_select, state="readonly")
         self.modelCombobox.place(relx=0.1, rely=0.345, relheight=0.053, relwidth=0.822)
 
         self.modelTag = customtkinter.CTkLabel(self.TFrame1, height=22, width=100, text='''选择模型(仅*-all模型支持文件类功能)：''', font=self.label_font)
@@ -85,27 +82,35 @@ class Toplevel1:
         self.modelTag_tooltip = ToolTip(self.modelTag, '''默认使用gpt4o-mini''')
 
         self.TLabel_Title = customtkinter.CTkLabel(self.TFrame1, height=31, width=100, font=self.title_font)
-        self.TLabel_Title.place(relx=0.1, rely=0.54)
+        self.TLabel_Title.place(relx=0.1, rely=0.51)
         self.TLabel_Title.configure(wraplength=100)
         self.TLabel_Title.configure(text='''使用说明：''')
         self.TLabel_Title.configure(anchor='sw')
 
-        self.TLabel_Content1 = customtkinter.CTkLabel(self.TFrame1, height=31, width=169, font=self.label_font)
-        self.TLabel_Content1.place(relx=0.074, rely=0.62)
+        self.TLabel_Content1 = customtkinter.CTkLabel(self.TFrame1, height=31, width=189, font=self.label_font)
+        self.TLabel_Content1.place(relx=0.074, rely=0.59)
         self.TLabel_Content1.configure(text='''1.输入用户名,选择服务器与模型''')
         self.TLabel_Content1.configure(anchor='sw')
 
-        self.TLabel_Content2 = customtkinter.CTkLabel(self.TFrame1, height=31, width=169, font=self.label_font)
-        self.TLabel_Content2.place(relx=0.074, rely=0.69)
+        self.TLabel_Content2 = customtkinter.CTkLabel(self.TFrame1, height=31, width=189, font=self.label_font)
+        self.TLabel_Content2.place(relx=0.074, rely=0.66)
         self.TLabel_Content2.configure(anchor='sw')
-        self.TLabel_Content2.configure(text='''2.右侧输入后，点发送''')
+        self.TLabel_Content2.configure(wraplength=189)
+        self.TLabel_Content2.configure(text='''2.输入后点鸡发送，耐心等待服务返回''')
 
-        self.TLabel_Content3 = customtkinter.CTkLabel(self.TFrame1, height=93, width=169, font=self.label_font)
-        self.TLabel_Content3.place(relx=0.074, rely=0.76)
-        self.TLabel_Content2.configure(anchor='sw')
-        self.TLabel_Content3.configure(wraplength=169)
-        self.TLabel_Content3.configure(text='''3.需要解析文件时点击上传文件，自动上传后会生成url，再编辑提问内容，再点发送（仅gpt4o-all支持文件分析）''')
-        self.TLabel_Content3.configure(justify="left")
+        self.TLabel_Content3 = customtkinter.CTkLabel(self.TFrame1, height=31, width=200, font=self.label_font)
+        self.TLabel_Content3.place(relx=0.074, rely=0.74)
+        self.TLabel_Content3.configure(anchor='sw')
+        self.TLabel_Content3.configure(wraplength=200)
+        self.TLabel_Content3.configure(justify='left')
+        self.TLabel_Content3.configure(text="3.需要解析文件时，点击上传文件自动上传后生成url再编辑提问内容后点发送（仅gpt4o-all支持文件分析）。")
+
+        self.TLabel_Content4 = customtkinter.CTkLabel(self.TFrame1, height=31, width=200, font=self.label_font)
+        self.TLabel_Content4.place(relx=0.074, rely=0.87)
+        self.TLabel_Content4.configure(anchor='sw')
+        self.TLabel_Content4.configure(wraplength=200)
+        self.TLabel_Content4.configure(justify='left')
+        self.TLabel_Content4.configure(text="4.因不支持混合提问（图片+文字），图片生成功能会清空对话框，请及时保存。")
 
         # 中间对话历史
         self.TFrame2 = customtkinter.CTkFrame(self.top)
@@ -116,14 +121,19 @@ class Toplevel1:
                                                     font=self.label_font)
         self.TFrame2Label1.place(relx=0.1, rely=0.028)
         self.TFrame2Label1.configure(anchor='sw')
-
+        # 原生组件
         self.DialogList = tk.Listbox(self.TFrame2)
-        self.DialogList.insert(1, "111")
-        self.DialogList.insert(2, "111")
+        self.DialogList.insert(1, "测试对话1")
+        self.DialogList.insert(2, "测试对话2")
         self.DialogList.place(relx=0.1, rely=0.098, relwidth=0.8, relheight=0.81)
         # ThemeManager中拉取颜色
-        self.DialogList.configure(background=ThemeManager.theme["CTkSegmentedButton"]["text_color"][1])
-        self.DialogList.configure(selectbackground=ThemeManager.theme["CTkSegmentedButton"]["selected_color"][0])
+        self.DialogList.configure(background=ThemeManager.theme["CTkTextbox"]["fg_color"][1])
+        self.DialogList.configure(foreground=ThemeManager.theme["CTkTextbox"]["text_color"][1])
+        self.DialogList.configure(highlightcolor=ThemeManager.theme["CTkTextbox"]["border_color"][1])
+        self.DialogList.configure(highlightthickness=0)
+        self.DialogList.configure(relief="flat")
+        self.DialogList.configure(selectmode="SINGLE")
+        self.DialogList.configure(selectbackground=ThemeManager.theme["CTkSegmentedButton"]["selected_color"][1])
 
         self.sbar = ttk.Scrollbar(self.DialogList, command=self.DialogList.yview, style="TFrame")
         self.sbar.pack(side=RIGHT, fill=Y)
@@ -141,29 +151,41 @@ class Toplevel1:
 
         self.TButton_Upload = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
         self.TButton_Upload.place(relx=0.817, rely=0.911)
-        self.TButton_Upload.configure(command=client_support.upload_file)
+        self.TButton_Upload.configure(command=client_support.upload_file_pre)
         self.TButton_Upload.configure(text='''上传文件''')
-        self.TButton_Upload.configure(fg_color="darkorange")
+        self.TButton_Upload.configure(fg_color="darkviolet")
+        self.TButton_Upload.configure(hover_color="indigo")
         self.TButton_Upload.configure(compound='left')
         self.TButton_Upload.configure(cursor="bogosity")
 
         self.TButton_Refresh = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
         self.TButton_Refresh.place(relx=0.908, rely=0.822)
-        self.TButton_Refresh.configure(text='''新建对话''')
+        self.TButton_Refresh.configure(text='''刷新对话''')
         self.TButton_Refresh.configure(command=client_support.refresh)
         self.TButton_Refresh.configure(compound='left')
         self.TButton_Refresh.configure(cursor="clock")
 
         self.TButton_NotSure = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
         self.TButton_NotSure.place(relx=0.908, rely=0.911)
-        self.TButton_NotSure.configure(text='''功能待定''')
+        self.TButton_NotSure.configure(text='''获取历史对话''')
         self.TButton_NotSure.configure(command=client_support.get_dialog_his)
         self.TButton_NotSure.configure(compound='left')
         self.TButton_NotSure.configure(cursor="man")
 
         self.result_text = CTkTextbox(self.top, font=self.dialog_font, state="disabled")
         self.result_text.place(relx=0.413, rely=0.022, relheight=0.753, relwidth=0.688)
-        self.result_text.configure(wrap=tk.WORD)
+
+        # 输入区
+        self.TLabel1 = customtkinter.CTkLabel(self.top, text='''请输入发送内容''', height=21, width=51, font=self.label_font)
+        self.TLabel1.place(relx=0.413, rely=0.778)
+        self.TLabel1.configure()
+        self.TLabel1.configure(compound='left')
+        # 请求提示
+        self.requestHint = customtkinter.CTkLabel(self.top, text='''请求中:''', height=21, width=51, font=self.label_font)
+        self.requestHint.configure(compound='left')
+        # 进度条
+        self.progress = customtkinter.CTkProgressBar(self.top, height=15, width=140)
+        self.progress.configure(mode="indeterminate")
 
         # 输入框
         self.speakBox = CTkTextbox(self.top, font=self.dialog_font)

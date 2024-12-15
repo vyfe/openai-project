@@ -4,6 +4,10 @@ import logging
 import os.path
 import random
 import time
+from http.client import responses
+from random import choices
+
+import requests
 
 import sqlitelog
 
@@ -13,7 +17,7 @@ from openai.types.chat import ChatCompletionUserMessageParam
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
@@ -99,7 +103,6 @@ def dialog():
         logging.info(f"user:{user}， model: {model}")
         if user not in user_list or model not in model_list:
             return {"msg": "not supported user or model"}, 500
-        # TODO 客户端支持多轮对话
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
         dialog_mode = request.values.get('dialog_mode', 'single')
@@ -111,13 +114,11 @@ def dialog():
             title=dialogvo[0]["content"]
         else:
             return {"msg": "not supported dialog_mode"}, 500
-        # 功能测试
         result = client.chat.completions.create(
             model=model_list[model],
             messages=dialogvo,
-            max_completion_tokens=8192
+            max_tokens=8192
         )
-        # TODO 需要统计token数（使用tiktoken），并截断的会话?
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
         logger.info(result)
@@ -135,10 +136,58 @@ def dialog_pic():
     # 图片对话接口
     logger.info(request.values)
     try:
-        # 上下文中获取最后一组图片+最后一次提示词，调用图片接口
+        # TODO 1 本地私钥解密
+        # 2 用户名 + 上下文解析
+        user = request.values.get('user')
+        model = request.values.get('model')
+        # 用户白名单、model名根据配置检查
+        logging.info(f"user:{user}， model: {model}")
+        if user not in user_list or model not in model_list:
+            return {"msg": "not supported user or model"}, 500
+        # 对话模式 single=单条 multi=上下文/编辑
+        dialogs = request.values.get('dialog')
+        dialog_mode = request.values.get('dialog_mode', 'single')
+        if dialog_mode == 'single':
+            dialogvo = {"role": "user", "desc": dialogs}
+            title=dialogs
+        elif dialog_mode == 'multi':
+            # TODO 上下文中获取最后一组图片+最后一次提示词，再调用图片编辑接口
+            dialogvo = {"role": "user", "desc": dialogs}
+            title = dialogs
+        else:
+            return {"msg": "not supported dialog_mode"}, 500
+        result = client.images.generate(
+            model=model_list[model],
+            prompt=dialogs,
+            n=1,
+            response_format="url",
+            size="1024x1024"
+        )
+        logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
+        # 暂时支持生成1张
+        desc = result.data[0].revised_prompt
+        # 保存到本地后使用本地的下载url
+        response = requests.get(result.data[0].url)
+        if response.status_code == 200:
+            filename = (model_list[model] + "-" + str(time.time()) + "-"
+                        + os.path.basename(result.data[0].url).split("?")[0])
+            save_path = os.path.join(conf["common"]["upload_dir"], "images/" + filename)
+            with open(save_path, "wb") as pic:
+                pic.write(response.content)
+            os.chmod(save_path, 0o755)
+            logging.info(f"pic saving:{save_path}")
+        else:
+            return {"msg": "error requesting pic server"}, 501
+        result_save = {"role": "assistant", "desc": desc, "url": f':4567/download/images/{filename}'}
         # 日志和对话单独记录，dialog中新增model-name字段？
-        return {"role": request.choices[0].message.role, "content": request.choices[0].message.content}, 200
+        # 图片按条数统计
+        sqlitelog.set_log(user, 1, model_list[model], json.dumps(result.to_dict()))
+        # 5 dialog组装：上下文+本次问题回答
+        dialog_rec = [dialogvo]
+        dialog_rec.append(result_save)
+        sqlitelog.set_dialog(user, title, model_list[model],json.dumps(dialog_rec))
+        return result_save, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 500
 
