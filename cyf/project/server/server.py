@@ -3,18 +3,16 @@ import json
 import logging
 import os.path
 import random
+import sys
 import time
-from http.client import responses
-from random import choices
+from datetime import datetime, timedelta
 
 import requests
-
-import sqlitelog
-
 from flask import Flask, request
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam
-from werkzeug.utils import secure_filename
+
+import sqlitelog
 
 app = Flask(__name__)
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
@@ -34,8 +32,12 @@ logging.basicConfig(
     filemode='w'  # 设置写入模式为覆盖
 )
 
+_debug=True
 # 创建一个日志记录器
 logger = logging.getLogger(__name__)
+if _debug:
+    console_handler = logging.StreamHandler(stream=sys.stdout)
+    logger.addHandler(console_handler)
 
 client=OpenAI(
     api_key=conf['api']['api_key'],
@@ -52,7 +54,7 @@ def health_check():
     try:
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
-        return {"msg": "json no ok"}, 500
+        return {"msg": "json no ok"}, 200
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
@@ -64,7 +66,7 @@ def data_check():
         else:
             return sqlitelog.message_query(request.values.get('info')), 200
     except json.JSONDecodeError:
-        return {"msg": "json no ok"}, 500
+        return {"msg": "json no ok"}, 200
 
 
 @app.route('/never_guess_my_usage/download',  methods=['POST'])
@@ -76,7 +78,7 @@ def upload():
     if file.filename == '':
         return {"msg": "no filename"}, 200
     if file.content_length > 20 * 1024 * 1024:
-        return {"msg": "more than 20M"}, 500
+        return {"msg": "more than 20M"}, 200
     # 检查文件是否符合条件
     if file and allowed_file(file.filename):
         filename = str(time.time()) + "-" + file.filename
@@ -88,7 +90,7 @@ def upload():
         return {"content": f':4567/download/{filename}'}, 200
     else:
         # 上传文件并返回url的接口
-        return {"msg": "文件格式问题"}, 500
+        return {"msg": "文件格式问题"}, 200
 
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
 def dialog():
@@ -102,7 +104,7 @@ def dialog():
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if user not in user_list or model not in model_list:
-            return {"msg": "not supported user or model"}, 500
+            return {"msg": "not supported user or model"}, 200
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
         dialog_mode = request.values.get('dialog_mode', 'single')
@@ -113,7 +115,7 @@ def dialog():
             dialogvo = json.loads(dialogs)
             title=dialogvo[0]["content"]
         else:
-            return {"msg": "not supported dialog_mode"}, 500
+            return {"msg": "not supported dialog_mode"}, 200
         result = client.chat.completions.create(
             model=model_list[model],
             messages=dialogvo,
@@ -124,12 +126,12 @@ def dialog():
         logger.info(result)
         sqlitelog.set_log(user, tokens, model_list[model], json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
-        sqlitelog.set_dialog(user, title, model_list[model],
+        sqlitelog.set_dialog(user, title, "chat", model_list[model],
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
         # 仅返回role和content
         return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
     except json.JSONDecodeError:
-        return {"msg": "api return json not ok"}, 500
+        return {"msg": "api return json not ok"}, 200
 
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
 def dialog_pic():
@@ -143,7 +145,7 @@ def dialog_pic():
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if user not in user_list or model not in model_list:
-            return {"msg": "not supported user or model"}, 500
+            return {"msg": "not supported user or model"}, 200
         # 对话模式 single=单条 multi=上下文/编辑
         dialogs = request.values.get('dialog')
         dialog_mode = request.values.get('dialog_mode', 'single')
@@ -155,7 +157,7 @@ def dialog_pic():
             dialogvo = {"role": "user", "desc": dialogs}
             title = dialogs
         else:
-            return {"msg": "not supported dialog_mode"}, 500
+            return {"msg": "not supported dialog_mode"}, 200
         result = client.images.generate(
             model=model_list[model],
             prompt=dialogs,
@@ -186,25 +188,37 @@ def dialog_pic():
         # 5 dialog组装：上下文+本次问题回答
         dialog_rec = [dialogvo]
         dialog_rec.append(result_save)
-        sqlitelog.set_dialog(user, title, model_list[model],json.dumps(dialog_rec))
+        sqlitelog.set_dialog(user, title, "chat", model_list[model], json.dumps(dialog_rec))
         return result_save, 200
     except json.JSONDecodeError:
-        return {"msg": "api return json not ok"}, 500
+        return {"msg": "api return json not ok"}, 200
 
 @app.route('/never_guess_my_usage/split_his', methods=['POST'])
 def dialog_his():
-    # 根据用户名获取3日内历史纪录，包含日期、标题、模型名
+    # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     user = request.values.get('user')
     logger.info(user)
-    return {"msg": "no dev"}, 500
+    if user not in user_list:
+        return {"msg": "not supported user or model"}, 200
+    min_time_str = (datetime.now() - timedelta(days=3)).date()
+    dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
+    dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
+    return {"content": dialog_list}, 200
 
-@app.route('/never_guess_my_usage/split_his', methods=['POST'])
+@app.route('/never_guess_my_usage/split_his_content', methods=['POST'])
 def dialog_content():
-    # 根据用户名+id获取历史纪录详情
-    user = request.values.get('user')
-    id = request.values.get('dialogId')
-    logger.info(user + id)
-    return {"msg": "no dev"}, 500
+    try:
+        # 根据用户名+id获取历史纪录详情context
+        user = request.values.get('user')
+        if user not in user_list:
+            return {"msg": "not supported user or model"}, 200
+        id = request.values.get('dialogId')
+        logger.info(user + "," + id)
+        # 理想状态下是列表
+        context = json.loads(sqlitelog.get_dialog_context(user, int(id)))
+        return {"content": context}
+    except json.JSONDecodeError:
+        return {"msg": "api return content not ok"}, 200
 
 if __name__ == '__main__':
     # 若不存在sqlite3 db，初始化
