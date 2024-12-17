@@ -5,20 +5,22 @@
 #  in conjunction with Tcl version 8.6
 #    Dec 09, 2024 09:23:30 PM CST  platform: Windows NT
 import configparser
+import datetime
 import functools
 import json
 import os
 import sys
 import threading
-import tkinter as tk
 import traceback
 import webbrowser
 from tkinter import filedialog, messagebox
 from tkinter.constants import *
+from typing import Literal, Callable
 
 import customtkinter
 import requests
 from openai.types.chat import ChatCompletionUserMessageParam
+from requests import Response
 
 from cyf.project.client import client
 
@@ -42,18 +44,23 @@ chat_suf = conf["common"]["chat_suf"]
 pic_gen_suf = conf["common"]["pic_gen_suf"]
 version = conf["common"]["version"]
 
+
+# _w1 = None
+# 模型配置
 model_list = {model_name: conf['model'][model_name] for model_name in conf['model']}
+model_def = {conf['model'][model_name]: model_name  for model_name in conf['model']}
 server_list = [server_name + "|" + conf['server'][server_name] for server_name in conf['server']]
 # 待上传文件地址
 file_path = ""
 # dialog缓存
 dialog_new = True
 # 模型类型，同类模型间对话通用且兼容
-model_type = ""
+model_type = Literal["chat", "pic"]
 # 暂存服务端回传的会话dict，用于构造对话dialog
 dialogs = []
 dialogsPic = []
-
+# 会话历史数据缓存
+dialogList = {}
 
 def main(*args):
     '''Main entry point for the application.'''
@@ -95,23 +102,12 @@ def upload_file():
     if not file_path:
         return
     print(f"已选择文件: {file_path}")
-    _w1.speakBox.configure(state="disabled")
     host = _w1.server_select.get().split("|")[1]
     # api执行上传，
     with open(file_path, 'rb') as file:
         files = {'file': file}
-        response = requests.post( f"http://{host}{upload_prefix}", files=files)
-    result_json = json.loads(response.text)
-    if "msg" in result_json:
-        print(response)
-        show_err("上传失败，爬爬爬:" + result_json["msg"])
-        return
-    url = f"http://{host}{result_json["content"]}"
-    _w1.speakBox.configure(state="normal")
-    # 输入框头部插入url
-    _w1.speakBox.insert("1.0", url, "file_url")
-    # 超链接
-    _w1.speakBox.tag_bind('link', '<Button-1>', lambda evt: webbrowser.open(url))
+        result_json = response_check(requests.post( f"http://{host}{upload_prefix}", files=files))
+    add_a_url(result_json["content"])
     _w1.speakBox.insert(END, " ")
     finish_request_hint()
     messagebox.showinfo("ojbk", f"您的文件已上传:{file_path}, url:{url}, 注意保密哦")
@@ -119,17 +115,16 @@ def upload_file():
 @catch_exceptions
 def send_chat_pre():
     # after用于单独执行请求返回的渲染
-    global root, model_type
+    global _w1, root, model_type
     send_content = _w1.speakBox.get("1.0", END)
-    _w1.result_text.configure(state="normal")
     _w1.result_text.insert(END, "\n提问：" + send_content + "\n")
-    _w1.result_text.configure(state="disabled")
     start_request_hint()
     if model_type == "chat":
         target_func = send_chat
     else:
         target_func = send_pic_gen
     threading.Thread(target=target_func, args=(send_content,)).start()
+    threading.Thread(target=get_dialog_his).start()
 
 @catch_exceptions
 def send_pic_gen(send):
@@ -145,28 +140,14 @@ def send_pic_gen(send):
         data["dialog_mode"] = "multi"
     else:
         dialog_new = False
-    response = requests.post(f"http://{host}{pic_gen_suf}", data)
-    if len(response.text) <= 0:
-        show_err("后端无返回，待会再试")
-        return
-    result_json = json.loads(response.text)
+    result_json = response_check(requests.post(f"http://{host}{pic_gen_suf}", data))
     # 测试图片
     # result_json = {"role": "assistant", "desc": "test——desc", "url": f':4567/download/images/dall-e-3-1734254013.964897-generated_00.png'}
-    if "msg" in result_json:
-        show_err(result_json["msg"])
-        return
     # 结果序列化存到dialog中
     dialogsPic.append(result_json)
-    _w1.result_text.configure(state="normal")
     # url + 超链接
-    _w1.result_text.insert(END, "回答(请点击url下载)：\n图片简介：" +  dialogsPic[-1]["desc"] + "\n超链接：")
-    url = f"http://{host}{dialogsPic[-1]["url"]}"
-    _w1.result_text.insert(END, url, "link")
-    _w1.result_text.tag_bind("link", "<Button-1>", lambda evt: webbrowser.open(url))
-
-    _w1.result_text.image_create(END)
-
-    _w1.result_text.configure(state="disabled")
+    _w1.result_text.insert(END, "回答(请复制url下载)：\n图片简介：" +  dialogsPic[-1]["desc"] + "\n超链接：")
+    add_a_url(dialogsPic[-1]["url"], True)
     # 删除内容
     finish_request_hint()
     _w1.speakBox.delete("1.0", END)
@@ -192,7 +173,78 @@ def send_chat(send):
     else:
         dialog_new = False
         data["dialog"] = send
-    response = requests.post(f"http://{host}{chat_suf}", data)
+    result_json = response_check(requests.post(f"http://{host}{chat_suf}", data))
+    # result_json = {"role": "assistant", "content": "mock数据"}
+    # 结果序列化存到dialog中
+    dialogs.append(result_json)
+    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
+    # 删除内容
+    finish_request_hint()
+    _w1.speakBox.delete("1.0", END)
+
+def start_async(target: Callable):
+    threading.Thread(target=target).start()
+
+@catch_exceptions
+def get_dialog_his():
+    # 1.获取对话列表，填写用户名后触发；2.请求返回后触发。
+    global _w1, dialogList
+    if not _w1 or len(_w1.user_name.get()) <= 0:
+        return
+    host = _w1.server_select.get().split("|")[1]
+    data = {
+        "user": _w1.user_name.get(),
+        "model": _w1.model_select.get(),
+    }
+    response_json = response_check(
+        requests.post(f"http://{host}{conf["common"]["dialog_list_suf"]}", data=data))
+    _w1.DialogList.delete(0, _w1.DialogList.size())
+    dialogList = {}
+    for dialog in response_json["content"]:
+        name = f"[{dialog["start_date"]}]" + dialog["dialog_name"]
+        _w1.DialogList.insert(END, name)
+        dialogList.update({name: dialog["id"]})
+
+
+@catch_exceptions
+def get_dialog_content():
+    global _w1, dialogList, model_type, model_def, dialogs, dialogsPic, dialog_new, host
+    # 根据listBox获取对话内容，点击右下按钮触发，获取后变更内容 + 选择模型（若对话类型不一致）
+    host = _w1.server_select.get().split("|")[1]
+    data = {
+        "user": _w1.user_name.get(),
+        "dialogId": dialogList.get(_w1.DialogList.get(_w1.DialogList.curselection()[0])),
+    }
+    response_json = response_check(
+        response = requests.post(f"http://{host}{conf["common"]["dialog_content_suf"]}", data=data))
+    if model_type != response_json["content"]["chattype"]:
+        # comboBox切换模型再清空对话框，再填充
+        model_type = response_json["content"]["chattype"]
+        _w1.modelCombobox.set(model_def[model_type])
+
+    # 直接清空对话框再填充
+    refresh(False)
+    dialog_new = False
+    if model_type == "chat":
+        dialogs = response_json["content"]["context"]
+    else:
+        dialogsPic = response_json["content"]["context"]
+    for log in response_json["content"]["context"]:
+        if log["role"] == "user":
+            if model_type == "chat":
+                _w1.result_text.insert(END, "提问：" + log["content"] + "\n")
+            else:
+                _w1.result_text.insert(END, "提问：" + log["desc"] + "\n")
+        else:
+            if model_type == "chat":
+                _w1.result_text.insert(END, "回答：" + log["content"] + "\n")
+            else:
+                _w1.result_text.insert(END, "回答(请复制url下载)：\n图片简介：" + log["desc"] + "\n")
+                _w1.result_text.insert(END, "超链接：")
+                add_a_url(log["url"], True)
+
+
+def response_check(response: Response):
     if len(response.text) <= 0:
         show_err("后端无返回，待会再试")
         return
@@ -201,24 +253,27 @@ def send_chat(send):
     if "msg" in result_json:
         show_err(result_json["msg"])
         return
-    # 结果序列化存到dialog中
-    dialogs.append(result_json)
-    # TODO 增加图片渲染环节
-    _w1.result_text.configure(state="normal")
-    _w1.result_text.insert(END, "回答：" + dialogs[-1]["content"] + "\n")
-    _w1.result_text.configure(state="disabled")
-    # 删除内容
-    finish_request_hint()
-    _w1.speakBox.delete("1.0", END)
+    return result_json
+
+# 客户端方法
+
+def add_a_url(uri: str, next_row=False):
+    global _w1, host
+    link = "link"
+    url = f"http://{host}{uri}"
+    _w1.result_text.insert(END, url, link)
+    _w1.result_text.tag_config(link, foreground="#3B8ED0", underline=True)
+    _w1.result_text.tag_bind(link, "<Button-1>", lambda evt: webbrowser.open(url))
+    if next_row:
+        _w1.result_text.insert(END, "\n")
 
 @catch_exceptions
-def refresh():
+def refresh(set_dialog = True):
     global _w1, dialogs, dialog_new
-    _w1.result_text.configure(state="normal")
     _w1.result_text.delete("1.0", END)
-    _w1.result_text.configure(state="disabled")
-    dialogs = []
-    dialog_new = True
+    if set_dialog:
+        dialogs = []
+        dialog_new = True
     return
 
 @catch_exceptions
@@ -250,11 +305,6 @@ def finish_request_hint():
     _w1.progress.stop()
     _w1.progress.place_forget()
 
-
-@catch_exceptions
-def get_dialog_his():
-    global _w1, dialogs
-    messagebox.showinfo("晚点支持", "晚点支持")
 
 @catch_exceptions
 def check_to_save():

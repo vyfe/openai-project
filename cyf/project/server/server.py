@@ -39,10 +39,10 @@ if _debug:
     console_handler = logging.StreamHandler(stream=sys.stdout)
     logger.addHandler(console_handler)
 
-client=OpenAI(
-    api_key=conf['api']['api_key'],
-    base_url=url
-)
+clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_list]
+
+def random_client() -> OpenAI:
+    return clients[random.randint(0, len(url_list) - 1)]
 
 # 检查文件扩展名是否允许
 def allowed_file(filename):
@@ -116,7 +116,7 @@ def dialog():
             title=dialogvo[0]["content"]
         else:
             return {"msg": "not supported dialog_mode"}, 200
-        result = client.chat.completions.create(
+        result = random_client().chat.completions.create(
             model=model_list[model],
             messages=dialogvo,
             max_tokens=8192
@@ -126,7 +126,7 @@ def dialog():
         logger.info(result)
         sqlitelog.set_log(user, tokens, model_list[model], json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
-        sqlitelog.set_dialog(user, title, "chat", model_list[model],
+        sqlitelog.set_dialog(user, model_list[model], "chat",  title,
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
         # 仅返回role和content
         return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
@@ -158,7 +158,7 @@ def dialog_pic():
             title = dialogs
         else:
             return {"msg": "not supported dialog_mode"}, 200
-        result = client.images.generate(
+        result = random_client().images.generate(
             model=model_list[model],
             prompt=dialogs,
             n=1,
@@ -188,7 +188,7 @@ def dialog_pic():
         # 5 dialog组装：上下文+本次问题回答
         dialog_rec = [dialogvo]
         dialog_rec.append(result_save)
-        sqlitelog.set_dialog(user, title, "chat", model_list[model], json.dumps(dialog_rec))
+        sqlitelog.set_dialog(user, model_list[model],"pic", title, json.dumps(dialog_rec))
         return result_save, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
@@ -215,8 +215,9 @@ def dialog_content():
         id = request.values.get('dialogId')
         logger.info(user + "," + id)
         # 理想状态下是列表
-        context = json.loads(sqlitelog.get_dialog_context(user, int(id)))
-        return {"content": context}
+        result = sqlitelog.get_dialog_context(user, int(id))
+        context = json.loads(result.context)
+        return {"content": {"chattype": result.chattype, "context": context}}
     except json.JSONDecodeError:
         return {"msg": "api return content not ok"}, 200
 

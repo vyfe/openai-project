@@ -47,8 +47,9 @@ def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: 
     Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute()
 
 def get_dialog_list(user: str, date: date):
-    query = (Dialog.select(Dialog.username, Dialog.chattype, Dialog.dialog_name, Dialog.start_date)
-             .where(Dialog.username == user, Dialog.start_date >= date))
+    query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.dialog_name, Dialog.start_date)
+             .where(Dialog.username == user, Dialog.start_date >= date)
+             .order_by(Dialog.start_date.desc()))
     if query.exists():
         return [dialog for dialog in query.dicts().iterator()]
     else:
@@ -56,7 +57,7 @@ def get_dialog_list(user: str, date: date):
 
 def get_dialog_context(user: str, id: int):
     try:
-        query = Dialog.get(Dialog.username == user, Dialog.id == id).context
+        query = Dialog.get(Dialog.username == user, Dialog.id == id)
         return query
     except DoesNotExist:
         return []

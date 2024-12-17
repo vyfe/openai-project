@@ -27,7 +27,7 @@ class Toplevel1:
         '''This class configures and populates the toplevel window.
            top is the toplevel containing window.'''
 
-        top.geometry("1200x450+980+330")
+        top.geometry("1300x550+980+330")
         top.minsize(120, 1)
         top.maxsize(2564, 1421)
         top.resizable(1,  1)
@@ -63,6 +63,7 @@ class Toplevel1:
         self.userEntry.place(relx=0.094, rely=0.089)
         self.userEntry.configure(cursor="ibeam")
         self.userEntry.configure(textvariable=self.user_name)
+        self.userEntry.bind("<FocusOut>", lambda x: client_support.start_async(client_support.get_dialog_his))
 
         self.serverTag = customtkinter.CTkLabel(self.TFrame1, height=22, width=100, text='''选择服务器：''', font=self.label_font)
         self.serverTag.place(relx=0.1, rely=0.138)
@@ -82,21 +83,24 @@ class Toplevel1:
         self.modelTag_tooltip = ToolTip(self.modelTag, '''默认使用gpt4o-mini''')
 
         self.TLabel_Title = customtkinter.CTkLabel(self.TFrame1, height=31, width=100, font=self.title_font)
-        self.TLabel_Title.place(relx=0.1, rely=0.51)
+        self.TLabel_Title.place(relx=0.1, rely=0.49)
         self.TLabel_Title.configure(wraplength=100)
         self.TLabel_Title.configure(text='''使用说明：''')
         self.TLabel_Title.configure(anchor='sw')
 
         self.TLabel_Content1 = customtkinter.CTkLabel(self.TFrame1, height=31, width=189, font=self.label_font)
-        self.TLabel_Content1.place(relx=0.074, rely=0.59)
-        self.TLabel_Content1.configure(text='''1.输入用户名,选择服务器与模型''')
+        self.TLabel_Content1.place(relx=0.074, rely=0.56)
+        self.TLabel_Content1.configure(text='''1.输入用户名,选择服务器与模型,可自动加载对话列表，点击获取对话获取历史记录。''')
         self.TLabel_Content1.configure(anchor='sw')
+        self.TLabel_Content1.configure(wraplength=189)
+        self.TLabel_Content1.configure(justify='left')
 
         self.TLabel_Content2 = customtkinter.CTkLabel(self.TFrame1, height=31, width=189, font=self.label_font)
         self.TLabel_Content2.place(relx=0.074, rely=0.66)
         self.TLabel_Content2.configure(anchor='sw')
         self.TLabel_Content2.configure(wraplength=189)
-        self.TLabel_Content2.configure(text='''2.输入后点鸡发送，耐心等待服务返回''')
+        self.TLabel_Content2.configure(text='''2.输入后发送，等待服务返回结果。''')
+        self.TLabel_Content2.configure(justify='left')
 
         self.TLabel_Content3 = customtkinter.CTkLabel(self.TFrame1, height=31, width=200, font=self.label_font)
         self.TLabel_Content3.place(relx=0.074, rely=0.74)
@@ -123,8 +127,6 @@ class Toplevel1:
         self.TFrame2Label1.configure(anchor='sw')
         # 原生组件
         self.DialogList = tk.Listbox(self.TFrame2)
-        self.DialogList.insert(1, "测试对话1")
-        self.DialogList.insert(2, "测试对话2")
         self.DialogList.place(relx=0.1, rely=0.098, relwidth=0.8, relheight=0.81)
         # ThemeManager中拉取颜色
         self.DialogList.configure(background=ThemeManager.theme["CTkTextbox"]["fg_color"][1])
@@ -168,11 +170,11 @@ class Toplevel1:
         self.TButton_NotSure = customtkinter.CTkButton(self.top, height=37, width=87, font=self.label_font)
         self.TButton_NotSure.place(relx=0.908, rely=0.911)
         self.TButton_NotSure.configure(text='''获取历史对话''')
-        self.TButton_NotSure.configure(command=client_support.get_dialog_his)
+        self.TButton_NotSure.configure(command=lambda : client_support.start_async(client_support.get_dialog_content))
         self.TButton_NotSure.configure(compound='left')
         self.TButton_NotSure.configure(cursor="man")
 
-        self.result_text = CTkTextbox(self.top, font=self.dialog_font, state="disabled")
+        self.result_text = CTkTextbox(self.top, font=self.dialog_font)
         self.result_text.place(relx=0.413, rely=0.022, relheight=0.753, relwidth=0.578)
 
         # 输入区
