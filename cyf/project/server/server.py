@@ -48,7 +48,7 @@ def random_client() -> OpenAI:
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-@app.route('/test', )
+@app.route('/never_guess_my_usage/test', )
 def health_check():
     logger.info(request.values)
     try:
@@ -152,19 +152,30 @@ def dialog_pic():
         if dialog_mode == 'single':
             dialogvo = {"role": "user", "desc": dialogs}
             title=dialogs
+            result = random_client().images.generate(
+                model=model_list[model],
+                prompt=dialogs,
+                n=1,
+                response_format="url",
+                size="1024x1024"
+            )
         elif dialog_mode == 'multi':
-            # TODO 上下文中获取最后一组图片+最后一次提示词，再调用图片编辑接口
-            dialogvo = {"role": "user", "desc": dialogs}
-            title = dialogs
+            dialogvo = json.loads(dialogs)
+            title = dialogvo[0]["desc"]
+            # 将连接图片转为本地的file对象
+            local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
+            with open(local_file, "rb") as image_file:
+                result = random_client().images.edit(
+                    model=model_list[model],
+                    image=image_file,
+                    prompt=dialogvo[-1]["desc"],
+                    n=1,
+                    response_format="url",
+                    size="1024x1024"
+                )
         else:
             return {"msg": "not supported dialog_mode"}, 200
-        result = random_client().images.generate(
-            model=model_list[model],
-            prompt=dialogs,
-            n=1,
-            response_format="url",
-            size="1024x1024"
-        )
+
         logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
         # 暂时支持生成1张
@@ -186,9 +197,10 @@ def dialog_pic():
         # 图片按条数统计
         sqlitelog.set_log(user, 1, model_list[model], json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题回答
-        dialog_rec = [dialogvo]
-        dialog_rec.append(result_save)
-        sqlitelog.set_dialog(user, model_list[model],"pic", title, json.dumps(dialog_rec))
+        if not isinstance(dialogvo, list):
+            dialogvo = [dialogvo]
+        dialogvo.append(result_save)
+        sqlitelog.set_dialog(user, model_list[model],"pic", title, json.dumps(dialogvo))
         return result_save, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
