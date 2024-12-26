@@ -1,4 +1,5 @@
 cp ~/server.tar.gz ./
 tar xf server.tar.gz
-pgrep -f 'python3 server.py' | xargs kill
-source myenv/bin/activate && python3 server.py &
+pgrep 'gunicorn' | xargs kill
+source myenv/bin/activate
+gunicorn --reload --log-level=DEBUG -w 4 -b 0.0.0.0:39997 server:app &

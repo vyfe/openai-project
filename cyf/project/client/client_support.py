@@ -124,7 +124,6 @@ def send_chat_pre():
     else:
         target_func = send_pic_gen
     threading.Thread(target=target_func, args=(send_content,)).start()
-    threading.Thread(target=get_dialog_his).start()
 
 @catch_exceptions
 def send_pic_gen(send):
@@ -135,11 +134,13 @@ def send_pic_gen(send):
     send = _w1.speakBox.get("1.0", END)
     host = _w1.server_select.get().split("|")[1]
     # TODO 后续支持图片会话
-    data = {"user": _w1.user_name.get(), "model": _w1.model_select.get(), "dialog": send}
+    data = {"user": _w1.user_name.get(), "model": _w1.model_select.get()}
     if not dialog_new:
         data["dialog_mode"] = "multi"
+        data["dialog"] = json.dumps(dialogsPic)
     else:
         dialog_new = False
+        data["dialog"] = send
     result_json = response_check(requests.post(f"http://{host}{pic_gen_suf}", data))
     # 测试图片
     # result_json = {"role": "assistant", "desc": "test——desc", "url": f':4567/download/images/dall-e-3-1734254013.964897-generated_00.png'}
@@ -242,6 +243,7 @@ def get_dialog_content():
                 _w1.result_text.insert(END, "回答(请复制url下载)：\n图片简介：" + log["desc"] + "\n")
                 _w1.result_text.insert(END, "超链接：")
                 add_a_url(log["url"], True)
+                _w1.result_text.insert(END, "\n")
 
 
 def response_check(response: Response):
@@ -304,6 +306,8 @@ def finish_request_hint():
     _w1.requestHint.place_forget()
     _w1.progress.stop()
     _w1.progress.place_forget()
+    # 完成对话再获取纪录
+    threading.Thread(target=get_dialog_his).start()
 
 
 @catch_exceptions

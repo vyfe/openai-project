@@ -6,6 +6,7 @@ import random
 import sys
 import time
 from datetime import datetime, timedelta
+from logging.handlers import RotatingFileHandler
 
 import requests
 from flask import Flask, request
@@ -28,16 +29,16 @@ logging.basicConfig(
     level=logging.INFO,  # 设置日志级别
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # 设置日志格式
     datefmt='%Y-%m-%d %H:%M:%S',  # 设置时间格式
-    filename='app.log',  # 设置日志文件名
-    filemode='w'  # 设置写入模式为覆盖
+    filemode='a'  # 设置写入模式为覆盖
 )
 
-_debug=True
-# 创建一个日志记录器
-logger = logging.getLogger(__name__)
+_debug=False
 if _debug:
-    console_handler = logging.StreamHandler(stream=sys.stdout)
-    logger.addHandler(console_handler)
+    handler = logging.StreamHandler(stream=sys.stdout)
+else:
+    handler = RotatingFileHandler('app.log', maxBytes=10 * 1024 * 1024, backupCount=5, encoding="UTF-8")
+    handler.setLevel(logging.INFO)
+app.logger.addHandler(handler)
 
 clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_list]
 
@@ -50,7 +51,7 @@ def allowed_file(filename):
 
 @app.route('/never_guess_my_usage/test', )
 def health_check():
-    logger.info(request.values)
+    app.logger.info(request.values)
     try:
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
@@ -58,7 +59,7 @@ def health_check():
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
-    logger.info(request.values)
+    app.logger.info(request.values)
     try:
         if request.values.get('param'):
             param = request.values.get('param').split(",")
@@ -95,7 +96,7 @@ def upload():
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
 def dialog():
     # 对话接口
-    logger.info(request.values)
+    app.logger.info(request.values)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
@@ -123,7 +124,7 @@ def dialog():
         )
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
-        logger.info(result)
+        app.logger.info(result)
         sqlitelog.set_log(user, tokens, model_list[model], json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
         sqlitelog.set_dialog(user, model_list[model], "chat",  title,
@@ -136,7 +137,7 @@ def dialog():
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
 def dialog_pic():
     # 图片对话接口
-    logger.info(request.values)
+    app.logger.info(request.values)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
@@ -157,7 +158,8 @@ def dialog_pic():
                 prompt=dialogs,
                 n=1,
                 response_format="url",
-                size="1024x1024"
+                size="1024x1024",
+                timeout=60
             )
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
@@ -176,7 +178,7 @@ def dialog_pic():
         else:
             return {"msg": "not supported dialog_mode"}, 200
 
-        logger.info(result)
+        app.logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
         # 暂时支持生成1张
         desc = result.data[0].revised_prompt
@@ -209,7 +211,7 @@ def dialog_pic():
 def dialog_his():
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     user = request.values.get('user')
-    logger.info(user)
+    app.logger.info(user)
     if user not in user_list:
         return {"msg": "not supported user or model"}, 200
     min_time_str = (datetime.now() - timedelta(days=3)).date()
@@ -225,7 +227,7 @@ def dialog_content():
         if user not in user_list:
             return {"msg": "not supported user or model"}, 200
         id = request.values.get('dialogId')
-        logger.info(user + "," + id)
+        app.logger.info(user + "," + id)
         # 理想状态下是列表
         result = sqlitelog.get_dialog_context(user, int(id))
         context = json.loads(result.context)
