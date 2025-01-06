@@ -21,7 +21,6 @@ class Log(Model):
 # 会话表模型
 class Dialog(Model):
     username = CharField()  # 用户名字段
-    username = CharField()  # 用户名字段
     chattype = CharField()  # 对话类型
     modelname = CharField()  # 模型名字段
     dialog_name = CharField()  # 会话名字段
@@ -49,7 +48,7 @@ def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: 
 def get_dialog_list(user: str, date: date):
     query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.dialog_name, Dialog.start_date)
              .where(Dialog.username == user, Dialog.start_date >= date)
-             .order_by(Dialog.start_date.desc()))
+             .order_by(Dialog.id.desc()))
     if query.exists():
         return [dialog for dialog in query.dicts().iterator()]
     else:

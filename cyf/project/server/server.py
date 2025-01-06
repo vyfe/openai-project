@@ -7,6 +7,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
+from urllib.parse import urlparse
 
 import requests
 from flask import Flask, request
@@ -183,10 +184,11 @@ def dialog_pic():
         # 暂时支持生成1张
         desc = result.data[0].revised_prompt
         # 保存到本地后使用本地的下载url
+        # TODO 异常提示词是没有url的，需要区分code
         response = requests.get(result.data[0].url)
         if response.status_code == 200:
-            filename = (model_list[model] + "-" + str(time.time()) + "-"
-                        + os.path.basename(result.data[0].url).split("?")[0])
+            filename = (model_list[model] + "-" + str(time.time()) + "-")
+            filename += [seg for seg in urlparse(result.data[0].url).path.split('/') if seg][-1]
             save_path = os.path.join(conf["common"]["upload_dir"], "images/" + filename)
             with open(save_path, "wb") as pic:
                 pic.write(response.content)
