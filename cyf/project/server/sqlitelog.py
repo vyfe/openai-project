@@ -36,7 +36,7 @@ class Dialog(Model):
 def init_db():
     # 创建表
     db.connect()
-    db.create_tables([Log, Dialog])
+    db.create_tables([Log, Dialog], safe=True)
 
 def set_log(user: str, usage: int, model: str, text: str):
     Log.create(username=user, usage=usage, modelname=model, request_text=text)

@@ -13,7 +13,9 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/never_guess_my_usage': {
-        target: 'http://localhost:39997',
+        target: process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
+          ? 'http://localhost:39997'
+          : 'http://aichat.609088523.xyz:39996',
         changeOrigin: true,
       }
     }

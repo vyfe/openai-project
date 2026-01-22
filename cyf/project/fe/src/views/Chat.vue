@@ -24,7 +24,7 @@
     <div class="chat-sidebar">
       <div class="model-selector">
         <h3>选择模型</h3>
-        <el-select v-model="selectedModel" placeholder="请选择模型" size="small">
+        <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable>
           <el-option
             v-for="model in models"
             :key="model.value"
@@ -90,13 +90,12 @@
       <div class="chat-content">
         <div class="chat-toolbar">
           <el-button
-            type="primary"
+            type="warning"
             size="small"
-            @click="loadDialogHistory"
-            :loading="loadingHistory"
+            @click="clearCurrentSession"
           >
-            <el-icon><Refresh /></el-icon>
-            刷新对话历史
+            <el-icon><Delete /></el-icon>
+            清空当前会话
           </el-button>
         </div>
         <div class="messages-container" ref="messagesContainer">
@@ -115,26 +114,30 @@
                 <span class="message-time">{{ message.time }}</span>
               </div>
               <div class="message-text" v-html="renderMarkdown(message.content)"></div>
+              <!-- 流式内容的加载动画 -->
+              <div v-if="message.type === 'ai' && isStreaming(index)" class="streaming-indicator">
+                <hr class="divider" />
+                <div v-if="message.content === ''" class="typing-initial">
+                  <div class="typing-placeholder">
+                    答案马上就到
+                  </div>
+                  <div class="typing">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                  </div>
+                </div>
+                <div v-else class="typing-continue">
+                  <div class="typing">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                  </div>
+                </div>
+              </div>
               <div v-if="message.file" class="message-file">
                 <el-icon><Document /></el-icon>
                 <span>{{ message.file.name }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="isLoading" class="message ai">
-            <div class="message-avatar">
-              <el-icon><Cpu /></el-icon>
-            </div>
-            <div class="message-content">
-              <div class="message-header">
-                <span class="message-author">AI助手</span>
-                <span class="message-time">{{ getCurrentTime() }}</span>
-              </div>
-              <div class="message-text typing">
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
-                <span class="typing-dot"></span>
               </div>
             </div>
           </div>
@@ -147,9 +150,9 @@
               v-model="inputMessage"
               type="textarea"
               :rows="3"
-              placeholder="请输入您的问题...（如需上传文件，请先点击左侧文件上传按钮）"
+              placeholder="请输入您的问题... (回车换行，Ctrl+回车发送)"
               class="message-input"
-              @keydown.enter.prevent="sendMessage"
+              @keydown="handleKeydown"
             />
             <div class="input-actions">
               <el-button
@@ -187,7 +190,8 @@ import {
   Cpu,
   Document,
   Position,
-  Refresh
+  Refresh,
+  Delete
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
@@ -204,7 +208,7 @@ const loadingHistory = ref(false)
 const inputMessage = ref('')
 const uploadedFile = ref<File | null>(null)
 
-const selectedModel = ref('gpt-4o-mini')
+const selectedModel = ref('')
 
 const models = ref<Array<{ label: string, value: string }>>([])
 
@@ -265,6 +269,10 @@ const clearFile = () => {
 
 const sendMessage = async () => {
   if (!inputMessage.value.trim()) return
+  if (!selectedModel.value) {
+    ElMessage.warning('请先选择一个模型')
+    return
+  }
 
   // 检查是否是图像生成模型
   const isImageModel = ['图像生成(dall-e)', '图像生成(gpt-4o)'].includes(selectedModel.value)
@@ -291,36 +299,49 @@ const sendMessage = async () => {
   scrollToBottom()
 
   try {
-    let aiResponse
-
     // 根据模型类型调用相应的API
     if (isImageModel) {
-      // 调用图像生成API
-      aiResponse = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content)
-    } else {
-      // 调用普通聊天API
-      aiResponse = await chatAPI.sendChat(selectedModel.value, userMessage.content)
-    }
+      // 图像生成模型仍使用普通API
+      const aiResponse = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content)
 
-    // 处理响应
-    let responseContent = ''
-    if (typeof aiResponse === 'object' && aiResponse.content) {
-      responseContent = aiResponse.content
-    } else if (typeof aiResponse === 'object' && aiResponse.desc) {
-      responseContent = aiResponse.desc
-      // 如果是图片生成，添加图片URL
-      if (aiResponse.url) {
-        responseContent += `\n图片链接: ${window.location.origin}${aiResponse.url}`
+      // 处理响应
+      let responseContent = ''
+      if (typeof aiResponse === 'object' && aiResponse.desc) {
+        responseContent = aiResponse.desc
+        // 如果是图片生成，添加图片URL
+        if (aiResponse.url) {
+          responseContent += `\n图片链接: ${window.location.origin}${aiResponse.url}`
+        }
+      } else {
+        responseContent = JSON.stringify(aiResponse)
       }
-    } else {
-      responseContent = JSON.stringify(aiResponse)
-    }
 
-    messages.push({
-      type: 'ai',
-      content: responseContent,
-      time: getCurrentTime()
-    })
+      messages.push({
+        type: 'ai',
+        content: responseContent,
+        time: getCurrentTime()
+      })
+    } else {
+      // 文本聊天使用流式API
+      const aiMessageIndex = messages.length
+      messages.push({
+        type: 'ai',
+        content: '',  // 初始内容为空
+        time: getCurrentTime()
+      })
+
+      await chatAPI.sendChatStream(
+        selectedModel.value,
+        userMessage.content,
+        (content, done) => {
+          messages[aiMessageIndex].content += content
+          if (done) {
+            isLoading.value = false
+          }
+          nextTick(() => scrollToBottom())
+        }
+      )
+    }
   } catch (error: any) {
     console.error('API Error:', error)
     let errorMessage = '获取AI回复失败，请重试'
@@ -365,6 +386,17 @@ const loadDialogHistory = async () => {
   } finally {
     loadingHistory.value = false
   }
+}
+
+// 清空当前会话
+const clearCurrentSession = () => {
+  messages.splice(0, messages.length)
+  messages.push({
+    type: 'ai',
+    content: '您好！我是AI助手，有什么可以帮助您的吗？',
+    time: getCurrentTime()
+  })
+  ElMessage.success('当前会话已清空')
 }
 
 // 加载特定对话内容
@@ -414,6 +446,32 @@ const scrollToBottom = () => {
   }
 }
 
+// 处理键盘事件：Ctrl+Enter 发送，Enter 换行
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault()
+    sendMessage()
+  }
+  // 普通回车不阻止默认行为，允许换行
+}
+
+// 检查当前消息是否正在流式接收中
+const isStreaming = (index: number) => {
+  // 如果是AI消息并且是当前正在加载的那条消息
+  const message = messages[index];
+  if (message.type === 'ai') {
+    // 检查是否是最新的AI消息且当前处于加载状态
+    const lastAiMessageIndex = messages.reduce((lastIndex, msg, idx) => {
+      if (msg.type === 'ai') {
+        return idx; // 返回最后一个AI消息的索引
+      }
+      return lastIndex;
+    }, -1);
+    return index === lastAiMessageIndex && isLoading.value;
+  }
+  return false;
+}
+
 const handleLogout = () => {
   authStore.logout()
   ElMessage.success('已退出登录')
@@ -429,10 +487,7 @@ onMounted(async () => {
         label: model.label,
         value: model.id
       }))
-      // 如果当前选中的模型不在新加载的模型列表中，设置为第一个模型
-      if (!models.value.some(m => m.value === selectedModel.value) && models.value.length > 0) {
-        selectedModel.value = models.value[0].value
-      }
+      // 不再设置默认选中模型
     } else {
       console.error('获取模型列表失败:', response.msg)
       // 设置默认模型列表作为备选
@@ -451,6 +506,9 @@ onMounted(async () => {
       { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
     ]
   }
+
+  // 自动加载历史会话
+  await loadDialogHistory()
 })
 </script>
 
@@ -846,5 +904,31 @@ onMounted(async () => {
 
 .dialog-list::-webkit-scrollbar-thumb:hover {
   background: rgba(144, 238, 144, 0.7);
+}
+
+.divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(144, 238, 144, 0.3), transparent);
+  margin: 10px 0;
+}
+
+.streaming-indicator {
+  margin-top: 10px;
+}
+
+.typing-initial {
+  margin-top: 10px;
+}
+
+.typing-placeholder {
+  margin-bottom: 8px;
+  color: #7a9c7a;
+  font-style: italic;
+  font-size: 14px;
+}
+
+.typing-continue {
+  margin-top: 10px;
 }
 </style>

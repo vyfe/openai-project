@@ -1,13 +1,15 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 
-// 后端实际API端口为39997，不需要额外的/api前缀
-const API_BASE_URL = 'http://localhost:39997'
+// 根据环境决定API端口，开发环境使用localhost:39997，生产环境使用线上地址
+const API_BASE_URL = import.meta.env.DEV
+  ? 'http://localhost:39997'
+  : 'http://aichat.609088523.xyz:39996'
 
 // 创建axios实例
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000, // 增加超时时间以应对可能较慢的AI响应
+  timeout: 300000, // 5分钟超时 (原为 120000)
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded'
   }
@@ -102,6 +104,84 @@ export const chatAPI = {
       data.dialog = JSON.stringify(dialog)
     }
     return api.post('/never_guess_my_usage/split', data)
+  },
+
+  // 流式聊天接口
+  sendChatStream: async (
+    model: string,
+    message: string,
+    onChunk: (content: string, done: boolean) => void,
+    dialogMode: string = 'single',
+    dialog?: any
+  ): Promise<void> => {
+    const data: any = {
+      model,
+      dialog: message
+    }
+    if (dialogMode === 'multi' && dialog) {
+      data.dialog_mode = 'multi'
+      data.dialog = JSON.stringify(dialog)
+    }
+
+    // 使用fetch API来处理SSE流式响应
+    const params = new URLSearchParams({
+      ...data,
+      user: useAuthStore().user || '',
+      password: useAuthStore().password || ''
+    });
+
+    const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/split_stream?${params}`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No reader available');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // 按行分割缓冲区
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 保留最后一行，可能是不完整的
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const dataStr = line.slice(6); // 移除 'data: ' 前缀
+              if (dataStr.trim()) {
+                const parsedData = JSON.parse(dataStr);
+                onChunk(parsedData.content, parsedData.done);
+
+                if (parsedData.done) {
+                  return; // 结束读取
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   },
 
   // 图片生成接口

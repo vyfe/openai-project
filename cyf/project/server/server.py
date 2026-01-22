@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam
@@ -105,8 +105,8 @@ def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
     for model in models_data:
         model_id = model.get('id', '')
 
-        # 检查是否包含指定前缀
-        has_include_prefix = any(model_id.lower().startswith(prefix.lower()) for prefix in include_prefixes)
+        # 检查是否包含指定模型
+        has_include_prefix = any(prefix.lower() in model_id.lower() for prefix in include_prefixes)
 
         # 检查是否包含排除关键词
         has_exclude_keyword = any(keyword.lower() in model_id.lower() for keyword in exclude_keywords)
@@ -297,6 +297,75 @@ def dialog():
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
 
+
+@app.route('/never_guess_my_usage/split_stream', methods=['POST', 'GET'])
+def dialog_stream():
+    # 对话接口 - 流式响应
+    app.logger.info(request.values)
+    try:
+        user = request.values.get('user')
+        password = request.values.get('password', '')
+        model = request.values.get('model')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
+        # 用户白名单、model名根据配置检查
+        logging.info(f"user:{user}， model: {model}")
+        if not is_valid_model(model):
+            return {"msg": "not supported user or model"}, 200
+        dialogs = request.values.get('dialog')
+        # 对话模式 single=单条 multi=上下文
+        dialog_mode = request.values.get('dialog_mode', 'single')
+        if dialog_mode == 'single':
+            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+            title=dialogs
+        elif dialog_mode == 'multi':
+            dialogvo = json.loads(dialogs)
+            title=dialogvo[0]["content"]
+        else:
+            return {"msg": "not supported dialog_mode"}, 200
+
+        def generate():
+            full_content = ""
+            stream = get_client_for_user(user).chat.completions.create(
+                model=model,
+                messages=dialogvo,
+                max_tokens=8192,
+                stream=True,
+                timeout=300  # 5分钟超时
+            )
+
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content_piece = chunk.choices[0].delta.content
+                    full_content += content_piece
+                    yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
+
+            yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+
+            # 记录日志 - 获取实际使用的token数
+            # 在流式响应中无法获取usage，所以使用估算的方式
+            tokens_used = len(full_content.encode('utf-8')) // 4  # 粗略估算token数量
+            sqlitelog.set_log(user, tokens_used, model, json.dumps({"content": full_content}))
+            # 记录对话
+            sqlitelog.set_dialog(user, model, "chat", title,
+                                json.dumps(dialogvo + [{"role": "assistant", "content": full_content}]))
+
+        return Response(
+            generate(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no'
+            }
+        )
+    except Exception as e:
+        app.logger.error(f"流式对话异常: {str(e)}")
+        return {"msg": f"流式对话异常: {str(e)}"}, 200
+
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
 def dialog_pic():
     # 图片对话接口
@@ -329,7 +398,7 @@ def dialog_pic():
                 n=1,
                 response_format="url",
                 size="1024x1024",
-                timeout=60
+                timeout=120
             )
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
@@ -416,9 +485,11 @@ def dialog_content():
     except json.JSONDecodeError:
         return {"msg": "api return content not ok"}, 200
 
+# 在应用启动时初始化数据库表
+# 若不存在sqlite3 db，初始化
+sqlitelog.init_db()
+
 if __name__ == '__main__':
-    # 若不存在sqlite3 db，初始化
-    sqlitelog.init_db()
     # 上传文件夹初始化
     # if not os.path.exists(conf["common"]["upload_dir"]):
     #     os.makedirs(conf["common"]["upload_dir"])
