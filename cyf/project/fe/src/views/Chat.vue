@@ -3,13 +3,19 @@
     <!-- 顶部导航栏 -->
     <div class="chat-header">
       <div class="header-left">
+        <el-button
+          class="sidebar-toggle-btn"
+          :icon="sidebarCollapsed ? Expand : Fold"
+          circle size="small"
+          @click="sidebarCollapsed = !sidebarCollapsed"
+        />
         <h2>智能对话</h2>
         <span class="user-info">用户：{{ authStore.user }}</span>
       </div>
       <div class="header-right">
-        <el-button 
-          type="danger" 
-          size="small" 
+        <el-button
+          type="danger"
+          size="small"
           :icon="SwitchButton"
           @click="handleLogout"
         >
@@ -21,70 +27,65 @@
     <!-- 聊天主体区域 -->
     <div class="chat-main">
       <!-- 侧边栏 -->
-    <div class="chat-sidebar">
-      <div class="model-selector">
-        <h3>选择模型</h3>
-        <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable>
-          <el-option
-            v-for="model in models"
-            :key="model.value"
-            :label="model.label"
-            :value="model.value"
-          />
-        </el-select>
-      </div>
-
-      <div class="dialog-history-section">
-        <h3>对话历史</h3>
-        <el-button
-          type="primary"
-          size="small"
-          @click="loadDialogHistory"
-          :loading="loadingHistory"
-          style="margin-bottom: 10px;"
-        >
-          <el-icon><Refresh /></el-icon>
-          刷新历史
-        </el-button>
-        <div class="dialog-list">
-          <div
-            v-for="dialog in dialogHistory"
-            :key="dialog.id"
-            class="dialog-item"
-            @click="loadDialogContent(dialog.id)"
-          >
-            <div class="dialog-title">{{ dialog.dialog_name }}</div>
-            <div class="dialog-date">{{ dialog.start_date }}</div>
+      <transition name="sidebar-slide">
+        <div v-show="!sidebarCollapsed" class="chat-sidebar" :class="{ 'sidebar-mobile': isMobile }">
+          <el-button v-if="isMobile" class="sidebar-close-btn" :icon="Close" circle @click="sidebarCollapsed = true"/>
+          <div class="model-selector">
+            <h3>选择模型</h3>
+            <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable>
+              <el-option
+                v-for="model in models"
+                :key="model.value"
+                :label="model.label"
+                :value="model.value"
+              />
+            </el-select>
           </div>
-          <div v-if="dialogHistory.length === 0" class="no-dialogs">
-            暂无历史对话
+
+          <div class="dialog-history-section">
+            <h3>对话历史</h3>
+            <el-button
+              type="primary"
+              size="small"
+              @click="loadDialogHistory"
+              :loading="loadingHistory"
+              style="margin-bottom: 10px;"
+            >
+              <el-icon><Refresh /></el-icon>
+              刷新历史
+            </el-button>
+            <div class="dialog-list">
+              <div
+                v-for="dialog in dialogHistory"
+                :key="dialog.id"
+                class="dialog-item"
+                @click="loadDialogContent(dialog.id)"
+              >
+                <div class="dialog-title">{{ dialog.dialog_name }}</div>
+                <div class="dialog-date">{{ dialog.start_date }}</div>
+              </div>
+              <div v-if="dialogHistory.length === 0" class="no-dialogs">
+                暂无历史对话
+              </div>
+            </div>
+          </div>
+
+          <!-- 上下文设置部分 -->
+          <div class="context-settings-section">
+            <h3>上下文设置</h3>
+            <div class="context-slider-wrapper">
+              <div class="context-label">
+                <span>携带历史消息</span>
+                <el-tag size="small" type="info">{{ contextCount }} 条</el-tag>
+              </div>
+              <el-slider v-model="contextCount" :min="0" :max="20" :step="1"
+                :marks="{ 0: '0', 10: '10', 20: '20' }" show-stops />
+              <div class="context-hint">设为0时仅发送当前消息</div>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div class="file-upload-section">
-        <h3>文件上传</h3>
-        <el-upload
-          ref="uploadRef"
-          class="upload-demo"
-          drag
-          :auto-upload="false"
-          :on-change="handleFileChange"
-          :show-file-list="true"
-          accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx"
-        >
-          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-          <div class="el-upload__text">
-            拖拽文件到此处或 <em>点击上传</em>
-          </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              支持 txt/pdf/jpg/jpeg/png/gif/ppt/pptx 格式
-            </div>
-          </template>
-        </el-upload>
-      </div>
-    </div>
+      </transition>
+      <div v-if="isMobile && !sidebarCollapsed" class="sidebar-overlay" @click="sidebarCollapsed = true"/>
 
       <!-- 聊天内容区域 -->
       <div class="chat-content">
@@ -146,6 +147,24 @@
         <!-- 输入区域 -->
         <div class="input-area">
           <div class="input-container">
+            <!-- 新增：文件上传弹窗按钮 -->
+            <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
+              <template #reference>
+                <el-button class="upload-trigger-btn" :icon="Plus" circle size="large"/>
+              </template>
+              <div class="upload-popover-content">
+                <div class="upload-popover-header">
+                  <span>上传文件</span>
+                  <el-button v-if="uploadedFile" type="danger" size="small" text @click="clearFile">清除</el-button>
+                </div>
+                <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
+                  accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx">
+                  <el-icon><upload-filled /></el-icon>
+                  <div class="el-upload__text">拖拽或点击上传</div>
+                </el-upload>
+              </div>
+            </el-popover>
+
             <el-input
               v-model="inputMessage"
               type="textarea"
@@ -163,14 +182,6 @@
               >
                 发送
               </el-button>
-              <el-button
-                v-if="uploadedFile"
-                type="info"
-                size="small"
-                @click="clearFile"
-              >
-                清除文件
-              </el-button>
             </div>
           </div>
         </div>
@@ -180,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -191,7 +202,11 @@ import {
   Document,
   Position,
   Refresh,
-  Delete
+  Delete,
+  Plus,
+  Expand,
+  Fold,
+  Close
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
@@ -207,13 +222,36 @@ const isLoading = ref(false)
 const loadingHistory = ref(false)
 const inputMessage = ref('')
 const uploadedFile = ref<File | null>(null)
+const showUploadPopover = ref(false)
 
-const selectedModel = ref('')
+const selectedModel = ref(localStorage.getItem('selectedModel') || '')
+
+// 添加上下文数量状态变量
+const contextCount = ref(parseInt(localStorage.getItem('contextCount') || '10'))
+
+// 添加侧边栏折叠状态
+const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('sidebarCollapsed') || 'false'))
+const isMobile = ref(false)
 
 const models = ref<Array<{ label: string, value: string }>>([])
 
 // 对话历史数据
 const dialogHistory = ref<any[]>([])
+
+// 监听contextCount变化并持久化
+watch(contextCount, (newVal) => {
+  localStorage.setItem('contextCount', newVal.toString())
+})
+
+// 监听sidebarCollapsed变化并持久化
+watch(sidebarCollapsed, (newVal) => {
+  localStorage.setItem('sidebarCollapsed', JSON.stringify(newVal))
+})
+
+// 监听selectedModel变化并持久化
+watch(selectedModel, (newVal) => {
+  localStorage.setItem('selectedModel', newVal)
+})
 
 const messages = reactive<Array<{
   type: 'user' | 'ai'
@@ -284,6 +322,10 @@ const sendMessage = async () => {
     file: uploadedFile.value || undefined
   }
 
+  // 在构建对话数组之前先保存当前的上下文消息
+  const contextSnapshot = [...messages]; // 创建当前消息快照用于构建上下文
+
+  // 添加用户消息到数组
   messages.push(userMessage)
   inputMessage.value = ''
   const currentFile = uploadedFile.value
@@ -330,6 +372,9 @@ const sendMessage = async () => {
         time: getCurrentTime()
       })
 
+      // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
+      const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content)
+
       await chatAPI.sendChatStream(
         selectedModel.value,
         userMessage.content,
@@ -339,7 +384,9 @@ const sendMessage = async () => {
             isLoading.value = false
           }
           nextTick(() => scrollToBottom())
-        }
+        },
+        contextCount.value > 0 ? 'multi' : 'single',
+        dialogArray
       )
     }
   } catch (error: any) {
@@ -360,6 +407,9 @@ const sendMessage = async () => {
     isLoading.value = false
     await nextTick()
     scrollToBottom()
+
+    // 刷新对话历史记录
+    await loadDialogHistory()
   }
 }
 
@@ -440,6 +490,61 @@ const loadDialogContent = async (dialogId: number) => {
   }
 }
 
+// 构建对话数组函数
+const buildDialogArray = (currentMessage: string): Array<{role: string, content: string}> => {
+  if (contextCount.value === 0) {
+    return [{ role: 'user', content: currentMessage }]
+  }
+
+  const dialogArray: Array<{role: string, content: string}> = []
+  // 获取有效消息（user 和 ai 类型），但排除初始欢迎消息和当前消息
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
+  const validMessages = messages.filter(msg => (msg.type === 'user' || msg.type === 'ai') && msg.content !== welcomeMessage)
+
+  // 获取要包含的上下文消息（排除当前用户消息）
+  const contextMessages = validMessages.slice(0, -1) // 排除最后一条（当前用户消息）
+  const messagesToInclude = contextMessages.slice(-contextCount.value) // 只取最新的几条
+
+  for (const msg of messagesToInclude) {
+    dialogArray.push({
+      role: msg.type === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })
+  }
+  dialogArray.push({ role: 'user', content: currentMessage })
+  return dialogArray
+}
+
+// 从消息快照构建对话数组函数
+const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): Array<{role: string, content: string}> => {
+  if (contextCount.value === 0) {
+    return [{ role: 'user', content: currentMessage }]
+  }
+
+  const dialogArray: Array<{role: string, content: string}> = []
+  // 获取快照中的有效消息（user 和 ai 类型），但排除初始欢迎消息
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
+  const validMessages = snapshot.filter((msg: any) => (msg.type === 'user' || msg.type === 'ai') && msg.content !== welcomeMessage)
+
+  // 获取要包含的上下文消息
+  const messagesToInclude = validMessages.slice(-contextCount.value) // 只取最新的几条
+
+  for (const msg of messagesToInclude) {
+    dialogArray.push({
+      role: msg.type === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })
+  }
+  dialogArray.push({ role: 'user', content: currentMessage })
+  return dialogArray
+}
+
+// 检测移动设备
+const checkMobile = () => {
+  isMobile.value = window.innerWidth < 768
+  if (isMobile.value) sidebarCollapsed.value = true
+}
+
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
@@ -471,6 +576,9 @@ const isStreaming = (index: number) => {
   }
   return false;
 }
+
+// TODO(human): 考虑是否需要在某些情况下延迟刷新对话历史，以避免过于频繁的API请求
+// 可以在这里添加防抖机制或根据响应时间决定是否立即刷新
 
 const handleLogout = () => {
   authStore.logout()
@@ -509,6 +617,15 @@ onMounted(async () => {
 
   // 自动加载历史会话
   await loadDialogHistory()
+
+  // 添加移动端检测和事件监听
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+// 组件卸载时移除事件监听
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
 })
 </script>
 
@@ -930,5 +1047,78 @@ onMounted(async () => {
 
 .typing-continue {
   margin-top: 10px;
+}
+
+/* 侧边栏动画 */
+.sidebar-slide-enter-active, .sidebar-slide-leave-active {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+.sidebar-slide-enter-from, .sidebar-slide-leave-to {
+  transform: translateX(-100%); opacity: 0;
+}
+
+/* 移动端侧边栏 */
+.sidebar-mobile {
+  position: fixed; left: 0; top: 0; height: 100vh; z-index: 1000;
+  box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+}
+.sidebar-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 999;
+}
+
+/* 响应式断点 */
+@media (max-width: 768px) {
+  .user-info { display: none; }
+  .chat-sidebar { width: 280px; }
+  .message-content { max-width: 85%; }
+  .input-area { padding: 12px; }
+  .header-left { gap: 8px; }
+  .sidebar-toggle-btn { margin-right: 8px; }
+}
+
+@media (max-width: 480px) {
+  .chat-sidebar { width: 100%; }
+  .message-avatar { width: 32px; height: 32px; }
+  .message-content { max-width: 80%; }
+  .input-container { flex-direction: column; align-items: stretch; }
+  .input-actions { flex-direction: row; align-items: center; margin-top: 12px; }
+  .upload-trigger-btn { align-self: flex-start; margin-bottom: 12px; }
+}
+
+/* 上下文设置部分样式 */
+.context-settings-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(144, 238, 144, 0.3);
+}
+
+.context-settings-section h3 {
+  color: #5a8a5a;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.context-slider-wrapper {
+  padding: 12px 0;
+}
+
+.context-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.context-hint {
+  font-size: 12px;
+  color: #9caf9c;
+  margin-top: 8px;
+}
+
+.sidebar-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1001;
 }
 </style>
