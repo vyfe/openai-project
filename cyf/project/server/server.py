@@ -10,18 +10,28 @@ from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
 
 app = Flask(__name__)
+CORS(app)  # 启用CORS支持
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
-user_list = {li for li in conf['common']['users'].split(',')}
+# 解析用户凭据
+user_credentials = {}
+for item in conf['common']['users'].split(','):
+    if ':' in item:
+        username, password = item.split(':', 1)
+        user_credentials[username.strip()] = password.strip()
+    else:
+        user_credentials[item.strip()] = ''
+user_list = set(user_credentials.keys())
 model_list = {model_name: conf['model'][model_name] for model_name in conf['model']}
 url = url_list[random.randint(0, len(url_list) - 1)]
 
@@ -43,12 +53,31 @@ app.logger.addHandler(handler)
 
 clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_list]
 
+
+def verify_credentials(user, password):
+    if not user or user not in user_credentials:
+        return False, "用户不存在或未授权"
+    if user_credentials[user] != password:
+        return False, "密码错误"
+    return True, None
+
 def random_client() -> OpenAI:
     return clients[random.randint(0, len(url_list) - 1)]
 
 # 检查文件扩展名是否允许
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/', methods=['GET', 'POST', 'OPTIONS'])
+def handle_options():
+    """处理预检请求"""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+    return '', 200
 
 @app.route('/never_guess_my_usage/test', )
 def health_check():
@@ -57,6 +86,21 @@ def health_check():
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
         return {"msg": "json no ok"}, 200
+
+
+@app.route('/never_guess_my_usage/login', methods=['POST'])
+def login():
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
+
+    if not user:
+        return {"success": False, "msg": "用户名不能为空"}, 200
+    if user not in user_credentials:
+        return {"success": False, "msg": "用户名不存在"}, 200
+    if user_credentials[user] != password:
+        return {"success": False, "msg": "密码错误"}, 200
+
+    return {"success": True, "msg": "登录成功", "user": user}, 200
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
@@ -102,10 +146,17 @@ def dialog():
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
         user = request.values.get('user')
+        password = request.values.get('password', '')
         model = request.values.get('model')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
-        if user not in user_list or model not in model_list:
+        if model not in model_list:
             return {"msg": "not supported user or model"}, 200
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
@@ -143,10 +194,17 @@ def dialog_pic():
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
         user = request.values.get('user')
+        password = request.values.get('password', '')
         model = request.values.get('model')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
-        if user not in user_list or model not in model_list:
+        if model not in model_list:
             return {"msg": "not supported user or model"}, 200
         # 对话模式 single=单条 multi=上下文/编辑
         dialogs = request.values.get('dialog')
@@ -213,9 +271,14 @@ def dialog_pic():
 def dialog_his():
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     user = request.values.get('user')
+    password = request.values.get('password', '')
+
+    # 验证用户凭据
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"msg": error_msg}, 200
+
     app.logger.info(user)
-    if user not in user_list:
-        return {"msg": "not supported user or model"}, 200
     min_time_str = (datetime.now() - timedelta(days=3)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
     dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
@@ -226,9 +289,14 @@ def dialog_content():
     try:
         # 根据用户名+id获取历史纪录详情context
         user = request.values.get('user')
-        if user not in user_list:
-            return {"msg": "not supported user or model"}, 200
+        password = request.values.get('password', '')
         id = request.values.get('dialogId')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         app.logger.info(user + "," + id)
         # 理想状态下是列表
         result = sqlitelog.get_dialog_context(user, int(id))
