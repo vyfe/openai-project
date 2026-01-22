@@ -1,6 +1,6 @@
 [common]
 upload_dir=
-users=admin:admin123,user1:password1
+users=admin:admin123:key,user1:password1
 [log]
 sqlite3_file=
 [api]

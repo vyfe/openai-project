@@ -38,7 +38,7 @@ api.interceptors.request.use(
     }
 
     // 如果数据是对象，将其转换为form格式
-    if (config.data && typeof config.data === 'object' && !config.data instanceof FormData) {
+    if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
       const formData = new URLSearchParams();
       for (const key in config.data) {
         if (config.data[key] !== undefined && config.data[key] !== null) {
@@ -129,6 +129,11 @@ export const chatAPI = {
     return api.post('/never_guess_my_usage/split_his_content', {
       dialogId
     })
+  },
+
+  // 获取可用模型列表
+  getModels: () => {
+    return api.get('/never_guess_my_usage/models')
   }
 }
 

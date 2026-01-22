@@ -114,7 +114,7 @@
                 <span class="message-author">{{ message.type === 'user' ? '用户' : 'AI助手' }}</span>
                 <span class="message-time">{{ message.time }}</span>
               </div>
-              <div class="message-text">{{ message.content }}</div>
+              <div class="message-text" v-html="renderMarkdown(message.content)"></div>
               <div v-if="message.file" class="message-file">
                 <el-icon><Document /></el-icon>
                 <span>{{ message.file.name }}</span>
@@ -177,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -191,6 +191,9 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/github-dark.css'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -203,14 +206,7 @@ const uploadedFile = ref<File | null>(null)
 
 const selectedModel = ref('gpt-4o-mini')
 
-const models = [
-  { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-  { label: 'GPT-4o', value: 'gpt-4o' },
-  { label: 'GPT-4o-all', value: 'gpt-4o-all' },
-  { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' },
-  { label: '图像生成(DALL-E)', value: '图像生成(dall-e)' },
-  { label: '图像生成(GPT-4o)', value: '图像生成(gpt-4o)' }
-]
+const models = ref<Array<{ label: string, value: string }>>([])
 
 // 对话历史数据
 const dialogHistory = ref<any[]>([])
@@ -227,6 +223,8 @@ const messages = reactive<Array<{
     time: getCurrentTime()
   }
 ])
+
+const renderMarkdown = (content: string) => marked.parse(content || '')
 
 function getCurrentTime() {
   return new Date().toLocaleTimeString('zh-CN', {
@@ -421,6 +419,39 @@ const handleLogout = () => {
   ElMessage.success('已退出登录')
   router.push('/login')
 }
+
+// 组件挂载时加载模型列表
+onMounted(async () => {
+  try {
+    const response = await chatAPI.getModels()
+    if (response && response.success && response.models) {
+      models.value = response.models.map((model: any) => ({
+        label: model.label,
+        value: model.id
+      }))
+      // 如果当前选中的模型不在新加载的模型列表中，设置为第一个模型
+      if (!models.value.some(m => m.value === selectedModel.value) && models.value.length > 0) {
+        selectedModel.value = models.value[0].value
+      }
+    } else {
+      console.error('获取模型列表失败:', response.msg)
+      // 设置默认模型列表作为备选
+      models.value = [
+        { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+        { label: 'GPT-4o', value: 'gpt-4o' },
+        { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
+      ]
+    }
+  } catch (error) {
+    console.error('加载模型列表时出错:', error)
+    // 设置默认模型列表作为备选
+    models.value = [
+      { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+      { label: 'GPT-4o', value: 'gpt-4o' },
+      { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
+    ]
+  }
+})
 </script>
 
 <style scoped>
@@ -636,6 +667,74 @@ const handleLogout = () => {
   color: #333;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+/* Markdown 内容的特殊样式 */
+.message-text :deep(p) {
+  margin: 0 0 1em 0;
+}
+
+.message-text :deep(h1),
+.message-text :deep(h2),
+.message-text :deep(h3),
+.message-text :deep(h4),
+.message-text :deep(h5),
+.message-text :deep(h6) {
+  margin: 0.5em 0;
+}
+
+.message-text :deep(pre) {
+  background: #2d2d2d !important;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 10px 0;
+  font-family: 'Courier New', monospace;
+  line-height: 1.4;
+}
+
+.message-text :deep(code) {
+  font-family: 'Courier New', monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.message-text :deep(pre code) {
+  background: none !important;
+  padding: 0 !important;
+  font-size: 0.9em;
+}
+
+.message-text :deep(blockquote) {
+  border-left: 3px solid #90ee90;
+  padding-left: 12px;
+  margin: 10px 0;
+  color: #666;
+}
+
+.message-text :deep(ul),
+.message-text :deep(ol) {
+  padding-left: 20px;
+  margin: 10px 0;
+}
+
+.message-text :deep(li) {
+  margin: 5px 0;
+}
+
+.message-text :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+}
+
+.message-text :deep(th),
+.message-text :deep(td) {
+  border: 1px solid #ccc;
+  padding: 8px;
+  text-align: left;
 }
 
 .message.user .message-text {
