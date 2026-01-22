@@ -1,4 +1,5 @@
 Flask==3.0.3
+Flask-Cors
 Flask-sock==0.7.0
 requests
 openai

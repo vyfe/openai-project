@@ -10,19 +10,46 @@ from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
 
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
 
 app = Flask(__name__)
+CORS(app)  # 启用CORS支持
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
-user_list = {li for li in conf['common']['users'].split(',')}
-model_list = {model_name: conf['model'][model_name] for model_name in conf['model']}
+# 解析用户凭据，支持格式：用户名:密码:api_key（api_key可选）
+user_credentials = {}
+user_api_keys = {}  # 存储用户的专属API key
+
+for item in conf['common']['users'].split(','):
+    parts = item.strip().split(':')
+    if len(parts) >= 2:
+        username = parts[0].strip()
+        password = parts[1].strip()
+        user_credentials[username] = password
+
+        # 如果有第三个参数，则为该用户的专属API key
+        if len(parts) >= 3 and parts[2].strip():
+            user_api_keys[username] = parts[2].strip()
+        else:
+            user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
+    else:
+        username = item.strip()
+        user_credentials[username] = ''
+        user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
+
+user_list = set(user_credentials.keys())
+
+# 模型缓存相关配置
+MODEL_CACHE = {}
+CACHE_EXPIRY_TIME = {}
+
 url = url_list[random.randint(0, len(url_list) - 1)]
 
 # 配置日志
@@ -43,12 +70,125 @@ app.logger.addHandler(handler)
 
 clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_list]
 
+
+def verify_credentials(user, password):
+    if not user or user not in user_credentials:
+        return False, "用户不存在或未授权"
+    if user_credentials[user] != password:
+        return False, "密码错误"
+    return True, None
+
 def random_client() -> OpenAI:
     return clients[random.randint(0, len(url_list) - 1)]
+
+
+def get_client_for_user(username: str) -> OpenAI:
+    """根据用户名获取对应的API客户端"""
+    if username in user_api_keys:
+        # 为用户创建具有其专属API key的客户端
+        api_key = user_api_keys[username]
+        url = url_list[random.randint(0, len(url_list) - 1)]
+        return OpenAI(api_key=api_key, base_url=url)
+    else:
+        # 返回默认客户端
+        return random_client()
+
+
+def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
+    """过滤模型列表"""
+    if include_prefixes is None:
+        include_prefixes = ['gpt', 'gemini']
+    if exclude_keywords is None:
+        exclude_keywords = ['instruct', 'realtime', 'audio']
+
+    filtered_models = []
+    for model in models_data:
+        model_id = model.get('id', '')
+
+        # 检查是否包含指定前缀
+        has_include_prefix = any(model_id.lower().startswith(prefix.lower()) for prefix in include_prefixes)
+
+        # 检查是否包含排除关键词
+        has_exclude_keyword = any(keyword.lower() in model_id.lower() for keyword in exclude_keywords)
+
+        if has_include_prefix and not has_exclude_keyword:
+            filtered_models.append({
+                'id': model_id,
+                'label': model_id
+            })
+
+    return filtered_models
+
+
+def get_cached_models():
+    """获取缓存的模型列表，如果过期则重新获取"""
+    import time
+
+    cache_ttl = int(conf.get('model_filter', 'cache_ttl', fallback='3600'))
+    current_time = time.time()
+
+    # 检查缓存是否过期
+    if 'models' in CACHE_EXPIRY_TIME and current_time < CACHE_EXPIRY_TIME['models']:
+        # 缓存有效，直接返回
+        return MODEL_CACHE.get('models', [])
+
+    # 缓存过期或不存在，重新获取模型
+    try:
+        # 使用默认客户端获取模型列表，因为这个API不需要用户特定的凭证
+        client = random_client()
+        models_response = client.models.list()
+
+        # 解析包含和排除规则
+        include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
+        exclude_keywords_str = conf.get('model_filter', 'exclude_keywords', fallback='instruct,realtime,audio')
+
+        include_prefixes = [prefix.strip() for prefix in include_prefixes_str.split(',')]
+        exclude_keywords = [keyword.strip() for keyword in exclude_keywords_str.split(',')]
+
+        # 过滤模型
+        filtered_models = filter_models([model.model_dump() for model in models_response.data], include_prefixes, exclude_keywords)
+
+        # 更新缓存
+        MODEL_CACHE['models'] = filtered_models
+        CACHE_EXPIRY_TIME['models'] = current_time + cache_ttl
+
+        return filtered_models
+    except Exception as e:
+        app.logger.error(f"获取模型列表失败: {str(e)}")
+        return []
+
+
+def is_valid_model(model_name):
+    """验证模型是否有效"""
+    available_models = get_cached_models()
+    available_model_ids = [model['id'] for model in available_models]
+    return model_name in available_model_ids
+
+
+@app.route('/never_guess_my_usage/models', methods=['GET', 'POST'])
+def get_models():
+    """获取可用的模型列表"""
+    try:
+        models = get_cached_models()
+        return {"success": True, "models": models}, 200
+    except Exception as e:
+        app.logger.error(f"获取模型列表异常: {str(e)}")
+        return {"success": False, "msg": f"获取模型列表失败: {str(e)}"}, 200
 
 # 检查文件扩展名是否允许
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/', methods=['GET', 'POST', 'OPTIONS'])
+def handle_options():
+    """处理预检请求"""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'OK'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+    return '', 200
 
 @app.route('/never_guess_my_usage/test', )
 def health_check():
@@ -57,6 +197,21 @@ def health_check():
         return json.dumps(request.values.to_dict()), 200
     except json.JSONDecodeError:
         return {"msg": "json no ok"}, 200
+
+
+@app.route('/never_guess_my_usage/login', methods=['POST'])
+def login():
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
+
+    if not user:
+        return {"success": False, "msg": "用户名不能为空"}, 200
+    if user not in user_credentials:
+        return {"success": False, "msg": "用户名不存在"}, 200
+    if user_credentials[user] != password:
+        return {"success": False, "msg": "密码错误"}, 200
+
+    return {"success": True, "msg": "登录成功", "user": user}, 200
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
@@ -102,10 +257,17 @@ def dialog():
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
         user = request.values.get('user')
+        password = request.values.get('password', '')
         model = request.values.get('model')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
-        if user not in user_list or model not in model_list:
+        if not is_valid_model(model):
             return {"msg": "not supported user or model"}, 200
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
@@ -118,17 +280,17 @@ def dialog():
             title=dialogvo[0]["content"]
         else:
             return {"msg": "not supported dialog_mode"}, 200
-        result = random_client().chat.completions.create(
-            model=model_list[model],
+        result = get_client_for_user(user).chat.completions.create(
+            model=model,
             messages=dialogvo,
             max_tokens=8192
         )
         # 4 sqlite3数据库写日志：用户名+token数+raw msg
         tokens = result.usage.total_tokens
         app.logger.info(result)
-        sqlitelog.set_log(user, tokens, model_list[model], json.dumps(result.to_dict()))
+        sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题，返回答案
-        sqlitelog.set_dialog(user, model_list[model], "chat",  title,
+        sqlitelog.set_dialog(user, model, "chat",  title,
                              json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
         # 仅返回role和content
         return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
@@ -143,10 +305,17 @@ def dialog_pic():
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
         user = request.values.get('user')
+        password = request.values.get('password', '')
         model = request.values.get('model')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
-        if user not in user_list or model not in model_list:
+        if not is_valid_model(model):
             return {"msg": "not supported user or model"}, 200
         # 对话模式 single=单条 multi=上下文/编辑
         dialogs = request.values.get('dialog')
@@ -154,8 +323,8 @@ def dialog_pic():
         if dialog_mode == 'single':
             dialogvo = {"role": "user", "desc": dialogs}
             title=dialogs
-            result = random_client().images.generate(
-                model=model_list[model],
+            result = get_client_for_user(user).images.generate(
+                model=model,
                 prompt=dialogs,
                 n=1,
                 response_format="url",
@@ -168,8 +337,8 @@ def dialog_pic():
             # 将连接图片转为本地的file对象
             local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
             with open(local_file, "rb") as image_file:
-                result = random_client().images.edit(
-                    model=model_list[model],
+                result = get_client_for_user(user).images.edit(
+                    model=model,
                     image=image_file,
                     prompt=dialogvo[-1]["desc"],
                     n=1,
@@ -187,7 +356,7 @@ def dialog_pic():
         # TODO 异常提示词是没有url的，需要区分code
         response = requests.get(result.data[0].url)
         if response.status_code == 200:
-            filename = (model_list[model] + "-" + str(time.time()) + "-")
+            filename = (model + "-" + str(time.time()) + "-")
             filename += [seg for seg in urlparse(result.data[0].url).path.split('/') if seg][-1]
             save_path = os.path.join(conf["common"]["upload_dir"], "images/" + filename)
             with open(save_path, "wb") as pic:
@@ -199,12 +368,12 @@ def dialog_pic():
         result_save = {"role": "assistant", "desc": desc, "url": f':4567/download/images/{filename}'}
         # 日志和对话单独记录，dialog中新增model-name字段？
         # 图片按条数统计
-        sqlitelog.set_log(user, 1, model_list[model], json.dumps(result.to_dict()))
+        sqlitelog.set_log(user, 1, model, json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题回答
         if not isinstance(dialogvo, list):
             dialogvo = [dialogvo]
         dialogvo.append(result_save)
-        sqlitelog.set_dialog(user, model_list[model],"pic", title, json.dumps(dialogvo))
+        sqlitelog.set_dialog(user, model,"pic", title, json.dumps(dialogvo))
         return result_save, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
@@ -213,9 +382,14 @@ def dialog_pic():
 def dialog_his():
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     user = request.values.get('user')
+    password = request.values.get('password', '')
+
+    # 验证用户凭据
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"msg": error_msg}, 200
+
     app.logger.info(user)
-    if user not in user_list:
-        return {"msg": "not supported user or model"}, 200
     min_time_str = (datetime.now() - timedelta(days=3)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
     dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
@@ -226,9 +400,14 @@ def dialog_content():
     try:
         # 根据用户名+id获取历史纪录详情context
         user = request.values.get('user')
-        if user not in user_list:
-            return {"msg": "not supported user or model"}, 200
+        password = request.values.get('password', '')
         id = request.values.get('dialogId')
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
         app.logger.info(user + "," + id)
         # 理想状态下是列表
         result = sqlitelog.get_dialog_context(user, int(id))
