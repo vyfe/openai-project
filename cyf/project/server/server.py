@@ -18,7 +18,10 @@ from openai.types.chat import ChatCompletionUserMessageParam
 import sqlitelog
 
 app = Flask(__name__)
-CORS(app)  # 启用CORS支持
+# 启用CORS支持，允许来自所有源的请求（在生产环境中应更具体地指定源）
+CORS(app, supports_credentials=True, origins=["*"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "User-Agent", "Cache-Control"],
+     methods=["GET", "PUT", "POST", "DELETE", "OPTIONS"])
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
@@ -243,14 +246,13 @@ def get_models():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
+
 @app.route('/', methods=['GET', 'POST', 'OPTIONS'])
 def handle_options():
     """处理预检请求"""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'OK'})
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
         return response
     return '', 200
 
@@ -313,6 +315,15 @@ def upload():
         # 上传文件并返回url的接口
         return {"msg": "文件格式问题"}, 200
 
+def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
+    """从对话中提取标题，优先使用第一条 user 消息"""
+    for msg in dialogvo:
+        if msg.get('role') == 'user':
+            content = msg.get('content', '')
+            return content[:max_length] + '...' if len(content) > max_length else content
+    return 'Untitled'
+
+
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
 def dialog():
     # 对话接口
@@ -323,6 +334,8 @@ def dialog():
         user = request.values.get('user')
         password = request.values.get('password', '')
         model = request.values.get('model')
+        # 获取前端传入的对话标题
+        dialog_title = request.values.get('dialog_title')
 
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
@@ -338,10 +351,10 @@ def dialog():
         dialog_mode = request.values.get('dialog_mode', 'single')
         if dialog_mode == 'single':
             dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
-            title=dialogs
+            title = dialog_title or dialogs
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
-            title=dialogvo[0]["content"]
+            title = dialog_title or extract_title_from_dialog(dialogvo)
         else:
             return {"msg": "not supported dialog_mode"}, 200
 
@@ -375,6 +388,8 @@ def dialog_stream():
         user = request.values.get('user')
         password = request.values.get('password', '')
         model = request.values.get('model')
+        # 获取前端传入的对话标题
+        dialog_title = request.values.get('dialog_title')
 
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
@@ -434,10 +449,10 @@ def dialog_stream():
         dialog_mode = request.values.get('dialog_mode', 'single')
         if dialog_mode == 'single':
             dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
-            title=dialogs
+            title = dialog_title or dialogs
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
-            title=dialogvo[0]["content"]
+            title = dialog_title or extract_title_from_dialog(dialogvo)
         else:
             # 针对SSE请求，需要返回SSE格式的错误
             def error_generator():
@@ -502,7 +517,11 @@ def dialog_stream():
             headers={
                 'Cache-Control': 'no-cache',
                 'X-Accel-Buffering': 'no',
-                'Connection': 'close'  # 确保连接关闭
+                'Connection': 'close',  # 确保连接关闭
+                'Access-Control-Allow-Origin': '*',  # 添加CORS头
+                'Access-Control-Allow-Credentials': 'true',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control',
+                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
             }
         )
     except Exception as e:
@@ -528,7 +547,11 @@ def dialog_stream():
             headers={
                 'Cache-Control': 'no-cache',
                 'X-Accel-Buffering': 'no',
-                'Connection': 'close'
+                'Connection': 'close',
+                'Access-Control-Allow-Origin': '*',  # 添加CORS头
+                'Access-Control-Allow-Credentials': 'true',
+                'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control',
+                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
             }
         )
 
@@ -542,6 +565,8 @@ def dialog_pic():
         user = request.values.get('user')
         password = request.values.get('password', '')
         model = request.values.get('model')
+        # 获取前端传入的对话标题
+        dialog_title = request.values.get('dialog_title')
 
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
@@ -557,7 +582,7 @@ def dialog_pic():
         dialog_mode = request.values.get('dialog_mode', 'single')
         if dialog_mode == 'single':
             dialogvo = {"role": "user", "desc": dialogs}
-            title=dialogs
+            title = dialog_title or dialogs
 
             try:
                 result = get_client_for_user(user).images.generate(
@@ -572,7 +597,7 @@ def dialog_pic():
                 return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
-            title = dialogvo[0]["desc"]
+            title = dialog_title or extract_title_from_dialog(dialogvo)  # 修复：改为使用新的提取函数
             # 将连接图片转为本地的file对象
             local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
 

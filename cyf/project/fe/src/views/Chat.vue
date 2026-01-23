@@ -103,6 +103,17 @@
       <!-- 聊天内容区域 -->
       <div class="chat-content">
         <div class="chat-toolbar">
+          <!-- 新增：对话标题编辑区域 -->
+          <div class="dialog-title-editor">
+            <el-input
+              v-model="dialogTitle"
+              placeholder="请输入对话标题..."
+              size="small"
+              maxlength="50"
+              show-word-limit
+              @blur="handleTitleBlur"
+            />
+          </div>
           <el-button
             type="warning"
             size="small"
@@ -237,6 +248,12 @@ const inputMessage = ref('')
 const uploadedFile = ref<File | null>(null)
 const showUploadPopover = ref(false)
 
+// 添加对话标题状态
+const dialogTitle = ref('')
+
+// 添加状态跟踪用户是否手动滚动离开了底部
+const isScrolledToBottom = ref(true)
+
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 
 // 添加上下文数量状态变量
@@ -272,6 +289,11 @@ watch(selectedModel, (newVal) => {
 // 监听 systemPrompt 变化并持久化
 watch(systemPrompt, (newVal) => {
   localStorage.setItem('systemPrompt', newVal)
+})
+
+// 监听 dialogTitle 变化并持久化
+watch(dialogTitle, (newVal) => {
+  localStorage.setItem('dialogTitle', newVal)
 })
 
 const messages = reactive<Array<{
@@ -348,6 +370,15 @@ const sendMessage = async () => {
 
   // 添加用户消息到数组
   messages.push(userMessage)
+
+  // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
+  if (!dialogTitle.value.trim()) {
+    // 截取前50个字符作为标题
+    dialogTitle.value = inputMessage.value.length > 50
+      ? inputMessage.value.substring(0, 50) + '...'
+      : inputMessage.value
+  }
+
   inputMessage.value = ''
   const currentFile = uploadedFile.value
   uploadedFile.value = null
@@ -365,7 +396,7 @@ const sendMessage = async () => {
     // 根据模型类型调用相应的API
     if (isImageModel) {
       // 图像生成模型仍使用普通API
-      const aiResponse = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content)
+      const aiResponse = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content, contextCount.value > 0 ? 'multi' : 'single', buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content), dialogTitle.value)
 
       // 处理响应
       let responseContent = ''
@@ -404,10 +435,16 @@ const sendMessage = async () => {
           if (done) {
             isLoading.value = false
           }
-          nextTick(() => scrollToBottom())
+          // 只在用户位于底部时才滚动
+          nextTick(() => {
+            if (isScrolledToBottom.value) {
+              scrollToBottom()
+            }
+          })
         },
         contextCount.value > 0 ? 'multi' : 'single',
-        dialogArray
+        dialogArray,
+        dialogTitle.value  // 添加dialogTitle参数
       )
     }
   } catch (error: any) {
@@ -478,6 +515,8 @@ const clearCurrentSession = () => {
     content: '您好！我是AI助手，有什么可以帮助您的吗？',
     time: getCurrentTime()
   })
+  // 清空对话标题
+  dialogTitle.value = ''
   ElMessage.success('当前会话已清空')
 }
 
@@ -514,11 +553,25 @@ const loadDialogContent = async (dialogId: number) => {
         })
       }
 
+      // 从对话历史中获取该对话的标题
+      const dialogItem = dialogHistory.value.find(d => d.id === dialogId)
+      if (dialogItem) {
+        dialogTitle.value = dialogItem.dialog_name
+      }
+
       ElMessage.success('对话加载成功')
     }
   } catch (error: any) {
     console.error('加载对话内容错误:', error)
     ElMessage.error('加载对话内容失败')
+  }
+}
+
+// 当标题输入框失去焦点时的处理
+const handleTitleBlur = () => {
+  // 在这里可以进行额外的验证或处理
+  if (dialogTitle.value.trim()) {
+    localStorage.setItem('dialogTitle', dialogTitle.value.trim())
   }
 }
 
@@ -592,8 +645,18 @@ const checkMobile = () => {
 }
 
 const scrollToBottom = () => {
-  if (messagesContainer.value) {
+  if (messagesContainer.value && isScrolledToBottom.value) {
+    // 只有在用户已经滚动到底部时才继续滚动
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
+}
+
+// 监听滚动事件，判断用户是否滚动到了底部
+const handleScroll = () => {
+  if (messagesContainer.value) {
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+    // 如果距离底部小于50像素，则认为是在底部
+    isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 50
   }
 }
 
@@ -661,17 +724,34 @@ onMounted(async () => {
     ]
   }
 
+  // 从localStorage恢复对话标题
+  const savedDialogTitle = localStorage.getItem('dialogTitle')
+  if (savedDialogTitle) {
+    dialogTitle.value = savedDialogTitle
+  }
+
   // 自动加载历史会话
   await loadDialogHistory()
 
   // 添加移动端检测和事件监听
   checkMobile()
   window.addEventListener('resize', checkMobile)
+
+  // 添加滚动事件监听器
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', handleScroll)
+    // 初始化滚动位置状态
+    handleScroll()
+  }
 })
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  // 移除滚动事件监听器
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', handleScroll)
+  }
 })
 </script>
 
@@ -823,6 +903,15 @@ onUnmounted(() => {
   padding: 10px 20px;
   background: rgba(255, 255, 255, 0.8);
   border-bottom: 1px solid rgba(144, 238, 144, 0.3);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dialog-title-editor {
+  flex: 1;
+  max-width: 300px;
+  margin-right: 10px;
 }
 
 .messages-container {
