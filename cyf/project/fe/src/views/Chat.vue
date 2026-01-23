@@ -30,9 +30,9 @@
       <transition name="sidebar-slide">
         <div v-show="!sidebarCollapsed" class="chat-sidebar" :class="{ 'sidebar-mobile': isMobile }">
           <el-button v-if="isMobile" class="sidebar-close-btn" :icon="Close" circle @click="sidebarCollapsed = true"/>
-          <div class="model-selector">
+          <div class="model-selector" @click.stop>
             <h3>选择模型</h3>
-            <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable>
+            <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable @click.stop>
               <el-option
                 v-for="model in models"
                 :key="model.value"

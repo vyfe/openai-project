@@ -27,22 +27,31 @@ url_list = conf['api']['api_host'].split(',')
 user_credentials = {}
 user_api_keys = {}  # 存储用户的专属API key
 
-for item in conf['common']['users'].split(','):
-    parts = item.strip().split(':')
-    if len(parts) >= 2:
-        username = parts[0].strip()
-        password = parts[1].strip()
-        user_credentials[username] = password
+# 支持多行格式的用户配置，每行一个用户信息
+users_config = conf['common']['users']
+# 按行分割，并去除空白行和仅包含空白字符的行
+user_lines = [line.strip() for line in users_config.split('\n') if line.strip()]
 
-        # 如果有第三个参数，则为该用户的专属API key
-        if len(parts) >= 3 and parts[2].strip():
-            user_api_keys[username] = parts[2].strip()
-        else:
+for line in user_lines:
+    # 按逗号分割（兼容旧格式）
+    user_entries = line.split(',') if ',' in line else [line]
+
+    for item in user_entries:
+        parts = item.strip().split(':')
+        if len(parts) >= 2:
+            username = parts[0].strip()
+            password = parts[1].strip()
+            user_credentials[username] = password
+
+            # 如果有第三个参数，则为该用户的专属API key
+            if len(parts) >= 3 and parts[2].strip():
+                user_api_keys[username] = parts[2].strip()
+            else:
+                user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
+        elif item.strip():  # 如果不是空行
+            username = item.strip()
+            user_credentials[username] = ''
             user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
-    else:
-        username = item.strip()
-        user_credentials[username] = ''
-        user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
 
 user_list = set(user_credentials.keys())
 

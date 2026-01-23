@@ -1,6 +1,16 @@
 [common]
 upload_dir=
-users=admin:admin123:key,user1:password1
+# 用户配置支持两种格式：
+# 1. 旧格式（一行）：users=admin:admin123:key,user1:password1
+# 2. 新格式（多行，YAML风格）：
+# users=
+#   admin:admin123:key
+#   user1:password1
+#   user2:password234:optional_api_key
+users=
+  admin:admin123:your_api_key_here
+  user1:password1
+  user2:password234:optional_api_key
 [log]
 sqlite3_file=
 [api]
