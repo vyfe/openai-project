@@ -45,8 +45,8 @@ cd "$PROJECT_ROOT"
 
 # 可选：询问用户是否删除源文件
 echo ""
-read -p "⚠️  是否删除原始文件？(输入 'yes' 确认删除): " DELETE_CONFIRMATION
-if [ "$DELETE_CONFIRMATION" = "yes" ]; then
+read -p "⚠️  是否保留原始文件？(输入 'y' 确认保留): " DELETE_CONFIRMATION
+if [ "$DELETE_CONFIRMATION" != "y" ]; then
     echo "🗑️  删除原始文件..."
     rm -f dist/server.tar.gz
     rm -f dist/fe.tar.gz
