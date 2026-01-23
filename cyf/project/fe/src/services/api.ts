@@ -167,6 +167,13 @@ export const chatAPI = {
               const dataStr = line.slice(6); // 移除 'data: ' 前缀
               if (dataStr.trim()) {
                 const parsedData = JSON.parse(dataStr);
+
+                // 检查是否存在错误
+                if (parsedData.error) {
+                  // 如果存在错误信息，抛出错误
+                  throw new Error(parsedData.error.msg || 'API请求失败');
+                }
+
                 onChunk(parsedData.content, parsedData.done);
 
                 if (parsedData.done) {
@@ -175,6 +182,10 @@ export const chatAPI = {
               }
             } catch (e) {
               console.error('Error parsing SSE data:', e);
+              // 如果解析错误或遇到异常，也需要把错误信息传出去
+              if (e instanceof Error) {
+                throw e; // 重新抛出错误，让调用方处理
+              }
             }
           }
         }

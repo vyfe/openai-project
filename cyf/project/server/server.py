@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import requests
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
-from openai import OpenAI
+from openai import OpenAI, APIError, AuthenticationError, RateLimitError
 from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
@@ -61,6 +61,60 @@ MODEL_CACHE = {}
 CACHE_EXPIRY_TIME = {}
 
 url = url_list[random.randint(0, len(url_list) - 1)]
+
+
+def handle_api_exception(e, user=None, model=None, dialog_content=None):
+    """
+    统一处理API异常，特别处理IP白名单限制等错误
+    """
+    app.logger.error(f"API请求异常: {str(e)}, 类型: {type(e).__name__}")
+
+    # 记录错误到日志
+    if user and model:
+        error_msg = f"API Error: {str(e)}"
+        sqlitelog.set_log(user, 0, model, json.dumps({"error": error_msg, "content": dialog_content or ""}))
+
+    # 处理不同的异常类型
+    if isinstance(e, AuthenticationError):
+        # 认证错误，可能包括IP白名单限制
+        error_details = getattr(e, 'body', {}) or {}
+        error_message = error_details.get('message', str(e)) if isinstance(error_details, dict) else str(e)
+
+        # 特别处理IP白名单限制错误
+        if '网段' in error_message or 'ip' in error_message.lower() or 'whitelist' in error_message.lower():
+            return {
+                "success": False,
+                "msg": "API密钥访问受限：当前IP不在白名单中，请联系管理员或更换API服务",
+                "error_type": "IP_RESTRICTION"
+            }
+        else:
+            return {
+                "success": False,
+                "msg": f"认证失败: {error_message}",
+                "error_type": "AUTHENTICATION_ERROR"
+            }
+    elif isinstance(e, RateLimitError):
+        return {
+            "success": False,
+            "msg": "请求频率超限，请稍后再试",
+            "error_type": "RATE_LIMIT_ERROR"
+        }
+    elif isinstance(e, APIError):
+        # 通用API错误
+        error_details = getattr(e, 'body', {}) or {}
+        error_message = error_details.get('message', str(e)) if isinstance(error_details, dict) else str(e)
+        return {
+            "success": False,
+            "msg": f"API错误: {error_message}",
+            "error_type": "API_ERROR"
+        }
+    else:
+        # 其他类型的异常
+        return {
+            "success": False,
+            "msg": f"请求失败: {str(e)}",
+            "error_type": "GENERAL_ERROR"
+        }
 
 # 配置日志
 logging.basicConfig(
@@ -290,20 +344,25 @@ def dialog():
             title=dialogvo[0]["content"]
         else:
             return {"msg": "not supported dialog_mode"}, 200
-        result = get_client_for_user(user).chat.completions.create(
-            model=model,
-            messages=dialogvo,
-            max_tokens=8192
-        )
-        # 4 sqlite3数据库写日志：用户名+token数+raw msg
-        tokens = result.usage.total_tokens
-        app.logger.info(result)
-        sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
-        # 5 dialog组装：上下文+本次问题，返回答案
-        sqlitelog.set_dialog(user, model, "chat",  title,
-                             json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
-        # 仅返回role和content
-        return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
+
+        # 添加API请求的异常处理
+        try:
+            result = get_client_for_user(user).chat.completions.create(
+                model=model,
+                messages=dialogvo,
+                max_tokens=8192
+            )
+            # 4 sqlite3数据库写日志：用户名+token数+raw msg
+            tokens = result.usage.total_tokens
+            app.logger.info(result)
+            sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
+            # 5 dialog组装：上下文+本次问题，返回答案
+            sqlitelog.set_dialog(user, model, "chat",  title,
+                                 json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
+            # 仅返回role和content
+            return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
+        except Exception as api_e:
+            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
 
@@ -320,12 +379,56 @@ def dialog_stream():
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
         if not is_valid:
-            return {"msg": error_msg}, 200
+            # 针对SSE请求，需要返回SSE格式的错误
+            def error_generator():
+                error_response = {
+                    "success": False,
+                    "msg": error_msg,
+                    "done": True,
+                    "error": {
+                        "success": False,
+                        "msg": error_msg,
+                        "error_type": "AUTHENTICATION_ERROR"
+                    }
+                }
+                yield f"data: {json.dumps(error_response)}\n\n"
+
+            return Response(
+                error_generator(),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no',
+                    'Connection': 'close'
+                }
+            )
 
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if not is_valid_model(model):
-            return {"msg": "not supported user or model"}, 200
+            # 针对SSE请求，需要返回SSE格式的错误
+            def error_generator():
+                error_response = {
+                    "success": False,
+                    "msg": "not supported user or model",
+                    "done": True,
+                    "error": {
+                        "success": False,
+                        "msg": "not supported user or model",
+                        "error_type": "MODEL_ERROR"
+                    }
+                }
+                yield f"data: {json.dumps(error_response)}\n\n"
+
+            return Response(
+                error_generator(),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no',
+                    'Connection': 'close'
+                }
+            )
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
         dialog_mode = request.values.get('dialog_mode', 'single')
@@ -336,45 +439,98 @@ def dialog_stream():
             dialogvo = json.loads(dialogs)
             title=dialogvo[0]["content"]
         else:
-            return {"msg": "not supported dialog_mode"}, 200
+            # 针对SSE请求，需要返回SSE格式的错误
+            def error_generator():
+                error_response = {
+                    "success": False,
+                    "msg": "not supported dialog_mode",
+                    "done": True,
+                    "error": {
+                        "success": False,
+                        "msg": "not supported dialog_mode",
+                        "error_type": "DIALOG_MODE_ERROR"
+                    }
+                }
+                yield f"data: {json.dumps(error_response)}\n\n"
+
+            return Response(
+                error_generator(),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no',
+                    'Connection': 'close'
+                }
+            )
 
         def generate():
             full_content = ""
-            stream = get_client_for_user(user).chat.completions.create(
-                model=model,
-                messages=dialogvo,
-                max_tokens=8192,
-                stream=True,
-                timeout=300  # 5分钟超时
-            )
+            try:
+                stream = get_client_for_user(user).chat.completions.create(
+                    model=model,
+                    messages=dialogvo,
+                    max_tokens=8192,
+                    stream=True,
+                    timeout=300  # 5分钟超时
+                )
 
-            for chunk in stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content_piece = chunk.choices[0].delta.content
-                    full_content += content_piece
-                    yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content_piece = chunk.choices[0].delta.content
+                        full_content += content_piece
+                        yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
 
-            yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+                yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
 
-            # 记录日志 - 获取实际使用的token数
-            # 在流式响应中无法获取usage，所以使用估算的方式
-            tokens_used = len(full_content.encode('utf-8')) // 4  # 粗略估算token数量
-            sqlitelog.set_log(user, tokens_used, model, json.dumps({"content": full_content}))
-            # 记录对话
-            sqlitelog.set_dialog(user, model, "chat", title,
-                                json.dumps(dialogvo + [{"role": "assistant", "content": full_content}]))
+                # 记录日志 - 获取实际使用的token数
+                # 在流式响应中无法获取usage，所以使用估算的方式
+                tokens_used = len(full_content.encode('utf-8')) // 4  # 粗略估算token数量
+                sqlitelog.set_log(user, tokens_used, model, json.dumps({"content": full_content}))
+                # 记录对话
+                sqlitelog.set_dialog(user, model, "chat", title,
+                                    json.dumps(dialogvo + [{"role": "assistant", "content": full_content}]))
+
+            except Exception as api_e:
+                error_response = handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs)
+                app.logger.error(f"流式API请求异常处理: {error_response}")
+                # 发送错误信息，标记为已完成，带有错误详情
+                yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"
 
         return Response(
             generate(),
             mimetype='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
-                'X-Accel-Buffering': 'no'
+                'X-Accel-Buffering': 'no',
+                'Connection': 'close'  # 确保连接关闭
             }
         )
     except Exception as e:
         app.logger.error(f"流式对话异常: {str(e)}")
-        return {"msg": f"流式对话异常: {str(e)}"}, 200
+
+        # 针对SSE请求，需要返回SSE格式的错误
+        def error_generator():
+            error_response = {
+                "success": False,
+                "msg": f"流式对话异常: {str(e)}",
+                "done": True,
+                "error": {
+                    "success": False,
+                    "msg": f"流式对话异常: {str(e)}",
+                    "error_type": "GENERAL_ERROR"
+                }
+            }
+            yield f"data: {json.dumps(error_response)}\n\n"
+
+        return Response(
+            error_generator(),
+            mimetype='text/event-stream',
+            headers={
+                'Cache-Control': 'no-cache',
+                'X-Accel-Buffering': 'no',
+                'Connection': 'close'
+            }
+        )
 
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
 def dialog_pic():
@@ -402,28 +558,36 @@ def dialog_pic():
         if dialog_mode == 'single':
             dialogvo = {"role": "user", "desc": dialogs}
             title=dialogs
-            result = get_client_for_user(user).images.generate(
-                model=model,
-                prompt=dialogs,
-                n=1,
-                response_format="url",
-                size="1024x1024",
-                timeout=120
-            )
+
+            try:
+                result = get_client_for_user(user).images.generate(
+                    model=model,
+                    prompt=dialogs,
+                    n=1,
+                    response_format="url",
+                    size="1024x1024",
+                    timeout=120
+                )
+            except Exception as api_e:
+                return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
         elif dialog_mode == 'multi':
             dialogvo = json.loads(dialogs)
             title = dialogvo[0]["desc"]
             # 将连接图片转为本地的file对象
             local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
-            with open(local_file, "rb") as image_file:
-                result = get_client_for_user(user).images.edit(
-                    model=model,
-                    image=image_file,
-                    prompt=dialogvo[-1]["desc"],
-                    n=1,
-                    response_format="url",
-                    size="1024x1024"
-                )
+
+            try:
+                with open(local_file, "rb") as image_file:
+                    result = get_client_for_user(user).images.edit(
+                        model=model,
+                        image=image_file,
+                        prompt=dialogvo[-1]["desc"],
+                        n=1,
+                        response_format="url",
+                        size="1024x1024"
+                    )
+            except Exception as api_e:
+                return handle_api_exception(api_e, user=user, model=model, dialog_content=json.dumps(dialogs)), 200
         else:
             return {"msg": "not supported dialog_mode"}, 200
 

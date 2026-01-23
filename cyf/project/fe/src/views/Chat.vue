@@ -83,6 +83,19 @@
               <div class="context-hint">设为0时仅发送当前消息</div>
             </div>
           </div>
+
+          <!-- 角色设定部分 -->
+          <div class="system-prompt-section">
+            <h3>角色设定</h3>
+            <el-input
+              v-model="systemPrompt"
+              type="textarea"
+              :rows="3"
+              placeholder="输入系统提示词，例如：你是一个专业的程序员助手..."
+              resize="vertical"
+            />
+            <div class="system-prompt-hint">设定 AI 的行为和角色</div>
+          </div>
         </div>
       </transition>
       <div v-if="isMobile && !sidebarCollapsed" class="sidebar-overlay" @click="sidebarCollapsed = true"/>
@@ -233,6 +246,9 @@ const contextCount = ref(parseInt(localStorage.getItem('contextCount') || '10'))
 const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('sidebarCollapsed') || 'false'))
 const isMobile = ref(false)
 
+// 角色设定（System Prompt）
+const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
+
 const models = ref<Array<{ label: string, value: string }>>([])
 
 // 对话历史数据
@@ -251,6 +267,11 @@ watch(sidebarCollapsed, (newVal) => {
 // 监听selectedModel变化并持久化
 watch(selectedModel, (newVal) => {
   localStorage.setItem('selectedModel', newVal)
+})
+
+// 监听 systemPrompt 变化并持久化
+watch(systemPrompt, (newVal) => {
+  localStorage.setItem('systemPrompt', newVal)
 })
 
 const messages = reactive<Array<{
@@ -396,6 +417,17 @@ const sendMessage = async () => {
       errorMessage = `错误: ${error.response.data?.msg || error.response.statusText}`
     } else if (error.request) {
       errorMessage = '网络请求失败，请检查后端服务是否正常运行'
+    } else if (error.message) {
+      // 更新判断条件，匹配后端返回的实际错误消息内容
+      if (error.message.includes('API错误') || error.message.includes('API请求失败') ||
+          error.message.includes('网段') || error.message.includes('白名单') ||
+          error.message.includes('IP') || error.message.includes('ip')) {
+        // 特别处理API错误信息，这通常来自SSE流中的错误消息
+        errorMessage = error.message
+      } else {
+        // 其他类型的错误消息也直接使用
+        errorMessage = error.message
+      }
     }
     ElMessage.error(errorMessage)
     messages.push({
@@ -425,7 +457,7 @@ const loadDialogHistory = async () => {
     const response = await chatAPI.getDialogHistory(selectedModel.value)
     if (response && response.content) {
       dialogHistory.value = response.content
-      ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
+      // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
     } else {
       dialogHistory.value = []
       ElMessage.info('暂无历史对话')
@@ -517,11 +549,19 @@ const buildDialogArray = (currentMessage: string): Array<{role: string, content:
 
 // 从消息快照构建对话数组函数
 const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): Array<{role: string, content: string}> => {
-  if (contextCount.value === 0) {
-    return [{ role: 'user', content: currentMessage }]
+  const dialogArray: Array<{role: string, content: string}> = []
+
+  // 如果有角色设定，添加到最前面
+  if (systemPrompt.value.trim()) {
+    dialogArray.push({ role: 'system', content: systemPrompt.value.trim() })
   }
 
-  const dialogArray: Array<{role: string, content: string}> = []
+  // 如果上下文数量为 0，只发送当前消息（但仍需包含 system 消息）
+  if (contextCount.value === 0) {
+    dialogArray.push({ role: 'user', content: currentMessage })
+    return dialogArray
+  }
+
   // 获取快照中的有效消息（user 和 ai 类型），但排除初始欢迎消息
   const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
   const validMessages = snapshot.filter((msg: any) => (msg.type === 'user' || msg.type === 'ai') && msg.content !== welcomeMessage)
@@ -1126,5 +1166,35 @@ onUnmounted(() => {
   top: 16px;
   right: 16px;
   z-index: 1001;
+}
+
+/* 角色设定部分样式 */
+.system-prompt-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(144, 238, 144, 0.3);
+}
+
+.system-prompt-section h3 {
+  color: #5a8a5a;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner) {
+  background: rgba(232, 245, 232, 0.3);
+  border: 1px solid #c0e0c0;
+  border-radius: 8px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner:focus) {
+  border-color: #90ee90;
+  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
+}
+
+.system-prompt-hint {
+  font-size: 12px;
+  color: #9caf9c;
+  margin-top: 8px;
 }
 </style>
