@@ -6,3 +6,4 @@
 /cyf/project/fe/node_*/*
 **/dist/
 .DS_STORE
+.claude/

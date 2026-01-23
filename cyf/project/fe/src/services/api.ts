@@ -94,7 +94,7 @@ export const fileAPI = {
 // 聊天API - 适配后端实际API
 export const chatAPI = {
   // 普通聊天接口
-  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string) => {
+  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number) => {
     const data: any = {
       model,
       dialog: message
@@ -105,6 +105,9 @@ export const chatAPI = {
     }
     if (dialogTitle) {
       data.dialog_title = dialogTitle
+    }
+    if (maxResponseTokens) {
+      data.max_response_tokens = maxResponseTokens
     }
     return api.post('/never_guess_my_usage/split', data)
   },
@@ -116,7 +119,8 @@ export const chatAPI = {
     onChunk: (content: string, done: boolean) => void,
     dialogMode: string = 'single',
     dialog?: any,
-    dialogTitle?: string
+    dialogTitle?: string,
+    maxResponseTokens?: number
   ): Promise<void> => {
     const data: any = {
       model,
@@ -128,6 +132,9 @@ export const chatAPI = {
     }
     if (dialogTitle) {
       data.dialog_title = dialogTitle
+    }
+    if (maxResponseTokens) {
+      data.max_response_tokens = maxResponseTokens
     }
 
     // 使用fetch API来处理SSE流式响应
@@ -229,6 +236,13 @@ export const chatAPI = {
   getDialogContent: (dialogId: number) => {
     return api.post('/never_guess_my_usage/split_his_content', {
       dialogId
+    })
+  },
+
+  // 删除历史会话（支持批量删除）
+  deleteDialogs: (dialogIds: number[]) => {
+    return api.post('/never_guess_my_usage/split_his_delete', {
+      dialog_ids: JSON.stringify(dialogIds)
     })
   },
 

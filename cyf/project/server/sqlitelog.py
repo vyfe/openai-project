@@ -62,6 +62,16 @@ def get_dialog_context(user: str, id: int):
         return []
 
 
+def delete_dialogs(user: str, dialog_ids: list) -> int:
+    """删除指定用户的多个会话，返回实际删除数量"""
+    if not dialog_ids:
+        return 0
+    query = Dialog.delete().where(
+        (Dialog.username == user) & (Dialog.id.in_(dialog_ids))
+    )
+    return query.execute()
+
+
 def message_query(sql: str, params=None):
     return json.dumps(db.execute_sql(sql, params).fetchall())
 

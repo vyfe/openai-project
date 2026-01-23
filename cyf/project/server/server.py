@@ -388,6 +388,9 @@ def dialog():
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
 
+        # 获取最大回复token参数
+        max_response_tokens = request.values.get('max_response_tokens', type=int)
+
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
         if not is_valid:
@@ -409,13 +412,16 @@ def dialog():
         else:
             return {"msg": "not supported dialog_mode"}, 200
 
+        # 构建API调用参数
+        api_params = {
+            "model": model,
+            "messages": dialogvo,
+            "max_tokens": max_response_tokens or 102400  # 使用传入的参数或默认值
+        }
+
         # 添加API请求的异常处理
         try:
-            result = get_client_for_user(user).chat.completions.create(
-                model=model,
-                messages=dialogvo,
-                max_tokens=8192
-            )
+            result = get_client_for_user(user).chat.completions.create(**api_params)
             # 4 sqlite3数据库写日志：用户名+token数+raw msg
             tokens = result.usage.total_tokens
             app.logger.info(result)
@@ -441,6 +447,9 @@ def dialog_stream():
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
+
+        # 获取最大回复token参数
+        max_response_tokens = request.values.get('max_response_tokens', type=int)
 
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
@@ -532,13 +541,16 @@ def dialog_stream():
         def generate():
             full_content = ""
             try:
-                stream = get_client_for_user(user).chat.completions.create(
-                    model=model,
-                    messages=dialogvo,
-                    max_tokens=8192,
-                    stream=True,
-                    timeout=300  # 5分钟超时
-                )
+                # 构建API调用参数
+                api_params = {
+                    "model": model,
+                    "messages": dialogvo,
+                    "max_tokens": max_response_tokens or 102400,  # 使用传入的参数或默认值
+                    "stream": True,
+                    "timeout": 300  # 5分钟超时
+                }
+
+                stream = get_client_for_user(user).chat.completions.create(**api_params)
 
                 for chunk in stream:
                     if chunk.choices and chunk.choices[0].delta.content:
@@ -734,6 +746,26 @@ def dialog_content():
         return {"content": {"chattype": result.chattype, "context": context}}
     except json.JSONDecodeError:
         return {"msg": "api return content not ok"}, 200
+
+
+@app.route('/never_guess_my_usage/split_his_delete', methods=['POST'])
+def dialog_delete():
+    """删除用户的历史会话（支持批量删除）"""
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
+    dialog_ids_str = request.values.get('dialog_ids', '[]')
+
+    # 验证用户凭据
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"success": False, "msg": error_msg}
+
+    # 解析并验证 dialog_ids
+    dialog_ids = json.loads(dialog_ids_str)
+
+    # 执行删除
+    deleted_count = sqlitelog.delete_dialogs(user, dialog_ids)
+    return {"success": True, "deleted_count": deleted_count}
 
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
