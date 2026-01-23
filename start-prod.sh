@@ -75,12 +75,23 @@ if [ -f "$BACKEND_TAR" ]; then
     cd dist_tmp
     tar -xzf "../../../../$BACKEND_TAR"
 
-    # 移动文件到正确位置
-    mv * .. 2>/dev/null || true
+    # 强制复制文件到正确位置，确保配置文件被正确覆盖
+    for item in *; do
+        if [ -d "$item" ] && [ -d "../$item" ]; then
+            # 如果是目录且目标目录已存在，则递归强制复制覆盖
+            cp -r -f --remove-destination "$item"/. "../$item"/
+        elif [ -f "$item" ] && [ -f "../$item" ]; then
+            # 如果是文件且目标文件已存在，则强制覆盖
+            cp -f --remove-destination "$item" "../$item"
+        else
+            # 如果是新文件或目录，则直接移动
+            mv "$item" "../$item"
+        fi
+    done
     cd ..
     rm -rf dist_tmp
     # add requirements.txt
-    echo "✅ 后端代码解压完成"
+    echo "✅ 后端代码解压完成（配置文件已正确覆盖）"
 else
     echo "❌ 错误: 未找到后端压缩包 '$BACKEND_TAR'"
     exit 1

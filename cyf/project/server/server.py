@@ -37,7 +37,8 @@ for line in user_lines:
     user_entries = line.split(',') if ',' in line else [line]
 
     for item in user_entries:
-        parts = item.strip().split(':')
+        # 使用最大分割次数2，确保即使密码或API密钥中包含冒号也能正确处理
+        parts = item.strip().split(':', 2)
         if len(parts) >= 2:
             username = parts[0].strip()
             password = parts[1].strip()

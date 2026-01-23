@@ -541,8 +541,14 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
 
 // 检测移动设备
 const checkMobile = () => {
+  const wasMobile = isMobile.value;
   isMobile.value = window.innerWidth < 768
-  if (isMobile.value) sidebarCollapsed.value = true
+
+  // 只在首次检测到移动设备或从桌面切换到移动设备时折叠侧边栏
+  // 避免在移动端键盘弹出/隐藏时重复折叠侧边栏
+  if (isMobile.value && !wasMobile) {
+    sidebarCollapsed.value = true
+  }
 }
 
 const scrollToBottom = () => {
