@@ -235,6 +235,11 @@ export const chatAPI = {
   // 获取可用模型列表
   getModels: () => {
     return api.get('/never_guess_my_usage/models')
+  },
+
+  // 获取分组的模型列表
+  getGroupedModels: () => {
+    return api.get('/never_guess_my_usage/models/grouped')
   }
 }
 

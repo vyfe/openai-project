@@ -16,10 +16,10 @@ sqlite3_file=
 [api]
 api_key=
 api_host=
-[model]
-gpt-4o-mini=gpt-4o-mini-2024-07-18
-gpt-4o=gpt-4o-2024-11-20
-gpt-4o-all=gpt-4o-all
-gpt-3.5-turbo=gpt-3.5-turbo
-图像生成(dall-e)=dall-e-3
-图像生成(gpt-4o)=gpt-4o-all
+[model_filter]
+# 包含前缀（硬编码默认值：gpt,gemini）
+include_prefixes=gpt,gemini,qwen,nano-banana,deepseek
+# 排除关键词
+exclude_keywords=instruct,realtime,audio
+# 缓存时间（秒）
+cache_ttl=3600

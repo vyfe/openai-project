@@ -232,6 +232,57 @@ def is_valid_model(model_name):
     return model_name in available_model_ids
 
 
+def get_grouped_models():
+    """获取按前缀分组的模型列表"""
+    try:
+        # 使用默认客户端获取模型列表
+        client = random_client()
+        models_response = client.models.list()
+
+        # 解析包含和排除规则
+        include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
+        exclude_keywords_str = conf.get('model_filter', 'exclude_keywords', fallback='instruct,realtime,audio')
+
+        include_prefixes = [prefix.strip() for prefix in include_prefixes_str.split(',')]
+        exclude_keywords = [keyword.strip() for keyword in exclude_keywords_str.split(',')]
+
+        # 按前缀对模型进行分组
+        grouped_models = {}
+
+        for prefix in include_prefixes:
+            if prefix.strip():  # 确保前缀非空
+                prefix_models = []
+                for model in models_response.data:
+                    model_id = model.id.lower()
+                    if prefix.lower() in model_id:
+                        # 检查是否包含排除关键词
+                        has_exclude_keyword = any(keyword.lower() in model_id for keyword in exclude_keywords)
+                        if not has_exclude_keyword:
+                            prefix_models.append({
+                                'id': model.id,
+                                'label': model.id
+                            })
+
+                if prefix_models:  # 只有当该前缀有匹配的模型时才添加到结果中
+                    grouped_models[prefix] = prefix_models
+
+        return grouped_models
+    except Exception as e:
+        app.logger.error(f"获取分组模型列表失败: {str(e)}")
+        return {}
+
+
+@app.route('/never_guess_my_usage/models/grouped', methods=['GET', 'POST'])
+def get_grouped_models_endpoint():
+    """获取按前缀分组的模型列表"""
+    try:
+        grouped_models = get_grouped_models()
+        return {"success": True, "grouped_models": grouped_models}, 200
+    except Exception as e:
+        app.logger.error(f"获取分组模型列表异常: {str(e)}")
+        return {"success": False, "msg": f"获取分组模型列表失败: {str(e)}"}, 200
+
+
 @app.route('/never_guess_my_usage/models', methods=['GET', 'POST'])
 def get_models():
     """获取可用的模型列表"""
@@ -331,8 +382,8 @@ def dialog():
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        user = request.values.get('user')
-        password = request.values.get('password', '')
+        user = request.values.get('user', '').strip()
+        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
@@ -385,8 +436,8 @@ def dialog_stream():
     # 对话接口 - 流式响应
     app.logger.info(request.values)
     try:
-        user = request.values.get('user')
-        password = request.values.get('password', '')
+        user = request.values.get('user', '').strip()
+        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
@@ -562,8 +613,8 @@ def dialog_pic():
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        user = request.values.get('user')
-        password = request.values.get('password', '')
+        user = request.values.get('user', '').strip()
+        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
@@ -649,8 +700,8 @@ def dialog_pic():
 @app.route('/never_guess_my_usage/split_his', methods=['POST'])
 def dialog_his():
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
-    user = request.values.get('user')
-    password = request.values.get('password', '')
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
 
     # 验证用户凭据
     is_valid, error_msg = verify_credentials(user, password)
@@ -667,8 +718,8 @@ def dialog_his():
 def dialog_content():
     try:
         # 根据用户名+id获取历史纪录详情context
-        user = request.values.get('user')
-        password = request.values.get('password', '')
+        user = request.values.get('user', '').strip()
+        password = request.values.get('password', '').strip()
         id = request.values.get('dialogId')
 
         # 验证用户凭据

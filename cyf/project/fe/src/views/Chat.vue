@@ -32,14 +32,16 @@
           <el-button v-if="isMobile" class="sidebar-close-btn" :icon="Close" circle @click="sidebarCollapsed = true"/>
           <div class="model-selector" @click.stop>
             <h3>选择模型</h3>
-            <el-select v-model="selectedModel" placeholder="请输入关键字搜索模型" size="small" filterable clearable @click.stop>
-              <el-option
-                v-for="model in models"
-                :key="model.value"
-                :label="model.label"
-                :value="model.value"
-              />
-            </el-select>
+            <el-cascader
+              v-model="cascaderValue"
+              :options="cascaderOptions"
+              :props="{ checkStrictly: false }"
+              placeholder="请选择模型分类"
+              size="small"
+              filterable
+              clearable
+              @change="handleCascaderChange"
+            />
           </div>
 
           <div class="dialog-history-section">
@@ -217,7 +219,7 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElCascader } from 'element-plus'
 import {
   SwitchButton,
   UploadFilled,
@@ -268,6 +270,9 @@ const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
 
 const models = ref<Array<{ label: string, value: string }>>([])
 
+// 添加分组模型数据
+const groupedModels = ref<Record<string, Array<{ label: string, value: string }>>>({});
+
 // 对话历史数据
 const dialogHistory = ref<any[]>([])
 
@@ -294,6 +299,113 @@ watch(systemPrompt, (newVal) => {
 // 监听 dialogTitle 变化并持久化
 watch(dialogTitle, (newVal) => {
   localStorage.setItem('dialogTitle', newVal)
+})
+
+// 添加级联选择器状态变量
+const cascaderValue = ref<string[]>([])
+const cascaderOptions = ref<any[]>([])
+
+// 将原始模型列表转换为级联选项
+const convertModelsToCascaderOptions = (modelList: Array<{ label: string, value: string }>) => {
+  // 使用真实获取的分组数据
+  if (Object.keys(groupedModels.value).length > 0) {
+    // 如果已有分组数据，直接使用
+    return Object.entries(groupedModels.value)
+      .filter(([_, models]) => models.length > 0) // 只包含有模型的分组
+      .map(([groupName, models]) => ({
+        value: groupName,
+        label: groupName.charAt(0).toUpperCase() + groupName.slice(1), // 首字母大写
+        children: (models as any[]).map(model => ({
+          value: model.id,
+          label: model.label || model.id
+        }))
+      }));
+  } else {
+    // 回退到按关键词匹配的方式
+    const prefixes = ['gpt', 'gemini', 'qwen', 'nano-banana', 'deepseek'];
+
+    // 按前缀分组模型
+    const grouped: Record<string, { label: string, value: string }[]> = {};
+
+    // 初始化分组
+    prefixes.forEach(prefix => {
+      grouped[prefix] = [];
+    });
+
+    // 分类模型
+    modelList.forEach(model => {
+      const lowerValue = model.value.toLowerCase();
+      let matched = false;
+
+      // 按优先级匹配前缀
+      for (const prefix of prefixes) {
+        if (lowerValue.includes(prefix)) {
+          grouped[prefix].push(model);
+          matched = true;
+          break;
+        }
+      }
+
+      // 如果没有匹配到任何前缀，放入"其他"分组
+      if (!matched) {
+        if (!grouped['other']) {
+          grouped['other'] = [];
+        }
+        grouped['other'].push(model);
+      }
+    });
+
+    // 生成级联选项
+    return Object.entries(grouped)
+      .filter(([_, models]) => models.length > 0) // 只包含有模型的分组
+      .map(([groupName, models]) => {
+        // 显示友好名称
+        let displayName = groupName;
+        if (groupName === 'other') displayName = '其他';
+
+        return {
+          value: groupName,
+          label: displayName.charAt(0).toUpperCase() + displayName.slice(1), // 首字母大写
+          children: models.map(model => ({
+            value: model.value,
+            label: model.label || model.value
+          }))
+        }
+      });
+  }
+}
+
+// 监听模型列表变化，自动生成级联选项
+watch(models, (newModels) => {
+  if (newModels && newModels.length > 0) {
+    cascaderOptions.value = convertModelsToCascaderOptions(newModels)
+  }
+}, { deep: true })
+
+// 处理级联选择器变化
+const handleCascaderChange = (value: string[]) => {
+  if (value && value.length === 2) {
+    // value[0] 是分组名, value[1] 是模型值
+    selectedModel.value = value[1]
+  } else {
+    selectedModel.value = ''
+  }
+}
+
+// 监听selectedModel变化，同步更新级联选择器
+watch(selectedModel, (newValue) => {
+  if (newValue) {
+    // 找到对应的分组和模型
+    for (const group of cascaderOptions.value) {
+      const modelOption = group.children.find((child: any) => child.value === newValue)
+      if (modelOption) {
+        cascaderValue.value = [group.value, modelOption.value]
+        return
+      }
+    }
+  } else {
+    cascaderValue.value = []
+  }
 })
 
 const messages = reactive<Array<{
@@ -356,7 +468,7 @@ const sendMessage = async () => {
   }
 
   // 检查是否是图像生成模型
-  const isImageModel = ['图像生成(dall-e)', '图像生成(gpt-4o)'].includes(selectedModel.value)
+  const isImageModel = selectedModel.value && (selectedModel.value.toLowerCase().includes('dall') || selectedModel.value.toLowerCase().includes('image'));
 
   const userMessage = {
     type: 'user' as const,
@@ -396,7 +508,7 @@ const sendMessage = async () => {
     // 根据模型类型调用相应的API
     if (isImageModel) {
       // 图像生成模型仍使用普通API
-      const aiResponse = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content, contextCount.value > 0 ? 'multi' : 'single', buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content), dialogTitle.value)
+      const aiResponse: any = await chatAPI.sendImageGeneration(selectedModel.value, userMessage.content, contextCount.value > 0 ? 'multi' : 'single', buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content), dialogTitle.value)
 
       // 处理响应
       let responseContent = ''
@@ -491,7 +603,7 @@ const loadDialogHistory = async () => {
 
   loadingHistory.value = true
   try {
-    const response = await chatAPI.getDialogHistory(selectedModel.value)
+    const response: any = await chatAPI.getDialogHistory(selectedModel.value)
     if (response && response.content) {
       dialogHistory.value = response.content
       // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
@@ -528,7 +640,7 @@ const loadDialogContent = async (dialogId: number) => {
   }
 
   try {
-    const response = await chatAPI.getDialogContent(dialogId)
+    const response: any = await chatAPI.getDialogContent(dialogId)
     if (response && response.content) {
       // 清空当前消息并加载对话内容
       messages.splice(0, messages.length)
@@ -537,13 +649,18 @@ const loadDialogContent = async (dialogId: number) => {
       const context = response.content.context
       if (Array.isArray(context)) {
         context.forEach((item: any) => {
+          if (item.role === 'system') {
+            // 跳过 system 消息，恢复到角色设定
+            systemPrompt.value = item.content || ''
+            return
+          }
           if (item.role === 'user') {
             messages.push({
               type: 'user',
               content: item.content || item.desc || JSON.stringify(item),
               time: getCurrentTime()
             })
-          } else {
+          } else if (item.role === 'assistant') {
             messages.push({
               type: 'ai',
               content: item.content || item.desc || JSON.stringify(item),
@@ -698,21 +815,39 @@ const handleLogout = () => {
 // 组件挂载时加载模型列表
 onMounted(async () => {
   try {
-    const response = await chatAPI.getModels()
-    if (response && response.success && response.models) {
-      models.value = response.models.map((model: any) => ({
-        label: model.label,
-        value: model.id
-      }))
-      // 不再设置默认选中模型
+    // 优先尝试获取分组模型列表
+    const response: any = await chatAPI.getGroupedModels()
+    if (response && response.success && response.grouped_models) {
+      // 保存分组模型数据
+      groupedModels.value = response.grouped_models;
+
+      // 将分组模型展平为普通列表
+      models.value = [];
+      for (const [prefix, modelList] of Object.entries(response.grouped_models)) {
+        (modelList as Array<any>).forEach((model: any) => {
+          models.value.push({
+            label: `${prefix}: ${model.label || model.id}`,
+            value: model.id
+          });
+        });
+      }
     } else {
-      console.error('获取模型列表失败:', response.msg)
-      // 设置默认模型列表作为备选
-      models.value = [
-        { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-        { label: 'GPT-4o', value: 'gpt-4o' },
-        { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
-      ]
+      // 如果获取分组模型失败，回退到普通模型列表
+      const normalResponse: any = await chatAPI.getModels();
+      if (normalResponse && normalResponse.success && normalResponse.models) {
+        models.value = normalResponse.models.map((model: any) => ({
+          label: model.label,
+          value: model.id
+        }));
+      } else {
+        console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
+        // 设置默认模型列表作为备选
+        models.value = [
+          { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
+          { label: 'GPT-4o', value: 'gpt-4o' },
+          { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
+        ]
+      }
     }
   } catch (error) {
     console.error('加载模型列表时出错:', error)
@@ -815,6 +950,11 @@ onUnmounted(() => {
   color: #5a8a5a;
   font-size: 16px;
   margin-bottom: 12px;
+}
+
+/* 级联选择器样式 */
+:deep(.el-cascader) {
+  width: 100%;
 }
 
 .dialog-history-section {
