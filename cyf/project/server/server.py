@@ -748,6 +748,165 @@ def dialog_content():
         return {"msg": "api return content not ok"}, 200
 
 
+@app.route('/never_guess_my_usage/usage', methods=['GET'])
+def get_usage():
+    """获取用户用量信息"""
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
+
+    # 验证用户凭据
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"success": False, "msg": error_msg}, 200
+
+    # 检查用户是否有专属API Key
+    if user not in user_api_keys or not user_api_keys[user]:
+        return {"success": False, "msg": "用户没有配置API密钥"}, 200
+
+    api_key = user_api_keys[user]
+    api_host = url_list[random.randint(0, len(url_list) - 1)]
+
+    # 获取汇率转换率，默认为2.5
+    usd_to_cny_rate = float(conf.get('api', 'usd_to_cny_rate', fallback='2.5'))
+
+    try:
+        # 获取当前时间和时间范围
+        now = datetime.now()
+
+        # 从配置中获取API参数模式，默认为'default'
+        api_param_mode = conf.get('api', 'api_param_mode', fallback='default')
+
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+        }
+
+        if api_param_mode == 'timestamp':
+            # 使用毫秒时间戳格式
+            # 今日0点（毫秒时间戳）
+            today_start = datetime.combine(now.date(), datetime.min.time())
+            today_timestamp_ms = int(today_start.timestamp() * 1000)
+
+            # 本周一0点（毫秒时间戳）
+            week_start = datetime.combine((now - timedelta(days=now.weekday())).date(), datetime.min.time())
+            week_timestamp_ms = int(week_start.timestamp() * 1000)
+
+            # 当前时间（毫秒时间戳）
+            now_timestamp_ms = int(now.timestamp() * 1000)
+
+            # 获取今日用量（使用毫秒时间戳格式）
+            today_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={today_timestamp_ms}&end_date={now_timestamp_ms}",
+                headers=headers,
+                timeout=30
+            )
+            today_response.raise_for_status()
+            today_data = today_response.json()
+            today_usage = today_data.get('total_usage', 0)
+
+            # 获取本周用量（使用毫秒时间戳格式）
+            week_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={week_timestamp_ms}&end_date={now_timestamp_ms}",
+                headers=headers,
+                timeout=30
+            )
+            week_response.raise_for_status()
+            week_data = week_response.json()
+            week_usage =  week_data.get('total_usage', 0)
+
+            # 获取总用量（使用更长时间范围的数据）
+            # 从一年前开始到现在，使用毫秒时间戳
+            one_year_ago = datetime.now() - timedelta(days=365)
+            one_year_ago_timestamp_ms = int(one_year_ago.timestamp() * 1000)
+
+            total_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={one_year_ago_timestamp_ms}&end_date={now_timestamp_ms}",
+                headers=headers,
+                timeout=30
+            )
+            total_response.raise_for_status()
+            total_data = total_response.json()
+            total_usage = total_data.get('total_usage', 0)
+
+        else:  # 默认使用日期字符串格式
+            # 今日0点
+            today_start = datetime.combine(now.date(), datetime.min.time())
+            # 本周一0点
+            week_start = datetime.combine((now - timedelta(days=now.weekday())).date(), datetime.min.time())
+
+            # 格式化为API所需格式 (YYYY-MM-DD)
+            today_str = today_start.strftime('%Y-%m-%d')
+            week_str = week_start.strftime('%Y-%m-%d')
+            now_str = now.strftime('%Y-%m-%d')
+
+            # 获取今日用量
+            today_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={today_str}&end_date={now_str}",
+                headers=headers,
+                timeout=30
+            )
+            today_response.raise_for_status()
+            today_data = today_response.json()
+            today_usage = week_data.get('total_usage', 0)
+
+            # 获取本周用量
+            week_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={week_str}&end_date={now_str}",
+                headers=headers,
+                timeout=30
+            )
+            week_response.raise_for_status()
+            week_data = week_response.json()
+            week_usage = week_data.get('total_usage', 0)
+
+            # 获取总用量
+            total_response = requests.get(
+                f"{api_host}/dashboard/billing/usage?start_date={week_str}&end_date={now_str}",
+                headers=headers,
+                timeout=30
+            )
+            total_response.raise_for_status()
+            total_data = total_response.json()
+            total_usage = total_data.get('total_usage', 0)
+
+        # 获取订阅限额
+        subscription_response = requests.get(
+            f"{api_host}/dashboard/billing/subscription",
+            headers=headers,
+            timeout=30
+        )
+        subscription_response.raise_for_status()
+        subscription_data = subscription_response.json()
+        quota = subscription_data.get('hard_limit_usd', 0)
+
+        # 单位换算：美分转人民币元
+        today_usage_cny = (today_usage / 100) * usd_to_cny_rate
+        week_usage_cny = (week_usage / 100) * usd_to_cny_rate
+        total_usage_cny = (total_usage / 100) * usd_to_cny_rate
+        quota_cny = quota * usd_to_cny_rate
+        remaining_cny = quota_cny - total_usage_cny
+
+        result = {
+            "success": True,
+            "data": {
+                "today_usage": round(today_usage_cny, 2),
+                "week_usage": round(week_usage_cny, 2),
+                "total_usage": round(total_usage_cny, 2),
+                "quota": round(quota_cny, 2),
+                "remaining": round(remaining_cny, 2),
+                "currency": "CNY"
+            }
+        }
+
+        return result, 200
+
+    except requests.exceptions.RequestException as e:
+        app.logger.error(f"获取用量API请求异常: {str(e)}")
+        return {"success": False, "msg": f"API请求失败: {str(e)}"}, 200
+    except Exception as e:
+        app.logger.error(f"获取用量异常: {str(e)}")
+        return {"success": False, "msg": f"获取用量失败: {str(e)}"}, 200
+
+
 @app.route('/never_guess_my_usage/split_his_delete', methods=['POST'])
 def dialog_delete():
     """删除用户的历史会话（支持批量删除）"""

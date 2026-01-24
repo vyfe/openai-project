@@ -11,6 +11,55 @@
         />
         <h2>智能对话</h2>
         <span class="user-info">用户：{{ authStore.user }}</span>
+      <!-- 用量查询弹窗 -->
+      <el-popover
+        placement="bottom"
+        :width="300"
+        trigger="click"
+        v-model:visible="showUsagePopover"
+      >
+        <template #reference>
+          <el-button
+            class="usage-btn"
+            :icon="Coin"
+            size="small"
+            @click="fetchUsage"
+          >
+            查看用量
+          </el-button>
+        </template>
+        <div class="usage-content">
+          <div v-if="loadingUsage" class="loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            正在加载用量数据...
+          </div>
+          <div v-else-if="usageError" class="error">
+            {{ usageError }}
+          </div>
+          <div v-else class="usage-data">
+            <div class="usage-item">
+              <span class="label">本日用量：</span>
+              <span class="value">{{ usageData.today_usage }} 元</span>
+            </div>
+            <div class="usage-item">
+              <span class="label">本周用量：</span>
+              <span class="value">{{ usageData.week_usage }} 元</span>
+            </div>
+            <div class="usage-item">
+              <span class="label">总用量：</span>
+              <span class="value">{{ usageData.total_usage }} 元</span>
+            </div>
+            <div class="usage-item">
+              <span class="label">总额度：</span>
+              <span class="value">{{ usageData.quota }} 元</span>
+            </div>
+            <div class="usage-item" :class="{ 'low-balance': usageData.remaining < 10 }">
+              <span class="label">余    额：</span>
+              <span class="value">{{ usageData.remaining }} 元</span>
+            </div>
+          </div>
+        </div>
+      </el-popover>
         <!-- TODO(human): 确保移动端也显示登录用户名，而不是被CSS隐藏 -->
         <!-- 已完成: 通过修改CSS文件，移除了@media (max-width: 768px)中.user-info { display: none; }的设置 -->
       </div>
@@ -441,7 +490,9 @@ import {
   MoreFilled,
   EditPen,
   Top,
-  Link
+  Link,
+  Coin,
+  Loading
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
@@ -471,6 +522,19 @@ const isScrolledToBottom = ref(true)
 
 // 控制是否显示回到顶部按钮
 const showBackToTop = ref(false)
+
+// 添加用量查询相关状态
+const showUsagePopover = ref(false)
+const loadingUsage = ref(false)
+const usageData = ref({
+  today_usage: 0,
+  week_usage: 0,
+  total_usage: 0,
+  quota: 0,
+  remaining: 0,
+  currency: 'CNY'
+})
+const usageError = ref('')
 
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 
@@ -1004,6 +1068,31 @@ const sendMessage = async () => {
 
     // 刷新对话历史记录
     await loadDialogHistory()
+  }
+}
+
+// 获取用量信息
+const fetchUsage = async () => {
+  if (showUsagePopover.value) {
+    // 如果弹窗已经打开，不再重复请求
+    return
+  }
+
+  loadingUsage.value = true
+  usageError.value = ''
+
+  try {
+    const response: any = await chatAPI.getUsage()
+    if (response && response.success) {
+      usageData.value = response.data
+    } else {
+      usageError.value = response?.msg || '获取用量信息失败'
+    }
+  } catch (error: any) {
+    console.error('获取用量错误:', error)
+    usageError.value = error.response?.data?.msg || error.message || '获取用量信息失败'
+  } finally {
+    loadingUsage.value = false
   }
 }
 

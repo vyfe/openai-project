@@ -16,6 +16,10 @@ sqlite3_file=
 [api]
 api_key=
 api_host=
+# USD to CNY conversion rate
+usd_to_cny_rate=5
+# API parameter mode: 'default' for date strings, 'timestamp' for millisecond timestamps
+api_param_mode=default
 [model_filter]
 # 包含前缀（硬编码默认值：gpt,gemini）
 include_prefixes=gpt,gemini,qwen,nano-banana,deepseek

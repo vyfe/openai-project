@@ -1052,3 +1052,86 @@
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
+
+/* 用量查询弹窗样式 */
+.usage-btn {
+  margin-left: 10px;
+  background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+  border: none;
+  color: white;
+}
+
+.usage-btn:hover {
+  background: linear-gradient(135deg, #ffcc00 0%, #ff8c00 100%);
+  color: white;
+}
+
+.usage-content {
+  min-width: 280px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0;
+  color: #909399;
+}
+
+.error {
+  color: #f56c6c;
+  padding: 10px 0;
+  text-align: center;
+}
+
+.usage-data {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.usage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.usage-item:last-child {
+  border-bottom: none;
+}
+
+.usage-item .label {
+  color: #606266;
+  font-size: 14px;
+}
+
+.usage-item .value {
+  color: #303133;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.usage-item.low-balance .value {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+/* 响应式设计：移动端用量弹窗样式 */
+@media (max-width: 768px) {
+  .usage-content {
+    min-width: 250px;
+  }
+
+  .usage-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .usage-item .label,
+  .usage-item .value {
+    font-size: 13px;
+  }
+}
