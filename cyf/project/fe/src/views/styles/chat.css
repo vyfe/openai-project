@@ -1003,6 +1003,29 @@
   border-top: 1px dashed rgba(144, 238, 144, 0.3);
 }
 
+.github-link-inline {
+  text-align: center;
+  padding: 8px 0;
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(90, 138, 90, 0.6);
+  border-top: 1px dotted rgba(144, 238, 144, 0.2);
+}
+
+.github-link-inline a {
+  color: rgba(90, 138, 90, 0.8);
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.github-link-inline a:hover {
+  color: #5a8a5a;
+  text-decoration: underline;
+}
+
 /* 回到顶部按钮样式 */
 .back-to-top-btn {
   position: sticky;

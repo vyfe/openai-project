@@ -49,6 +49,11 @@
     
     <div class="login-footer">
       <p>体验智能对话，让AI为您服务</p>
+      <p class="github-link-login">
+        <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer">
+          <el-icon><Link /></el-icon> 开源项目 GitHub
+        </a>
+      </p>
     </div>
   </div>
 </template>
@@ -57,7 +62,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, Link } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 
@@ -239,5 +244,24 @@ const handleLogin = async () => {
   color: #7a9c7a;
   font-size: 14px;
   margin: 0;
+}
+
+.login-footer .github-link-login {
+  margin-top: 10px;
+}
+
+.login-footer .github-link-login a {
+  color: #7a9c7a;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.login-footer .github-link-login a:hover {
+  color: #5a8a5a;
+  text-decoration: underline;
 }
 </style>

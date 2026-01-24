@@ -257,7 +257,7 @@
               size="small"
               @click="clearCurrentSession"
             >
-              <el-icon><Delete /></el-icon>
+              <el-icon><Message /></el-icon>
               开启另一个会话
             </el-button>
 
@@ -356,6 +356,13 @@
             <span>© 2026 vyfe | aichat.609088523.xyz</span>
           </div>
 
+          <!-- 开源项目链接 -->
+          <div class="github-link-inline">
+            <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer">
+              <el-icon><Link /></el-icon> 开源项目 GitHub
+            </a>
+          </div>
+
           <!-- 回到顶部按钮 -->
           <div
             v-if="showBackToTop"
@@ -433,7 +440,8 @@ import {
   RefreshLeft,
   MoreFilled,
   EditPen,
-  Top
+  Top,
+  Link
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
