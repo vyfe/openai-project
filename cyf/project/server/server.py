@@ -180,8 +180,8 @@ def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
 
         if has_include_prefix and not has_exclude_keyword:
             filtered_models.append({
-                'id': model_id,
-                'label': model_id
+                'id': model_id.lower(),
+                'label': model_id.lower()
             })
 
     return filtered_models

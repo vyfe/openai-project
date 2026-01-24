@@ -165,8 +165,43 @@
               :rows="3"
               placeholder="输入系统提示词，例如：你是一个专业的程序员助手..."
               resize="vertical"
+              @blur="handleSystemPromptBlur"
             />
             <div class="system-prompt-hint">设定 AI 的行为和角色</div>
+
+            <!-- 角色设定选项卡 -->
+            <div class="role-tabs">
+              <div
+                v-for="role in rolePresets"
+                :key="role.id"
+                class="role-tab"
+                :class="{ active: activeRoleId === role.id }"
+              >
+                <span @click="switchRole(role)">{{ role.name }}</span>
+                <div class="role-tab-actions" v-if="!['default', 'programmer', 'translator', 'writer'].includes(role.id)">
+                  <el-dropdown trigger="click" @command="(command) => handleRoleAction(command, role.id)">
+                    <el-button text size="small" class="role-action-btn">
+                      <el-icon><MoreFilled /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="rename">
+                          <el-icon><EditPen /></el-icon>
+                          重命名
+                        </el-dropdown-item>
+                        <el-dropdown-item command="delete" divided>
+                          <el-icon><Delete /></el-icon>
+                          删除
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
+              </div>
+              <div class="role-tab add-tab" @click="addCustomRole">
+                <el-icon><Plus /></el-icon>
+              </div>
+            </div>
           </div>
 
           <!-- 发送键偏好设置 -->
@@ -221,7 +256,7 @@
               @click="clearCurrentSession"
             >
               <el-icon><Delete /></el-icon>
-              清空当前会话
+              开启另一个会话
             </el-button>
 
             <!-- 新增：导出对话截屏按钮 -->
@@ -313,6 +348,20 @@
               </div>
             </div>
           </div>
+
+          <!-- 对话区域内嵌水印（用于长截图） -->
+          <div class="copyright-watermark-inline">
+            <span>© 2026 vyfe | aichat.609088523.xyz</span>
+          </div>
+
+          <!-- 回到顶部按钮 -->
+          <div
+            v-if="showBackToTop"
+            class="back-to-top-btn"
+            @click="scrollToTop"
+          >
+            <el-icon><Top /></el-icon>
+          </div>
         </div>
 
         <!-- 输入区域 -->
@@ -379,13 +428,17 @@ import {
   Fold,
   Close,
   CopyDocument,
-  RefreshLeft
+  RefreshLeft,
+  MoreFilled,
+  EditPen,
+  Top
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
+import '@/views/styles/chat.css'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -405,6 +458,9 @@ const fontSize = ref(localStorage.getItem('fontSize') || 'medium')
 
 // 添加状态跟踪用户是否手动滚动离开了底部
 const isScrolledToBottom = ref(true)
+
+// 控制是否显示回到顶部按钮
+const showBackToTop = ref(false)
 
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 
@@ -426,6 +482,39 @@ const isKeyboardVisible = ref(false)
 
 // 角色设定（System Prompt）
 const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
+
+// 预设角色设定列表
+const rolePresets = ref<Array<{id: string, name: string, prompt: string}>>([
+  { id: 'default', name: '默认', prompt: '' },
+  { id: 'programmer', name: '程序员', prompt: '你是一个专业的程序员助手，擅长代码编写、调试和技术问题解答。' },
+  { id: 'translator', name: '翻译', prompt: '你是一个专业的翻译助手，擅长中英文互译，注重语义准确和表达流畅。' },
+  { id: 'writer', name: '写作', prompt: '你是一个专业的写作助手，擅长文章润色、创意写作和文案编辑。' }
+])
+
+// 保存自定义角色到localStorage
+const saveCustomRoles = () => {
+  const customRoles = rolePresets.value.filter(
+    role => !['default', 'programmer', 'translator', 'writer'].includes(role.id)
+  )
+  localStorage.setItem('customRoles', JSON.stringify(customRoles))
+}
+
+// 从localStorage加载自定义角色
+const loadCustomRoles = () => {
+  const saved = localStorage.getItem('customRoles')
+  if (saved) {
+    try {
+      const customRoles = JSON.parse(saved)
+      // 追加到预设角色后面
+      rolePresets.value.push(...customRoles)
+    } catch (e) {
+      console.error('加载自定义角色失败:', e)
+    }
+  }
+}
+
+// 当前选中的角色ID
+const activeRoleId = ref(localStorage.getItem('activeRoleId') || 'default')
 
 const models = ref<Array<{ label: string, value: string }>>([])
 
@@ -461,8 +550,14 @@ watch(selectedModel, (newVal) => {
   localStorage.setItem('selectedModel', newVal)
 })
 
-// 监听 systemPrompt 变化并持久化
+// 监听 systemPrompt 变化并更新当前角色的prompt
 watch(systemPrompt, (newVal) => {
+  // 更新当前选中角色的prompt内容
+  const currentRole = rolePresets.value.find(r => r.id === activeRoleId.value)
+  if (currentRole && !['default', 'programmer', 'translator', 'writer'].includes(currentRole.id)) {
+    currentRole.prompt = newVal
+    saveCustomRoles() // 保存自定义角色
+  }
   localStorage.setItem('systemPrompt', newVal)
 })
 
@@ -480,6 +575,107 @@ watch(fontSize, (newVal) => {
 watch(sendPreference, (newVal) => {
   localStorage.setItem('sendPreference', newVal)
 })
+
+// 监听 activeRoleId 变化并持久化
+watch(activeRoleId, (newVal) => {
+  localStorage.setItem('activeRoleId', newVal)
+})
+
+// 切换角色函数
+const switchRole = (role: {id: string, name: string, prompt: string}) => {
+  activeRoleId.value = role.id
+  systemPrompt.value = role.prompt
+  localStorage.setItem('activeRoleId', role.id)
+  localStorage.setItem('systemPrompt', role.prompt) // 同时保存当前prompt到localStorage
+}
+
+// 添加自定义角色函数
+const addCustomRole = () => {
+  // 添加自定义角色的逻辑
+  const newId = `custom_${Date.now()}`
+  rolePresets.value.push({
+    id: newId,
+    name: '自定义',
+    prompt: systemPrompt.value
+  })
+  activeRoleId.value = newId
+  localStorage.setItem('activeRoleId', newId)
+  localStorage.setItem('systemPrompt', systemPrompt.value) // 同时保存当前prompt到localStorage
+  saveCustomRoles() // 保存自定义角色
+}
+
+// 处理系统提示词输入框失焦事件
+const handleSystemPromptBlur = () => {
+  // 更新当前选中角色的prompt内容
+  const currentRole = rolePresets.value.find(r => r.id === activeRoleId.value)
+  if (currentRole && !['default', 'programmer', 'translator', 'writer'].includes(currentRole.id)) {
+    currentRole.prompt = systemPrompt.value
+    saveCustomRoles() // 保存自定义角色
+  }
+}
+
+// 重命名角色函数
+const renameRole = (roleId: string) => {
+  const role = rolePresets.value.find(r => r.id === roleId)
+  if (role) {
+    const newName = prompt('请输入新的角色名称:', role.name)
+    if (newName && newName.trim()) {
+      role.name = newName.trim()
+      // 如果当前角色被重命名，则更新本地存储
+      if (activeRoleId.value === roleId) {
+        localStorage.setItem('activeRoleId', roleId)
+      }
+      saveCustomRoles() // 保存自定义角色
+    }
+  }
+}
+
+// 删除角色函数
+const deleteRole = (roleId: string) => {
+  // 只允许删除自定义角色，不允许删除预设角色
+  if (['default', 'programmer', 'translator', 'writer'].includes(roleId)) {
+    ElMessage.warning('不能删除预设角色')
+    return
+  }
+
+  const roleIndex = rolePresets.value.findIndex(r => r.id === roleId)
+  if (roleIndex !== -1) {
+    const roleName = rolePresets.value[roleIndex].name
+    ElMessageBox.confirm(
+      `确定要删除角色 "${roleName}" 吗？`,
+      '删除角色',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    ).then(() => {
+      rolePresets.value.splice(roleIndex, 1)
+      saveCustomRoles() // 保存自定义角色
+
+      // 如果删除的是当前选中的角色，则切换到默认角色
+      if (activeRoleId.value === roleId) {
+        const defaultRole = rolePresets.value.find(r => r.id === 'default')
+        if (defaultRole) {
+          switchRole(defaultRole)
+        }
+      }
+
+      ElMessage.success('角色已删除')
+    }).catch(() => {
+      // 用户取消删除
+    })
+  }
+}
+
+// 处理角色操作
+const handleRoleAction = (command: string, roleId: string) => {
+  if (command === 'rename') {
+    renameRole(roleId)
+  } else if (command === 'delete') {
+    deleteRole(roleId)
+  }
+}
 
 // 添加级联选择器状态变量
 const cascaderValue = ref<string[]>([])
@@ -836,7 +1032,7 @@ const clearCurrentSession = () => {
   })
   // 清空对话标题
   dialogTitle.value = ''
-  ElMessage.success('当前会话已清空')
+  ElMessage.success('已开启新会话')
 }
 
 // 加载特定对话内容
@@ -857,8 +1053,7 @@ const loadDialogContent = async (dialogId: number) => {
       if (Array.isArray(context)) {
         context.forEach((item: any) => {
           if (item.role === 'system') {
-            // 跳过 system 消息，恢复到角色设定
-            systemPrompt.value = item.content || ''
+            // 不再覆盖本地角色设定，直接跳过system消息
             return
           }
           if (item.role === 'user') {
@@ -1078,10 +1273,23 @@ const handleScroll = () => {
     // 如果距离底部小于50像素，则认为是在底部
     isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 50
 
+    // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
+    showBackToTop.value = scrollTop > clientHeight
+
     // 如果软键盘弹出，自动保持滚动到底部
     if (isKeyboardVisible.value) {
       scrollToBottom()
     }
+  }
+}
+
+// 回到顶部函数
+const scrollToTop = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
   }
 }
 
@@ -1378,6 +1586,9 @@ const handleLogout = () => {
 
 // 组件挂载时加载模型列表
 onMounted(async () => {
+  // 首先加载自定义角色
+  loadCustomRoles()
+
   try {
     // 优先尝试获取分组模型列表
     const response: any = await chatAPI.getGroupedModels()
@@ -1464,909 +1675,3 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-.chat-container {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(135deg, #f9f7f0 0%, #e8f5e8 100%);
-  /* 修复移动端视口高度问题 */
-  height: -webkit-fill-available;
-}
-
-.chat-header {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  padding: 16px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
-  box-shadow: 0 2px 10px rgba(144, 238, 144, 0.1);
-  flex-shrink: 0; /* 防止头部被压缩 */
-}
-
-.chat-header {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  padding: 16px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
-  box-shadow: 0 2px 10px rgba(144, 238, 144, 0.1);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.header-left h2 {
-  color: #5a8a5a;
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.user-info {
-  color: #7a9c7a;
-  font-size: 14px;
-}
-
-.chat-main {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.chat-sidebar {
-  width: 300px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  padding: 20px;
-  border-right: 1px solid rgba(144, 238, 144, 0.3);
-  overflow-y: auto;
-  /* 新增以下属性 */
-  -webkit-overflow-scrolling: touch;  /* 启用惯性滚动 */
-  touch-action: pan-y;                 /* 只允许垂直滚动 */
-  overscroll-behavior: contain;        /* 防止滚动链 */
-}
-
-.model-selector {
-  margin-bottom: 30px;
-}
-
-.model-selector h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-
-/* 级联选择器样式 */
-:deep(.el-cascader) {
-  width: 100%;
-}
-
-.dialog-history-section {
-  margin-bottom: 30px;
-}
-
-.dialog-history-section h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-
-.dialog-list {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #dcdcdc;
-  border-radius: 8px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.7);
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  overscroll-behavior: contain;
-  /* 其他现有样式保持不变 */
-}
-
-.dialog-item {
-  padding: 8px;
-  margin-bottom: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  background: rgba(232, 245, 232, 0.5);
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  position: relative; /* 添加定位上下文 */
-}
-
-.dialog-item.selected {
-  background: rgba(144, 238, 144, 0.5);
-  outline: 2px solid rgba(144, 238, 144, 0.8);
-}
-
-.dialog-item:hover {
-  background: rgba(144, 238, 144, 0.3);
-}
-
-.dialog-content {
-  flex: 1;
-  cursor: pointer;
-}
-
-.dialog-checkbox {
-  margin-right: 8px;
-}
-
-.delete-btn {
-  visibility: hidden;
-  opacity: 0;
-  transition: visibility 0.2s, opacity 0.2s;
-}
-
-.dialog-item:hover .delete-btn {
-  visibility: visible;
-  opacity: 1;
-}
-
-.dialog-item:last-child {
-  margin-bottom: 0;
-}
-
-.dialog-title {
-  font-weight: 500;
-  color: #5a8a5a;
-  font-size: 14px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dialog-content {
-  flex: 1;
-  cursor: pointer;
-  min-width: 0; /* 允许flex项目收缩 */
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dialog-date {
-  font-size: 12px;
-  color: #9caf9c;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.history-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.history-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.edit-mode-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.no-dialogs {
-  padding: 10px;
-  color: #9caf9c;
-  font-style: italic;
-  text-align: center;
-}
-
-.file-upload-section h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-
-.upload-demo {
-  border: 2px dashed #c0e0c0;
-  border-radius: 8px;
-  background: rgba(232, 245, 232, 0.3);
-}
-
-.upload-demo:hover {
-  border-color: #90ee90;
-  background: rgba(232, 245, 232, 0.5);
-}
-
-.chat-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: rgba(255, 255, 255, 0.7);
-}
-
-.chat-toolbar {
-  padding: 10px 20px;
-  background: rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.dialog-title-editor {
-  flex: 1;
-  max-width: 460px;
-  margin-right: 10px;
-}
-
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.message {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.message.user {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #9acd32 0%, #7dd87d 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.message.user .message-avatar {
-  background: linear-gradient(135deg, #87ceeb 0%, #5f9ea0 100%);
-}
-
-.message-content {
-  max-width: 70%;
-}
-
-.message-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.message-author {
-  font-weight: 500;
-  color: #5a8a5a;
-  font-size: 14px;
-}
-
-.message-time {
-  color: #9caf9c;
-  font-size: 12px;
-}
-
-.message-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 4px;
-}
-
-.message-actions .el-button {
-  color: #9caf9c;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.message:hover .message-actions .el-button {
-  opacity: 1;
-}
-
-.message-text {
-  background: rgba(255, 255, 255, 0.9);
-  padding: 12px 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(144, 238, 144, 0.3);
-  color: #333;
-  line-height: 1.5;
-  white-space: pre-line; /* 更改：保留换行符，但合并空格和制表符 */
-  overflow-wrap: break-word; /* 确保长单词能换行 */
-  margin-bottom: 0; /* 确保底部没有额外边距 */
-}
-
-/* 处理末尾的换行符问题 */
-.message-text br:last-child {
-  display: none;
-}
-
-/* 确保Markdown渲染后的元素也没有多余的底部边距 */
-.message-text > :last-child {
-  margin-bottom: 0;
-}
-
-/* 对特定元素的处理 */
-.message-text p:last-child {
-  margin-bottom: 0;
-}
-
-.message-text div:last-child {
-  margin-bottom: 0;
-}
-
-/* Markdown 内容的特殊样式 */
-.message-text :deep(p) {
-  margin: 0 0 1em 0;
-}
-
-.message-text :deep(h1),
-.message-text :deep(h2),
-.message-text :deep(h3),
-.message-text :deep(h4),
-.message-text :deep(h5),
-.message-text :deep(h6) {
-  margin: 0.5em 0;
-}
-
-.message-text :deep(pre) {
-  background: #2d2d2d !important;
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 10px 0;
-  font-family: 'Courier New', monospace;
-  line-height: 1.4;
-}
-
-.message-text :deep(code) {
-  font-family: 'Courier New', monospace;
-  background: rgba(0, 0, 0, 0.05);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.9em;
-}
-
-.message-text :deep(pre code) {
-  background: none !important;
-  padding: 0 !important;
-  font-size: 0.9em;
-}
-
-.message-text :deep(blockquote) {
-  border-left: 3px solid #90ee90;
-  padding-left: 12px;
-  margin: 10px 0;
-  color: #666;
-}
-
-.message-text :deep(ul),
-.message-text :deep(ol) {
-  padding-left: 20px;
-  margin: 10px 0;
-}
-
-.message-text :deep(li) {
-  margin: 5px 0;
-}
-
-.message-text :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0;
-}
-
-.message-text :deep(th),
-.message-text :deep(td) {
-  border: 1px solid #ccc;
-  padding: 8px;
-  text-align: left;
-}
-
-.message.user .message-text {
-  background: rgba(144, 238, 144, 0.2);
-  border-color: rgba(144, 238, 144, 0.5);
-}
-
-.message-file {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: rgba(232, 245, 232, 0.5);
-  border-radius: 8px;
-  font-size: 14px;
-  color: #5a8a5a;
-}
-
-.error-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-start;
-}
-
-.typing {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.typing-dot {
-  width: 8px;
-  height: 8px;
-  background: #7a9c7a;
-  border-radius: 50%;
-  animation: typing 1.4s infinite ease-in-out;
-}
-
-.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-.typing-dot:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes typing {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
-}
-
-.input-area {
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
-  flex-shrink: 0; /* 防止输入区域被压缩 */
-}
-
-.input-container {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.message-input {
-  flex: 1;
-}
-
-.message-input textarea {
-  background: rgba(232, 245, 232, 0.3);
-  border: 1px solid #c0e0c0;
-  border-radius: 12px;
-  resize: none;
-}
-
-.message-input textarea:focus {
-  border-color: #90ee90;
-  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
-}
-
-.input-actions {
-  display: flex;
-  gap: 8px;
-  flex-direction: row;
-}
-
-/* 确保移动端输入区域的按钮都可见 */
-.input-actions {
-  display: flex;
-  gap: 8px;
-  flex-direction: row;
-  align-self: flex-end; /* 确保按钮与输入框底部对齐 */
-}
-
-/* 针对软键盘弹出时的调整 */
-.chat-container.keyboard-visible .input-area {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
-}
-
-/* 修复Element Plus按钮默认边距在移动端的影响 */
-.input-actions .el-button + .el-button {
-  margin-left: 0;
-}
-
-/* 滚动条样式 */
-.messages-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.messages-container::-webkit-scrollbar-track {
-  background: rgba(232, 245, 232, 0.3);
-  border-radius: 3px;
-}
-
-.messages-container::-webkit-scrollbar-thumb {
-  background: rgba(144, 238, 144, 0.5);
-  border-radius: 3px;
-}
-
-.messages-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 238, 144, 0.7);
-}
-
-/* 对话历史滚动条样式 */
-.dialog-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.dialog-list::-webkit-scrollbar-track {
-  background: rgba(232, 245, 232, 0.3);
-  border-radius: 3px;
-}
-
-.dialog-list::-webkit-scrollbar-thumb {
-  background: rgba(144, 238, 144, 0.5);
-  border-radius: 3px;
-}
-
-.dialog-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 238, 144, 0.7);
-}
-
-.divider {
-  border: none;
-  height: 1px;
-  background: linear-gradient(to right, transparent, rgba(144, 238, 144, 0.3), transparent);
-  margin: 10px 0;
-}
-
-.streaming-indicator {
-  margin-top: 10px;
-}
-
-.typing-initial {
-  margin-top: 10px;
-}
-
-.typing-placeholder {
-  margin-bottom: 8px;
-  color: #7a9c7a;
-  font-style: italic;
-  font-size: 14px;
-}
-
-.typing-continue {
-  margin-top: 10px;
-}
-
-/* 侧边栏动画 */
-.sidebar-slide-enter-active, .sidebar-slide-leave-active {
-  transition: transform 0.3s ease, opacity 0.3s ease;
-}
-.sidebar-slide-enter-from, .sidebar-slide-leave-to {
-  transform: translateX(-100%); opacity: 0;
-}
-
-/* 移动端侧边栏 */
-.sidebar-mobile {
-  position: fixed; left: 0; top: 0; height: 100%;              /* 替换 100vh */
-  max-height: 100dvh;        /* 使用动态视口高度作为上限 */
-  z-index: 1000;
-  box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-  overflow-y: auto;          /* 确保移动端也能滚动 */
-  -webkit-overflow-scrolling: touch;
-}
-.sidebar-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 999;
-}
-
-/* 响应式断点 */
-@media (max-width: 768px) {
-  .user-info { display: none; }
-  .chat-sidebar { width: 280px; }
-  .message-content { max-width: 85%; }
-  .input-area { padding: 12px; }
-  .header-left { gap: 8px; }
-  .sidebar-toggle-btn { margin-right: 8px; }
-}
-
-@media (max-width: 480px) {
-  .chat-sidebar { width: 100%; }
-  .message-avatar { width: 32px; height: 32px; }
-  .message-content { max-width: 80%; }
-  .input-container { flex-direction: column; align-items: stretch; }
-  .input-actions { flex-direction: row; align-items: center; margin-top: 12px; }
-  .upload-trigger-btn { align-self: flex-start; margin-bottom: 12px; }
-}
-
-/* 上下文设置部分样式 */
-.context-settings-section {
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
-}
-
-.context-settings-section h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 16px;
-}
-
-.context-slider-wrapper {
-  padding: 12px 0;
-}
-
-.context-label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.context-hint {
-  font-size: 12px;
-  color: #9caf9c;
-  margin-top: 8px;
-}
-
-.sidebar-close-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 1001;
-}
-
-/* 角色设定部分样式 */
-.system-prompt-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
-}
-
-.system-prompt-section h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-
-.system-prompt-section :deep(.el-textarea__inner) {
-  background: rgba(232, 245, 232, 0.3);
-  border: 1px solid #c0e0c0;
-  border-radius: 8px;
-}
-
-.system-prompt-section :deep(.el-textarea__inner:focus) {
-  border-color: #90ee90;
-  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
-}
-
-/* 发送键偏好设置部分样式 */
-.send-preference-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
-}
-
-.send-preference-section h3 {
-  color: #5a8a5a;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
-
-.send-preference-wrapper {
-  padding: 12px 0;
-}
-
-.send-preference-hint {
-  font-size: 12px;
-  color: #9caf9c;
-  margin-top: 8px;
-}
-
-/* 字体大小控制样式 */
-.font-size-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 15px;
-}
-
-.font-size-label {
-  white-space: nowrap;
-}
-
-.messages-container {
-  /* 小字体 */
-  &:not(.font-medium):not(.font-large) {
-    font-size: 12px;
-  }
-
-  /* 中等字体 */
-  &.font-medium {
-    font-size: 14px;
-  }
-
-  /* 大字体 */
-  &.font-large {
-    font-size: 16px;
-  }
-}
-
-.message-text {
-  /* 小字体 */
-  .messages-container:not(.font-medium):not(.font-large) & {
-    font-size: 12px;
-  }
-
-  /* 中等字体 */
-  .messages-container.font-medium & {
-    font-size: 14px;
-  }
-
-  /* 大字体 */
-  .messages-container.font-large & {
-    font-size: 16px;
-  }
-}
-
-.messages-container-temp {
-  position: absolute;
-  left: -9999px;
-  background-color: #f9f7f0 !important;
-  padding: 20px !important;
-  box-sizing: border-box !important;
-  width: 100% !important;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* 响应式断点 */
-@media (max-width: 768px) {
-  .user-info { display: none; }
-  .chat-sidebar { width: 280px; }
-  .message-content { max-width: 85%; }
-  .input-area { padding: 12px; }
-  .header-left { gap: 8px; }
-  .sidebar-toggle-btn { margin-right: 8px; }
-
-  .chat-toolbar {
-    flex-direction: column;
-    align-items: stretch; /* 改为拉伸以填满宽度 */
-    gap: 12px;
-  }
-
-  .dialog-title-editor,
-  .font-size-controls,
-  .action-buttons {
-    width: 100%; /* 让各个组件填满宽度 */
-  }
-
-  .dialog-title-editor {
-    margin-right: 0; /* 移除移动端的右边距 */
-  }
-
-  .font-size-controls {
-    justify-content: center; /* 在移动端居中对齐字体大小控制 */
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
-
-  /* 修复Element Plus按钮默认边距在移动端的影响 */
-  .action-buttons .el-button + .el-button {
-    margin-left: 0;
-  }
-}
-
-@media (max-width: 480px) {
-  .chat-sidebar { width: 100%; }
-  .message-avatar { width: 32px; height: 32px; }
-  .message-content { max-width: 80%; }
-  .input-container { flex-direction: column; align-items: stretch; }
-  .input-actions {
-    flex-direction: row;
-    align-items: center;
-    margin-top: 12px;
-    justify-content: flex-end; /* 确保按钮靠右对齐 */
-    width: 100%; /* 确保动作区占满整行 */
-    flex-wrap: wrap; /* 允许换行以适应小屏幕 */
-  }
-  .upload-trigger-btn { align-self: flex-end; margin-bottom: 0; }
-
-  .action-buttons {
-    width: 100%;
-  }
-  .dialog-title-editor {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  /* 修复Element Plus按钮默认边距在移动端的影响 */
-  .action-buttons .el-button + .el-button {
-    margin-left: 0;
-  }
-
-  /* 确保输入框和按钮都能适应小屏幕 */
-  .input-area {
-    padding: 12px;
-  }
-
-  /* 确保按钮不会因为太宽而挤压输入框 */
-  .input-actions .el-button {
-    flex-shrink: 0;
-  }
-
-  /* 确保发送按钮在移动端可见 */
-  .input-actions .el-button--primary {
-    min-width: 60px; /* 确保发送按钮有最小宽度 */
-  }
-}
-
-/* Android设备特定优化 */
-@media screen and (-webkit-device-pixel-ratio: 1.5), screen and (-webkit-device-pixel-ratio: 2), screen and (-webkit-device-pixel-ratio: 3) {
-  .chat-sidebar,
-  .sidebar-mobile,
-  .dialog-list {
-    /* 在Android设备上增强滚动性能 */
-    will-change: scroll-position;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-  }
-}
-
-/* 移动端视口高度调整 */
-@supports (-webkit-touch-callout: none) {
-  /* iOS Safari */
-  .chat-container {
-    height: -webkit-fill-available;
-  }
-}
-
-@supports (height: -webkit-fill-available) {
-  /* Chrome, Firefox on mobile */
-  .chat-container {
-    height: -webkit-fill-available;
-  }
-}
-
-@supports (height: 100dvh) {
-  /* Modern browsers supporting dynamic viewport height */
-  .chat-container {
-    height: 100dvh;
-  }
-}
-
-/* 修复软键盘弹出时的布局问题 */
-@media screen and (max-height: 600px) and (orientation: portrait) {
-  .chat-content {
-    height: 100%;
-  }
-
-  .messages-container {
-    height: calc(100% - 100px); /* 为输入区域留出空间 */
-  }
-
-  .input-area {
-    position: sticky;
-    bottom: 0;
-    z-index: 10;
-  }
-}
-
-.system-prompt-hint {
-  font-size: 12px;
-  color: #9caf9c;
-  margin-top: 8px;
-}
-</style>
