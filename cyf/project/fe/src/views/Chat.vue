@@ -51,11 +51,11 @@
             </div>
             <div class="usage-item">
               <span class="label">总额度：</span>
-              <span class="value">{{ usageData.quota }} 元</span>
+              <span class="value">{{ usageData.quota > 10000? '-' : usageData.quota }} 元</span>
             </div>
             <div class="usage-item" :class="{ 'low-balance': usageData.remaining < 10 }">
               <span class="label">余    额：</span>
-              <span class="value">{{ usageData.remaining }} 元</span>
+              <span class="value">{{ usageData.remaining > 10000? '-' : usageData.remaining }} 元</span>
             </div>
           </div>
         </div>
