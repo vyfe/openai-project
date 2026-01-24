@@ -563,10 +563,10 @@ watch(systemPrompt, (newVal) => {
   localStorage.setItem('systemPrompt', newVal)
 })
 
-// 监听 dialogTitle 变化并持久化
-watch(dialogTitle, (newVal) => {
-  localStorage.setItem('dialogTitle', newVal)
-})
+// 注释掉监听 dialogTitle 变化并持久化的功能，这样标题就不会保存到localStorage
+// watch(dialogTitle, (newVal) => {
+//   localStorage.setItem('dialogTitle', newVal)
+// })
 
 // 监听 fontSize 变化并持久化
 watch(fontSize, (newVal) => {
@@ -1091,9 +1091,10 @@ const loadDialogContent = async (dialogId: number) => {
 // 当标题输入框失去焦点时的处理
 const handleTitleBlur = () => {
   // 在这里可以进行额外的验证或处理
-  if (dialogTitle.value.trim()) {
-    localStorage.setItem('dialogTitle', dialogTitle.value.trim())
-  }
+  // 移除保存到localStorage的功能，这样标题不会被持久化
+  // if (dialogTitle.value.trim()) {
+  //   localStorage.setItem('dialogTitle', dialogTitle.value.trim())
+  // }
 }
 
 // 处理字体大小变化
@@ -1636,11 +1637,11 @@ onMounted(async () => {
     ]
   }
 
-  // 从localStorage恢复对话标题
-  const savedDialogTitle = localStorage.getItem('dialogTitle')
-  if (savedDialogTitle) {
-    dialogTitle.value = savedDialogTitle
-  }
+  // 注释掉从localStorage恢复对话标题的功能，实现每次刷新页面时标题栏都为空
+  // const savedDialogTitle = localStorage.getItem('dialogTitle')
+  // if (savedDialogTitle) {
+  //   dialogTitle.value = savedDialogTitle
+  // }
 
   // 从localStorage恢复发送键偏好
   const savedSendPreference = localStorage.getItem('sendPreference')
