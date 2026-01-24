@@ -37,14 +37,15 @@
             {{ usageError }}
           </div>
           <div v-else class="usage-data">
-            <div class="usage-item">
+            <!--  api查询范围条件有问题，先不展示-->
+            <!-- <div class="usage-item">
               <span class="label">本日用量：</span>
               <span class="value">{{ usageData.today_usage }} 元</span>
             </div>
             <div class="usage-item">
               <span class="label">本周用量：</span>
               <span class="value">{{ usageData.week_usage }} 元</span>
-            </div>
+            </div> -->
             <div class="usage-item">
               <span class="label">总用量：</span>
               <span class="value">{{ usageData.total_usage }} 元</span>
@@ -83,16 +84,41 @@
           <el-button v-if="isMobile" class="sidebar-close-btn" :icon="Close" circle @click="sidebarCollapsed = true"/>
           <div class="model-selector" @click.stop>
             <h3>选择模型</h3>
-            <el-cascader
-              v-model="cascaderValue"
-              :options="cascaderOptions"
-              :props="{ checkStrictly: false }"
-              placeholder="请选择模型分类"
-              size="small"
-              filterable
-              clearable
-              @change="handleCascaderChange"
-            />
+            <div class="provider-selector">
+              <el-select
+                v-model="providerValue"
+                placeholder="选择厂商"
+                size="small"
+                filterable
+                clearable
+                @change="handleProviderChange"
+              >
+                <el-option
+                  v-for="provider in providers"
+                  :key="provider"
+                  :label="provider"
+                  :value="provider"
+                />
+              </el-select>
+            </div>
+            <div class="model-selector">
+              <el-select
+                v-model="modelValue"
+                placeholder="选择模型"
+                size="small"
+                filterable
+                clearable
+                :disabled="!providerValue"
+                @change="handleModelChange"
+              >
+                <el-option
+                  v-for="model in filteredModels"
+                  :key="model.value"
+                  :label="model.label"
+                  :value="model.value"
+                />
+              </el-select>
+            </div>
           </div>
 
           <div class="dialog-history-section">
@@ -360,7 +386,22 @@
                   </el-popconfirm>
                 </div>
               </div>
-              <div class="message-text" v-html="renderMarkdown(message.content)"></div>
+              <div class="message-text" v-html="renderMarkdown(getTextContent(message.content))"></div>
+              <!-- 图片预览 -->
+              <div v-if="extractFileUrls(message.content).length > 0" class="message-attachments">
+                <template v-for="url in extractFileUrls(message.content)" :key="url">
+                  <img
+                    v-if="isImageUrl(url)"
+                    :src="url"
+                    class="attachment-preview"
+                    @click="openImagePreview(url)"
+                  />
+                  <a v-else :href="url" target="_blank" class="attachment-link">
+                    <el-icon><Document /></el-icon>
+                    {{ url.split('/').pop() }}
+                  </a>
+                </template>
+              </div>
               <!-- 流式内容的加载动画 -->
               <div v-if="message.type === 'ai' && isStreaming(index)" class="streaming-indicator">
                 <hr class="divider" />
@@ -466,10 +507,23 @@
       </div>
     </div>
   </div>
+
+  <!-- 图片预览弹窗 -->
+  <el-dialog
+    v-model="showImagePreview"
+    width="80%"
+    top="5vh"
+    class="image-preview-dialog"
+    :modal="true"
+    :show-close="true"
+    @close="showImagePreview = false"
+  >
+    <img :src="previewImageUrl" style="width: 100%; height: auto;" />
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, watch, onUnmounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElCascader } from 'element-plus'
 import {
@@ -554,6 +608,16 @@ const sendPreference = ref(localStorage.getItem('sendPreference') || 'ctrl_enter
 // 用于检测软键盘是否激活的状态
 const isKeyboardVisible = ref(false)
 
+// 图片预览相关状态
+const previewImageUrl = ref('')
+const showImagePreview = ref(false)
+
+// 打开图片预览
+const openImagePreview = (url: string) => {
+  previewImageUrl.value = url
+  showImagePreview.value = true
+}
+
 // 角色设定（System Prompt）
 const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
 
@@ -595,6 +659,20 @@ const models = ref<Array<{ label: string, value: string }>>([])
 // 添加分组模型数据
 const groupedModels = ref<Record<string, Array<{ label: string, value: string }>>>({});
 
+// 新增：独立的模型选择器状态
+const providerValue = ref<string>('')
+const modelValue = ref<string>('')
+const providers = ref<string[]>([])
+const filteredModels = computed(() => {
+  if (!providerValue.value) return []
+  // 根据当前选择的厂商过滤模型
+  return models.value.filter(model => {
+    // 检查模型值是否包含厂商名称
+    return model.value.toLowerCase().includes(providerValue.value.toLowerCase()) ||
+           model.label.toLowerCase().includes(providerValue.value.toLowerCase())
+  })
+})
+
 // 对话历史数据
 const dialogHistory = ref<any[]>([])
 
@@ -622,6 +700,15 @@ watch(sidebarCollapsed, (newVal) => {
 // 监听selectedModel变化并持久化
 watch(selectedModel, (newVal) => {
   localStorage.setItem('selectedModel', newVal)
+})
+
+// 监听providerValue和modelValue变化，同步到selectedModel
+watch([providerValue, modelValue], ([newProvider, newModel]) => {
+  if (newProvider && newModel) {
+    selectedModel.value = newModel
+  } else if (!newProvider) {
+    selectedModel.value = ''
+  }
 })
 
 // 监听 systemPrompt 变化并更新当前角色的prompt
@@ -678,6 +765,36 @@ const addCustomRole = () => {
   saveCustomRoles() // 保存自定义角色
 }
 
+// 从消息内容中提取文件URL列表（兼容新旧格式）
+const extractFileUrls = (content: string): string[] => {
+  const urls: string[] = []
+
+  // 新格式: [FILE_URL:xxx]
+  const newPattern = /\[FILE_URL:(https?:\/\/[^\]]+)\]/g
+  let match
+  while ((match = newPattern.exec(content)) !== null) {
+    urls.push(match[1])
+  }
+
+  // 旧格式: 文件已上传: xxx (向后兼容)
+  const oldPattern = /文件已上传:\s*(https?:\/\/[^\s]+)/g
+  while ((match = oldPattern.exec(content)) !== null) {
+    urls.push(match[1])
+  }
+
+  return urls
+}
+
+// 获取纯文本内容（移除文件标记）
+const getTextContent = (content: string): string => {
+  return content.replace(/\[(FILE_URL|文件已上传):[^\]]+\]/g, '').trim()
+}
+
+// 判断URL是否为图片
+const isImageUrl = (url: string): boolean => {
+  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/i.test(url)
+}
+
 // 处理系统提示词输入框失焦事件
 const handleSystemPromptBlur = () => {
   // 更新当前选中角色的prompt内容
@@ -703,6 +820,60 @@ const renameRole = (roleId: string) => {
     }
   }
 }
+
+// 处理厂商选择变化
+const handleProviderChange = (value: string) => {
+  // 当厂商改变时，清空已选择的模型
+  modelValue.value = ''
+  // 如果值被清空，也清空selectedModel
+  if (!value) {
+    selectedModel.value = ''
+  }
+}
+
+// 处理模型选择变化
+const handleModelChange = (value: string) => {
+  // 更新主selectedModel变量
+  selectedModel.value = value
+}
+
+// 更新厂商列表
+const updateProviders = () => {
+  // 从模型列表中提取厂商名称（基于模型值中的前缀）
+  const uniqueProviders = new Set<string>()
+
+  models.value.forEach(model => {
+    const lowerValue = model.value.toLowerCase()
+
+    // 按优先级匹配厂商前缀
+    if (lowerValue.includes('gpt')) {
+      uniqueProviders.add('gpt')
+    } else if (lowerValue.includes('gemini')) {
+      uniqueProviders.add('gemini')
+    } else if (lowerValue.includes('qwen')) {
+      uniqueProviders.add('qwen')
+    } else if (lowerValue.includes('nano-banana')) {
+      uniqueProviders.add('nano-banana')
+    } else if (lowerValue.includes('deepseek')) {
+      uniqueProviders.add('deepseek')
+    } else {
+      // 如果没有匹配到预定义的厂商，使用第一个单词作为厂商
+      const firstPart = model.value.split('-')[0]
+      if (firstPart && firstPart.length > 1) {
+        uniqueProviders.add(firstPart)
+      }
+    }
+  })
+
+  providers.value = Array.from(uniqueProviders).sort()
+}
+
+// TODO(human): 改进供应商识别算法，使它能更准确地匹配模型名称和供应商
+// 目前的算法只是简单的关键词匹配，可能无法正确处理所有模型名称格式
+// 你可以考虑以下方案：
+// 1. 维护一个更详细的供应商-模型映射表
+// 2. 使用更复杂的正则表达式匹配规则
+// 3. 根据API返回的分组信息来确定供应商
 
 // 删除角色函数
 const deleteRole = (roleId: string) => {
@@ -885,7 +1056,12 @@ const messages = reactive<Array<{
 const renderMarkdown = (content: string) => {
   const parsedContent = marked.parse(content || '');
   // 确保返回的是字符串
-  return typeof parsedContent === 'string' ? parsedContent.trim() : parsedContent;
+  let result = typeof parsedContent === 'string' ? parsedContent.trim() : parsedContent;
+
+  // 为Markdown生成的图片添加CSS类
+  result = result.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
+
+  return result;
 }
 
 function getCurrentTime() {
@@ -902,8 +1078,17 @@ const handleFileChange = async (file: any) => {
     if (response && response.content) {
       // 文件上传成功，将URL添加到当前消息中
       uploadedFile.value = file.raw
-      // 在输入框中插入文件URL
-      inputMessage.value += `\n文件已上传: ${response.content}`
+      // 如果后端返回的content是相对路径或缺少host，则补充完整URL
+      let fullUrl = response.content
+      if (response.content.startsWith(':')) {
+        // 如果返回以冒号开头（如 :4567/download/xxx.png），则添加当前页面的protocol和host
+        fullUrl = window.location.protocol + '//' + window.location.host + response.content
+      } else if (response.content.startsWith('/')) {
+        // 如果返回以斜杠开头（如 /download/xxx.png），则添加当前页面的protocol和host
+        fullUrl = window.location.protocol + '//' + window.location.host + response.content
+      }
+      // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
+      inputMessage.value += `\n[FILE_URL:${fullUrl}]`
       ElMessage.success(`文件 "${file.name}" 已上传`)
     } else {
       throw new Error(response.msg || '文件上传失败')
@@ -1732,6 +1917,37 @@ onMounted(async () => {
       { label: 'GPT-4o', value: 'gpt-4o' },
       { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
     ]
+  }
+
+  // 更新供应商列表
+  updateProviders()
+
+  // 如果有保存的模型选择，设置对应的供应商和模型
+  if (selectedModel.value) {
+    // 根据选择的模型值找到对应的供应商
+    const selectedModelInfo = models.value.find(model => model.value === selectedModel.value)
+    if (selectedModelInfo) {
+      // 遍历模型值找出供应商
+      const lowerValue = selectedModelInfo.value.toLowerCase()
+      if (lowerValue.includes('gpt')) {
+        providerValue.value = 'gpt'
+      } else if (lowerValue.includes('gemini')) {
+        providerValue.value = 'gemini'
+      } else if (lowerValue.includes('qwen')) {
+        providerValue.value = 'qwen'
+      } else if (lowerValue.includes('nano-banana')) {
+        providerValue.value = 'nano-banana'
+      } else if (lowerValue.includes('deepseek')) {
+        providerValue.value = 'deepseek'
+      } else {
+        // 如果没有匹配到预定义的供应商，使用第一个单词
+        const firstPart = selectedModelInfo.value.split('-')[0]
+        if (firstPart && firstPart.length > 1) {
+          providerValue.value = firstPart
+        }
+      }
+      modelValue.value = selectedModel.value
+    }
   }
 
   // 注释掉从localStorage恢复对话标题的功能，实现每次刷新页面时标题栏都为空

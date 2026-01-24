@@ -32,11 +32,23 @@ class Dialog(Model):
         indexes = (
             (('username', 'chattype', 'dialog_name'), True),  # 定义唯一索引，假设对话名不能重复吧
         )
+# 模型标记
+class ModelMeta(Model):
+    model_name = CharField()  # 模型名称
+    model_desc = CharField()  # 模型用途描述
+    recommend = BooleanField()  # 是否推荐
+    status_valid = BooleanField()  # 是否对外开放
+
+    class Meta:
+        database = db  # 指定数据库
+        indexes = (
+            (('model_name',), True),  # 定义唯一索引，确保模型名称不重复
+        )
 
 def init_db():
     # 创建表
     db.connect()
-    db.create_tables([Log, Dialog], safe=True)
+    db.create_tables([Log, Dialog, ModelMeta], safe=True)
 
 def set_log(user: str, usage: int, model: str, text: str):
     Log.create(username=user, usage=usage, modelname=model, request_text=text)

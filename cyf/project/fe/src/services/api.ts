@@ -82,8 +82,8 @@ export const fileAPI = {
   upload: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    // 后端实际文件上传接口，Content-Type由浏览器自动设置
-    return axios.post(`${API_BASE_URL}/never_guess_my_usage/download`, formData, {
+    // 使用自定义api实例，保持响应结构一致
+    return api.post('/never_guess_my_usage/download', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }

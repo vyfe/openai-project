@@ -5,6 +5,7 @@ import os.path
 import random
 import sys
 import time
+import re
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
@@ -16,6 +17,9 @@ from openai import OpenAI, APIError, AuthenticationError, RateLimitError
 from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
+
+# 文件URL正则表达式
+FILE_URL_PATTERN = re.compile(r'\[FILE_URL:(https?://[^\]]+)\]')
 
 app = Flask(__name__)
 # 启用CORS支持，允许来自所有源的请求（在生产环境中应更具体地指定源）
@@ -64,6 +68,47 @@ MODEL_CACHE = {}
 CACHE_EXPIRY_TIME = {}
 
 url = url_list[random.randint(0, len(url_list) - 1)]
+
+
+def is_gemini_model(model_name: str) -> bool:
+    """判断是否为 Gemini 类型模型"""
+    return 'gemini' in model_name.lower()
+
+
+def convert_message_for_gemini(message: dict) -> dict:
+    """
+    将消息转换为 Gemini 格式
+    输入: {"role": "user", "content": "文本[FILE_URL:http://xxx]"}
+    输出: {"role": "user", "content": [{"type": "text", "text": "文本"}, {"type": "file_url", "file_url": "http://xxx"}]}
+    """
+    content = message.get('content', '')
+    if isinstance(content, list):
+        return message  # 已是数组格式
+
+    # 提取文件 URL
+    file_urls = FILE_URL_PATTERN.findall(content)
+
+    if not file_urls:
+        return message  # 无文件URL，保持原格式
+
+    # 获取纯文本（移除标记）
+    text_content = FILE_URL_PATTERN.sub('', content).strip()
+
+    # 构建 content 数组
+    content_array = []
+    if text_content:
+        content_array.append({"type": "text", "text": text_content})
+    for url in file_urls:
+        content_array.append({"type": "file_url", "file_url": url})
+
+    return {"role": message.get('role'), "content": content_array}
+
+
+def convert_dialog_for_model(dialogvo: list, model: str) -> list:
+    """根据模型类型转换对话格式"""
+    if is_gemini_model(model):
+        return [convert_message_for_gemini(msg) for msg in dialogvo]
+    return dialogvo  # 非Gemini模型保持原格式
 
 
 def handle_api_exception(e, user=None, model=None, dialog_content=None):
@@ -415,7 +460,7 @@ def dialog():
         # 构建API调用参数
         api_params = {
             "model": model,
-            "messages": dialogvo,
+            "messages": convert_dialog_for_model(dialogvo, model),  # 根据模型类型转换对话格式
             "max_tokens": max_response_tokens or 102400  # 使用传入的参数或默认值
         }
 
@@ -544,7 +589,7 @@ def dialog_stream():
                 # 构建API调用参数
                 api_params = {
                     "model": model,
-                    "messages": dialogvo,
+                    "messages": convert_dialog_for_model(dialogvo, model),  # 根据模型类型转换对话格式
                     "max_tokens": max_response_tokens or 102400,  # 使用传入的参数或默认值
                     "stream": True,
                     "timeout": 300  # 5分钟超时
@@ -846,7 +891,7 @@ def get_usage():
             )
             today_response.raise_for_status()
             today_data = today_response.json()
-            today_usage = week_data.get('total_usage', 0)
+            today_usage = today_data.get('total_usage', 0)
 
             # 获取本周用量
             week_response = requests.get(
@@ -929,6 +974,15 @@ def dialog_delete():
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
 sqlitelog.init_db()
+
+# 初始化模型元数据
+try:
+    from init_model_meta import init_model_meta_data
+    init_model_meta_data()
+except ImportError:
+    print("警告: init_model_meta.py 文件不存在或导入失败，跳过模型元数据初始化")
+except Exception as e:
+    print(f"模型元数据初始化过程中发生错误: {e}")
 
 if __name__ == '__main__':
     # 上传文件夹初始化
