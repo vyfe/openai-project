@@ -34,6 +34,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .header-left h2 {
@@ -41,11 +42,17 @@
   font-size: 20px;
   font-weight: 600;
   margin: 0;
+  flex-shrink: 0;
 }
 
 .user-info {
   color: #7a9c7a;
   font-size: 14px;
+  flex-shrink: 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-main {
@@ -604,12 +611,21 @@
 
 /* 响应式断点 */
 @media (max-width: 768px) {
-  .user-info { display: none; }
   .chat-sidebar { width: 280px; }
   .message-content { max-width: 85%; }
   .input-area { padding: 12px; }
   .header-left { gap: 8px; }
   .sidebar-toggle-btn { margin-right: 8px; }
+
+  /* 移动端调整标题和用户信息的显示 */
+  .header-left {
+    flex-wrap: wrap;
+    min-height: 40px;
+  }
+
+  .header-left h2, .user-info {
+    flex-shrink: 0;
+  }
 }
 
 @media (max-width: 480px) {
@@ -768,7 +784,6 @@
 
 /* 响应式断点 */
 @media (max-width: 768px) {
-  .user-info { display: none; }
   .chat-sidebar { width: 280px; }
   .message-content { max-width: 85%; }
   .input-area { padding: 12px; }

@@ -11,6 +11,8 @@
         />
         <h2>智能对话</h2>
         <span class="user-info">用户：{{ authStore.user }}</span>
+        <!-- TODO(human): 确保移动端也显示登录用户名，而不是被CSS隐藏 -->
+        <!-- 已完成: 通过修改CSS文件，移除了@media (max-width: 768px)中.user-info { display: none; }的设置 -->
       </div>
       <div class="header-right">
         <el-button
@@ -282,7 +284,7 @@
             </div>
             <div class="message-content">
               <div class="message-header">
-                <span class="message-author">{{ message.type === 'user' ? '用户' : 'AI助手' }}</span>
+                <span class="message-author">{{ message.type === 'user' ? authStore.user : 'AI助手' }}</span>
                 <span class="message-time">{{ message.time }}</span>
                 <div class="message-actions">
                   <el-button
