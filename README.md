@@ -1,12 +1,12 @@
-# Python OpenAI 客户端-服务端项目
+# OpenAI-Project：AI魔法棍
 
 ## 项目目标
 
-open-ai 访问器，用于部署代理，跨越魔法限制
+open-ai聚合服务访问器，用于部署代理，跨越魔法限制
 
 ## 如何使用
 
-部署服务端+客户端，通过客户端-服务端-openai的方式访问。
+部署服务端，通过客户端/前端-服务端-openai的方式访问。
 
 ## 部署准备工作
 
@@ -16,11 +16,11 @@ open-ai 访问器，用于部署代理，跨越魔法限制
 
 所需配置见conf.ini：
 
-## 客户端原理：cyf.project.client
+## 客户端原理：cyf.project.client（已弃用）
 
 所需配置见conf.ini：
 
-## 启动步骤：
+## 服务一站式启动步骤：
 
 - 根目录执行：sh full-pack-prod.sh，从dist目录取包;
 - 服务器上执行：cd ${PROJECT_ROOT} && tar -xf openai-full-prod.tar.gz && sh start-prod.sh
@@ -94,7 +94,7 @@ server {
 
 ## 项目概述
 
-这是一个基于Python的OpenAI API客户端-服务端项目，提供了图形用户界面客户端和后端服务，支持多种OpenAI模型（包括GPT系列和DALL-E图像生成）。项目还包括一个现代化的Vue前端界面，用于更好的用户体验。
+这是一个基于Python的OpenAI API客户端-服务端项目，提供了图形用户界面客户端和后端服务，支持多种OpenAI模型。项目还包括一个现代化的Vue前端界面，用于更好的用户体验。
 
 ## 项目结构
 
@@ -133,12 +133,7 @@ cyf/
 ### 服务端 (server/)
 - 基于Flask的Web API服务
 - 支持多API密钥轮询负载均衡
-- 支持多种OpenAI模型：
-  - GPT-4o mini
-  - GPT-4o
-  - GPT-4o-all
-  - GPT-3.5-turbo
-  - DALL-E 图像生成
+- 支持多种OpenAI模型；
 - 文件上传功能 (支持 txt, pdf, png, jpg, jpeg, gif, ppt, pptx)
 - SQLite数据库日志记录系统
   - 记录用户请求、用量、模型使用情况
@@ -155,7 +150,7 @@ cyf/
 - 响应式设计，适配不同屏幕尺寸
 - Element Plus UI组件库
 
-### 客户端 (client/) - 旧版
+### 客户端 (client/) - 旧版已废弃
 - 基于CustomTkinter的图形用户界面
 - 用户身份验证
 - 模型选择器 (GPT-4o, GPT-3.5-turbo, DALL-E等)
