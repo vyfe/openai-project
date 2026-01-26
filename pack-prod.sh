@@ -19,7 +19,7 @@ echo "⚙️  开始打包后端代码..."
 
 # 打包后端
 cd cyf/project/server
-python server_pack.py
+python3 server_pack.py
 
 echo "✅ 后端打包完成"
 

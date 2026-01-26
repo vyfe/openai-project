@@ -27,7 +27,17 @@ app.config['MAX_CONTENT_LENGTH'] = 52428800
 CORS(app, supports_credentials=True, origins=["*"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "User-Agent", "Cache-Control"],
      methods=["GET", "PUT", "POST", "DELETE", "OPTIONS"])
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx'}
+
+# 为所有响应添加CORS头的函数
+@app.after_request
+def after_request(response):
+    # 为所有响应添加CORS头
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx', 'md'}
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
@@ -659,11 +669,7 @@ def dialog_stream():
             headers={
                 'Cache-Control': 'no-cache',
                 'X-Accel-Buffering': 'no',
-                'Connection': 'close',  # 确保连接关闭
-                'Access-Control-Allow-Origin': '*',  # 添加CORS头
-                'Access-Control-Allow-Credentials': 'true',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control',
-                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+                'Connection': 'close'  # 确保连接关闭
             }
         )
     except Exception as e:
@@ -690,10 +696,6 @@ def dialog_stream():
                 'Cache-Control': 'no-cache',
                 'X-Accel-Buffering': 'no',
                 'Connection': 'close',
-                'Access-Control-Allow-Origin': '*',  # 添加CORS头
-                'Access-Control-Allow-Credentials': 'true',
-                'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control',
-                'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
             }
         )
 
@@ -1005,6 +1007,9 @@ def dialog_delete():
     deleted_count = sqlitelog.delete_dialogs(user, dialog_ids)
     return {"success": True, "deleted_count": deleted_count}
 
+@app.route('/never_guess_my_usage/system_prompt', methods=['GET'])
+def system_prompt():
+    return {"msg": "api return content not ok"}, 200
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
 sqlitelog.init_db()

@@ -478,6 +478,23 @@
                   重试
                 </el-button>
               </div>
+              <!-- 当回复为空时，提示用户重新发送 -->
+              <div v-if="message.type === 'ai' && message.content === '' && !message.isError && !isStreaming(index)" class="empty-response-actions">
+                <el-alert
+                  :closable="false"
+                  title="AI助手暂时没有回复，请稍后再试或重新提问"
+                  type="info"
+                  show-icon
+                />
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="retryMessage(index)"
+                >
+                  <el-icon><RefreshLeft /></el-icon>
+                  重新提问
+                </el-button>
+              </div>
               <!-- 截断消息继续生成按钮 -->
               <div v-if="message.type === 'ai' && message.isTruncated && !message.isError && !isStreaming(index)" class="truncated-actions">
                 <div class="truncated-indicator">
@@ -542,7 +559,7 @@
                     <el-button v-if="uploadedFile" type="danger" size="small" text @click="clearFile">清除</el-button>
                   </div>
                   <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
-                    accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx">
+                    accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.md,.markdown">
                     <el-icon><upload-filled /></el-icon>
                     <div class="el-upload__text">拖拽或点击上传</div>
                   </el-upload>
@@ -580,13 +597,14 @@
   <!-- 格式帮助弹窗 -->
   <el-dialog
     v-model="showLatexHelpDialog"
-    title="专业格式帮助"
+  
     width="60%"
     :modal="true"
     :show-close="true"
     @close="showLatexHelpDialog = false"
   >
     <div class="latex-help-content">
+      <h2>专业输出帮助</h2>
       <h3>如何在对话中使用 LaTeX 数学公式</h3>
       <p>您可以使用以下语法在对话中插入数学公式：</p>
 
@@ -722,7 +740,6 @@ const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
 // 预设角色设定列表
 const rolePresets = ref<Array<{id: string, name: string, prompt: string}>>([
   { id: 'default', name: '默认', prompt: '' },
-  { id: 'programmer', name: '程序员', prompt: '你是一个专业的程序员助手，擅长代码编写、调试和技术问题解答。' },
   { id: 'translator', name: '翻译', prompt: '你是一个专业的翻译助手，擅长中英文互译，注重语义准确和表达流畅。' },
   { id: 'writer', name: '写作', prompt: '你是一个专业的写作助手，擅长文章润色、创意写作和文案编辑。' }
 ])
@@ -1288,11 +1305,21 @@ function getCurrentTime() {
 
 const handleFileChange = async (file: any) => {
   try {
+    // 检查是否为MD文件，如果是则重命名为TXT文件
+    let fileToUpload = file.raw;
+    if (file.raw.type === 'text/markdown' || file.name.toLowerCase().endsWith('.md')) {
+      // 读取MD文件内容并创建新的TXT文件
+      const textContent = await file.raw.text();
+      const txtFileName = file.name.replace(/\.md$/, '.txt');
+      fileToUpload = new File([textContent], txtFileName, { type: 'text/plain' });
+      ElMessage.info(`MD文件已转换为TXT格式: ${txtFileName}`)
+    }
+
     // 上传文件到服务器
-    const response = await fileAPI.upload(file.raw)
+    const response = await fileAPI.upload(fileToUpload)
     if (response && response.content) {
       // 文件上传成功，将URL添加到当前消息中
-      uploadedFile.value = file.raw
+      uploadedFile.value = fileToUpload
       // 如果后端返回的content是相对路径或缺少host，则补充完整URL
       let fullUrl = response.content
       if (response.content.startsWith(':')) {
@@ -1304,7 +1331,7 @@ const handleFileChange = async (file: any) => {
       }
       // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
       inputMessage.value += `\n[FILE_URL:${fullUrl}]`
-      ElMessage.success(`文件 "${file.name}" 已上传`)
+      ElMessage.success(`文件 "${fileToUpload.name}" 已上传`)
     } else {
       throw new Error(response.msg || '文件上传失败')
     }
@@ -1330,6 +1357,38 @@ const sendMessage = async () => {
   if (!selectedModel.value) {
     ElMessage.warning('请先选择一个模型')
     return
+  }
+
+  // TODO(human): 在发送新请求前，自动清除异常类的消息（包含重试或继续输出按钮的消息），避免将它们再次发送到后端
+  // 实现逻辑应该是遍历当前消息数组，移除所有带有 isError 或 isTruncated 标记的消息，以及内容为空的AI消息
+  // 这样可以确保新请求不会携带错误或截断的消息作为上下文
+
+  // 清除异常类的消息（包含重试或继续输出按钮的消息）
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
+  const normalMessages = messages.filter(msg => {
+    // 保留欢迎消息
+    if (msg.type === 'ai' && msg.content === welcomeMessage) {
+      return true
+    }
+    // 过滤掉带有错误标记的消息
+    if (msg.isError) {
+      return false
+    }
+    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
+    if (msg.type === 'ai' && msg.content === '') {
+      return false
+    }
+    // 过滤掉带有截断标记的消息
+    if (msg.isTruncated) {
+      return false
+    }
+    return true
+  })
+
+  // 如果消息数组被过滤，则替换原数组
+  if (normalMessages.length !== messages.length) {
+    // 保留正常的消息
+    messages.splice(0, messages.length, ...normalMessages)
   }
 
   // 检查是否是图像生成模型
@@ -1417,6 +1476,10 @@ const sendMessage = async () => {
                 messages[aiMessageIndex].finishReason = 'length'
                 messages[aiMessageIndex].isTruncated = true
               }
+              // 如果内容仍然为空，说明出现了问题
+              else if (messages[aiMessageIndex].content === '') {
+                messages[aiMessageIndex].isError = true
+              }
             }
             // 只在用户位于底部时才滚动
             nextTick(() => {
@@ -1484,15 +1547,6 @@ const sendMessage = async () => {
       } else {
         // 其他类型的错误消息也直接使用
         errorMessage = error.message
-      }
-    }
-
-    // 将最后的AI消息标记为错误状态
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].type === 'ai' && messages[i].content === '') {
-        messages[i].content = errorMessage;
-        messages[i].isError = true;  // 添加错误状态
-        break;
       }
     }
 
@@ -1927,13 +1981,55 @@ const deleteMessage = (index: number) => {
 
 // 重试发送特定AI消息（重新发送该消息所属的上下文）
 const retryMessage = async (index: number) => {
-  if (index < 0 || index >= messages.length || messages[index].type !== 'ai' || !messages[index].isError) {
+  if (index < 0 || index >= messages.length || messages[index].type !== 'ai') {
+    return;
+  }
+
+  // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要重试的消息
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
+  const currentMessageToRetry = messages[index]; // 保存当前要重试的消息
+  const normalMessages = messages.filter((msg, msgIndex) => {
+    // 保留欢迎消息
+    if (msg.type === 'ai' && msg.content === welcomeMessage) {
+      return true
+    }
+    // 保留当前要重试的消息
+    if (msgIndex === index) {
+      return true
+    }
+    // 过滤掉带有错误标记的消息
+    if (msg.isError) {
+      return false
+    }
+    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
+    if (msg.type === 'ai' && msg.content === '') {
+      return false
+    }
+    // 过滤掉带有截断标记的消息
+    if (msg.isTruncated) {
+      return false
+    }
+    return true
+  })
+
+  // 如果消息数组被过滤，则替换原数组
+  if (normalMessages.length !== messages.length) {
+    // 保留正常的消息
+    messages.splice(0, messages.length, ...normalMessages)
+  }
+
+  // 重新查找要重试的消息的新索引
+  const newIndexOfRetryMessage = messages.indexOf(currentMessageToRetry);
+
+  // 如果消息不存在（不应该发生），则返回
+  if (newIndexOfRetryMessage === -1) {
+    ElMessage.error('重试的消息不存在');
     return;
   }
 
   // 查找这个AI消息之前的用户消息
   let userMessageIndex = -1;
-  for (let i = index - 1; i >= 0; i--) {
+  for (let i = newIndexOfRetryMessage - 1; i >= 0; i--) {
     if (messages[i].type === 'user') {
       userMessageIndex = i;
       break;
@@ -1945,15 +2041,14 @@ const retryMessage = async (index: number) => {
     return;
   }
 
-  // 从AI错误消息中获取内容，准备重新发送
   const userMessage = messages[userMessageIndex];
-  const aiMessage = messages[index];
+  const aiMessage = messages[newIndexOfRetryMessage];
 
-  // 临时移除错误的AI消息，标记为正在重试
-  messages.splice(index, 1);
+  // 移除错误或空的AI消息
+  messages.splice(newIndexOfRetryMessage, 1);
 
-  // 准备上下文信息
-  const contextSnapshot = messages.slice(0, userMessageIndex); // 获取AI消息前的上下文
+  // 准备上下文信息（不包括当前错误的AI消息）
+  const contextSnapshot = messages.slice(0, newIndexOfRetryMessage); // 获取到当前位置前的所有消息
 
   // 设置为加载状态
   isLoading.value = true;
@@ -1999,29 +2094,62 @@ const retryMessage = async (index: number) => {
         time: getCurrentTime()
       });
 
-      // 使用之前保存的上下文快照构建对话数组
+      // 使用上下文快照构建对话数组
       const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content);
 
-      await chatAPI.sendChatStream(
-        selectedModel.value,
-        userMessage.content,
-        (content, done) => {
-          messages[index].content += content;
-          if (done) {
-            isLoading.value = false;
-          }
-          // 只在用户位于底部时才滚动
-          nextTick(() => {
-            if (isScrolledToBottom.value) {
-              scrollToBottom();
+      // 根据开关决定使用流式还是非流式API
+      if (streamEnabled.value) {
+        // 使用流式API
+        await chatAPI.sendChatStream(
+          selectedModel.value,
+          userMessage.content,
+          (content, done, finishReason) => {
+            messages[index].content += content;
+            if (done) {
+              isLoading.value = false;
+              if (finishReason === 'length') {
+                messages[index].finishReason = 'length';
+                messages[index].isTruncated = true;
+              }
             }
-          });
-        },
-        contextCount.value > 0 ? 'multi' : 'single',
-        dialogArray,
-        dialogTitle.value,  // 添加dialogTitle参数
-        maxResponseChars.value * 2 // 添加最大回复tokens参数（字数×2）
-      );
+            // 只在用户位于底部时才滚动
+            nextTick(() => {
+              if (isScrolledToBottom.value) {
+                scrollToBottom();
+              }
+            });
+          },
+          contextCount.value > 0 ? 'multi' : 'single',
+          dialogArray,
+          dialogTitle.value,  // 添加dialogTitle参数
+          Math.round(maxResponseChars.value * 1.2 + 30) // 添加最大回复tokens参数
+        );
+      } else {
+        // 使用非流式API
+        const response: any = await chatAPI.sendChat(
+          selectedModel.value,
+          userMessage.content,
+          contextCount.value > 0 ? 'multi' : 'single',
+          dialogArray,
+          dialogTitle.value,
+          Math.round(maxResponseChars.value * 2.4) // 添加最大回复tokens参数
+        );
+
+        // 更新AI消息内容
+        messages[index].content = response.content;
+        if (response.finish_reason === 'length') {
+          messages[index].finishReason = response.finish_reason as 'length';
+          messages[index].isTruncated = true;
+        }
+
+        isLoading.value = false;
+        // 滚动到底部
+        nextTick(() => {
+          if (isScrolledToBottom.value) {
+            scrollToBottom();
+          }
+        });
+      }
     }
 
     ElMessage.success('消息重试成功');
@@ -2161,6 +2289,48 @@ const continueGeneration = async (index: number) => {
   const truncatedMessage = messages[index]
   if (!truncatedMessage || !truncatedMessage.isTruncated) return
 
+  // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要继续生成的消息
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
+  const currentMessageToContinue = messages[index]; // 保存当前要继续生成的消息
+  const normalMessages = messages.filter((msg, msgIndex) => {
+    // 保留欢迎消息
+    if (msg.type === 'ai' && msg.content === welcomeMessage) {
+      return true
+    }
+    // 保留当前要继续生成的消息
+    if (msgIndex === index) {
+      return true
+    }
+    // 过滤掉带有错误标记的消息
+    if (msg.isError) {
+      return false
+    }
+    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
+    if (msg.type === 'ai' && msg.content === '') {
+      return false
+    }
+    // 过滤掉带有截断标记的消息（除了当前要处理的这条消息外）
+    if (msg.isTruncated) {
+      return false
+    }
+    return true
+  })
+
+  // 如果消息数组被过滤，则替换原数组
+  if (normalMessages.length !== messages.length) {
+    // 保留正常的消息
+    messages.splice(0, messages.length, ...normalMessages)
+  }
+
+  // 重新查找要继续生成的消息的新索引
+  const newIndexOfContinueMessage = messages.indexOf(currentMessageToContinue);
+
+  // 如果消息不存在（不应该发生），则返回
+  if (newIndexOfContinueMessage === -1) {
+    ElMessage.error('继续生成的消息不存在');
+    return;
+  }
+
   // 创建一条新的AI消息用于继续生成
   const continueMessageIndex = messages.length
   messages.push({
@@ -2177,7 +2347,7 @@ const continueGeneration = async (index: number) => {
     const userPrompt = "请继续生成未完成的内容，直接从上次中断的地方继续，不要重复已生成的内容。"
 
     // 构建包含截断回答的上下文，确保包含当前截断的消息
-    const dialogArray = buildDialogArrayFromSnapshot(messages.slice(0, index + 1), userPrompt)
+    const dialogArray = buildDialogArrayFromSnapshot(messages.slice(0, newIndexOfContinueMessage + 1), userPrompt)
 
     // 根据开关决定使用流式还是非流式API
     if (streamEnabled.value) {
@@ -2466,9 +2636,37 @@ body.dark-theme .latex-help-content code {
   color: #e0e0e0;
 }
 
+/* 修复ElDialog标题的夜间模式样式 - 使用CSS变量 */
+body.dark-theme {
+  --el-text-color-primary: #e0e0e0;
+}
+
+/* 修复ElDialog头部和其他组件的夜间模式样式 */
+body.dark-theme .el-dialog__header {
+  border-bottom: 1px solid #4a4a4a;
+}
+
+body.dark-theme .el-dialog__body {
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
 body.dark-theme .example-formulas {
   background-color: #3a3a3a;
   color: #e0e0e0;
+}
+
+/* 空响应操作按钮样式 */
+.empty-response-actions {
+  margin-top: 8px;
+}
+
+.empty-response-actions .el-alert {
+  margin-bottom: 8px;
+}
+
+.empty-response-actions .el-button {
+  margin-left: 0;
 }
 </style>
 
