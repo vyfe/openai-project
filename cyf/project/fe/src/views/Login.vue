@@ -53,6 +53,7 @@
         <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer">
           <el-icon><Link /></el-icon> 开源项目 GitHub
         </a>
+        <span class="wechat-info"> vx:pata_data_studio </span>
       </p>
     </div>
   </div>
@@ -265,6 +266,20 @@ const handleLogin = async () => {
   text-decoration: underline;
 }
 
+.login-footer .github-link-login .wechat-info {
+  margin-left: 15px;
+  color: #7a9c7a;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: top;
+  line-height: 1.2;
+}
+
+.login-footer .github-link-login .wechat-info:hover {
+  color: #5a8a5a;
+}
+
 /* 深色主题样式 */
 body.dark-theme .login-container {
   background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
@@ -327,5 +342,13 @@ body.dark-theme .login-footer .github-link-login a {
 body.dark-theme .login-footer .github-link-login a:hover {
   color: #e0e0e0;
   text-decoration: underline;
+}
+
+body.dark-theme .login-footer .github-link-login .wechat-info {
+  color: #9a9a9a;
+}
+
+body.dark-theme .login-footer .github-link-login .wechat-info:hover {
+  color: #e0e0e0;
 }
 </style>
