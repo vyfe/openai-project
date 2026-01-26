@@ -45,6 +45,16 @@ class ModelMeta(Model):
             (('model_name',), True),  # 定义唯一索引，确保模型名称不重复
         )
 
+    def to_dict(self):
+        """将模型实例转换为字典格式"""
+        return {
+            'id': self.id,
+            'model_name': self.model_name,
+            'model_desc': self.model_desc,
+            'recommend': self.recommend,
+            'status_valid': self.status_valid
+        }
+
 def init_db():
     # 创建表
     db.connect()
@@ -82,6 +92,33 @@ def delete_dialogs(user: str, dialog_ids: list) -> int:
         (Dialog.username == user) & (Dialog.id.in_(dialog_ids))
     )
     return query.execute()
+
+
+def get_model_meta_list(model_names: list = None, recommend: bool = None, status_valid: bool = None):
+    """
+    查询模型元数据列表，支持复合条件查询，所有参数均为可选项
+    :param model_name: 模型名称（可选）
+    :param recommend: 是否推荐（可选）
+    :param status_valid: 是否对外有效（可选）
+    :return: 符合条件的模型元数据列表
+    """
+    query = ModelMeta.select()
+
+    # 根据参数添加过滤条件
+    if model_names is not None:
+        query = query.where(ModelMeta.model_name.in_(model_names))
+
+    if recommend is not None:
+        query = query.where(ModelMeta.recommend == recommend)
+
+    if status_valid is not None:
+        query = query.where(ModelMeta.status_valid == status_valid)
+
+    # 返回字典格式的结果列表
+    if query.exists():
+        return [model for model in query.dicts().iterator()]
+    else:
+        return []
 
 
 def message_query(sql: str, params=None):

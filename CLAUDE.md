@@ -62,6 +62,11 @@ cyf/
 - 文件上传功能（支持多种格式）
 - 响应式设计，适配不同屏幕尺寸
 - Element Plus UI组件库
+- 在Vue组件中使用 `:deep()` 选择器可以穿透作用域样式修改第三方组件样式
+- 针对 `<pre>` 和 `<code>` 标签设置 `max-width: 100%` 和 `overflow-x: auto` 防止内容溢出
+- 使用 `white-space: pre-wrap` 保持代码格式的同时允许换行
+- 使用 `table-layout: fixed` 确保表格在小屏幕上布局稳定
+- 使用 `word-break: break-word` 和 `overflow-wrap: break-word` 确保长内容能正确换行
 
 ### 客户端 (client/) - 旧版
 - 基于CustomTkinter的图形用户界面
@@ -228,3 +233,10 @@ bash start-dev.sh
 - 处理窗口大小变化时要区分初始化检测和动态调整，避免在软键盘弹出/收起时触发不必要的UI状态变更
 - resize事件中不要无条件更改侧边栏折叠状态，应该对比变化前后状态再决定是否更新UI
 - 检测移动设备时，记录设备类型的变化状态以防止重复操作
+- 在处理移动端代码块和表格布局时，使用 `white-space: pre-wrap` 保持代码格式的同时允许换行
+- 使用 `table-layout: fixed` 确保表格在小屏幕上布局稳定
+- 针对 `<pre>` 和 `<code>` 标签设置 `max-width: 100%` 和 `overflow-x: auto` 防止内容溢出
+- 移动端媒体查询常用断点: `(max-width: 768px)` 和 `(max-width: 480px)`
+- 使用 `word-break: break-word` 和 `overflow-wrap: break-word` 确保长内容能正确换行
+- Element Plus 组件在移动端需要特殊的间距和尺寸调整
+- 在Vue组件中使用 `:deep()` 选择器可以穿透作用域样式修改第三方组件样式

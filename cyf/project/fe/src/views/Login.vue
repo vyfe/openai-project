@@ -264,4 +264,68 @@ const handleLogin = async () => {
   color: #5a8a5a;
   text-decoration: underline;
 }
+
+/* 深色主题样式 */
+body.dark-theme .login-container {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%);
+}
+
+body.dark-theme .login-container::before {
+  background: radial-gradient(circle, rgba(85, 85, 85, 0.1) 0%, transparent 70%);
+}
+
+body.dark-theme .login-card {
+  background: rgba(34, 34, 34, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(85, 85, 85, 0.3);
+  color: white;
+}
+
+body.dark-theme .login-header h1 {
+  color: #e0e0e0;
+}
+
+body.dark-theme .login-header p {
+  color: #9a9a9a;
+}
+
+body.dark-theme .login-form .el-input__wrapper {
+  background: transparent;
+  border: 1px solid #555;
+  color: white;
+}
+
+body.dark-theme .login-form .el-input__wrapper:hover {
+  border-color: #7aa87a;
+}
+
+body.dark-theme .login-form .el-input__wrapper:focus-within {
+  border-color: #7aa87a;
+  box-shadow: 0 0 0 2px rgba(122, 168, 122, 0.2);
+}
+
+body.dark-theme .login-button {
+  background: linear-gradient(135deg, #5a8a5a 0%, #7aa87a 100%);
+  border: none;
+  color: white;
+}
+
+body.dark-theme .login-button:hover {
+  background: linear-gradient(135deg, #6a9a6a 0%, #8ab88a 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(122, 168, 122, 0.3);
+}
+
+body.dark-theme .login-footer p {
+  color: #9a9a9a;
+}
+
+body.dark-theme .login-footer .github-link-login a {
+  color: #9a9a9a;
+}
+
+body.dark-theme .login-footer .github-link-login a:hover {
+  color: #e0e0e0;
+  text-decoration: underline;
+}
 </style>

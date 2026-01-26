@@ -12,7 +12,9 @@ const api = axios.create({
   timeout: 300000, // 5分钟超时 (原为 120000)
   headers: {
     'Content-Type': 'application/x-www-form-urlencoded'
-  }
+  },
+  maxBodyLength: Infinity,  // 允许无限大的请求体               
+  maxContentLength: Infinity,  // 允许无限大的响应体
 })
 
 // 请求拦截器 - 自动注入用户凭据并将数据转换为form格式
@@ -116,7 +118,7 @@ export const chatAPI = {
   sendChatStream: async (
     model: string,
     message: string,
-    onChunk: (content: string, done: boolean) => void,
+    onChunk: (content: string, done: boolean, finishReason?: string) => void,
     dialogMode: string = 'single',
     dialog?: any,
     dialogTitle?: string,
@@ -137,19 +139,19 @@ export const chatAPI = {
       data.max_response_tokens = maxResponseTokens
     }
 
-    // 使用fetch API来处理SSE流式响应
-    const params = new URLSearchParams({
-      ...data,
-      user: useAuthStore().user || '',
-      password: useAuthStore().password || ''
-    });
+    // 添加认证信息到数据中
+    data.user = useAuthStore().user || '';
+    data.password = useAuthStore().password || '';
 
-    const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/split_stream?${params}`, {
-      method: 'GET',
+    // 使用fetch API来处理SSE流式响应，改用POST请求以避免URL长度限制
+    const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/split_stream`, {
+      method: 'POST',
       headers: {
         'Accept': 'text/event-stream',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Cache-Control': 'no-cache',
-      }
+      },
+      body: new URLSearchParams(data).toString()
     });
 
     if (!response.ok) {
@@ -188,7 +190,7 @@ export const chatAPI = {
                   throw new Error(parsedData.error.msg || 'API请求失败');
                 }
 
-                onChunk(parsedData.content, parsedData.done);
+                onChunk(parsedData.content, parsedData.done, parsedData.finish_reason);
 
                 if (parsedData.done) {
                   return; // 结束读取

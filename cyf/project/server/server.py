@@ -22,6 +22,7 @@ import sqlitelog
 FILE_URL_PATTERN = re.compile(r'\[FILE_URL:(https?://[^\]]+)\]')
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 52428800
 # 启用CORS支持，允许来自所有源的请求（在生产环境中应更具体地指定源）
 CORS(app, supports_credentials=True, origins=["*"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "User-Agent", "Cache-Control"],
@@ -224,10 +225,17 @@ def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
         has_exclude_keyword = any(keyword.lower() in model_id.lower() for keyword in exclude_keywords)
 
         if has_include_prefix and not has_exclude_keyword:
-            filtered_models.append({
+            # 构建基本模型对象
+            filtered_model = {
                 'id': model_id.lower(),
                 'label': model_id.lower()
-            })
+            }
+            # 保留原模型中的其他字段（如 recommend, model_desc 等）
+            for key, value in model.items():
+                if key not in ['id', 'label']:  # 只有当这些字段不存在于基本对象中时才添加
+                    if key not in filtered_model:
+                        filtered_model[key] = value
+            filtered_models.append(filtered_model)
 
     return filtered_models
 
@@ -241,12 +249,9 @@ def get_cached_models():
 
     # 检查缓存是否过期
     if 'models' in CACHE_EXPIRY_TIME and current_time < CACHE_EXPIRY_TIME['models']:
-        # 缓存有效，直接返回
         return MODEL_CACHE.get('models', [])
 
-    # 缓存过期或不存在，重新获取模型
     try:
-        # 使用默认客户端获取模型列表，因为这个API不需要用户特定的凭证
         client = random_client()
         models_response = client.models.list()
 
@@ -260,13 +265,38 @@ def get_cached_models():
         # 过滤模型
         filtered_models = filter_models([model.model_dump() for model in models_response.data], include_prefixes, exclude_keywords)
 
+        # ========== 新增：集成 ModelMeta 元数据 ==========
+        # 获取所有模型的元数据
+        model_ids = [m['id'] for m in filtered_models]
+        model_meta_list = sqlitelog.get_model_meta_list(model_names=model_ids)
+
+        # 构建元数据映射 (model_name -> meta)
+        meta_map = {meta['model_name'].lower(): meta for meta in model_meta_list}
+
+        # 增强模型列表：添加元数据字段，过滤无效模型
+        enhanced_models = []
+        for model in filtered_models:
+            model_id = model['id'].lower()
+            meta = meta_map.get(model_id)
+
+            # 如果有元数据且 status_valid 为 False，跳过该模型
+            if meta and not meta.get('status_valid', True):
+                continue
+
+            # 添加元数据字段
+            model['recommend'] = meta.get('recommend', False) if meta else False
+            model['model_desc'] = meta.get('model_desc', '') if meta else ''
+            enhanced_models.append(model)
+        # ========== 新增结束 ==========
+
         # 更新缓存
-        MODEL_CACHE['models'] = filtered_models
+        MODEL_CACHE['models'] = enhanced_models
         CACHE_EXPIRY_TIME['models'] = current_time + cache_ttl
 
-        return filtered_models
+        return enhanced_models
     except Exception as e:
         app.logger.error(f"获取模型列表失败: {str(e)}")
+        return []
         return []
 
 
@@ -280,9 +310,7 @@ def is_valid_model(model_name):
 def get_grouped_models():
     """获取按前缀分组的模型列表"""
     try:
-        # 使用默认客户端获取模型列表
-        client = random_client()
-        models_response = client.models.list()
+        models_response = get_cached_models()
 
         # 解析包含和排除规则
         include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
@@ -297,16 +325,13 @@ def get_grouped_models():
         for prefix in include_prefixes:
             if prefix.strip():  # 确保前缀非空
                 prefix_models = []
-                for model in models_response.data:
-                    model_id = model.id.lower()
+                for model in models_response:
+                    model_id = model['id'].lower()
                     if prefix.lower() in model_id:
                         # 检查是否包含排除关键词
                         has_exclude_keyword = any(keyword.lower() in model_id for keyword in exclude_keywords)
                         if not has_exclude_keyword:
-                            prefix_models.append({
-                                'id': model.id,
-                                'label': model.id
-                            })
+                            prefix_models.append(model)
 
                 if prefix_models:  # 只有当该前缀有匹配的模型时才添加到结果中
                     grouped_models[prefix] = prefix_models
@@ -474,8 +499,12 @@ def dialog():
             # 5 dialog组装：上下文+本次问题，返回答案
             sqlitelog.set_dialog(user, model, "chat",  title,
                                  json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
-            # 仅返回role和content
-            return {"role": result.choices[0].message.role, "content": result.choices[0].message.content}, 200
+            # 仅返回role、content和finish_reason
+            return {
+                "role": result.choices[0].message.role,
+                "content": result.choices[0].message.content,
+                "finish_reason": result.choices[0].finish_reason
+            }, 200
         except Exception as api_e:
             return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
     except json.JSONDecodeError:
@@ -597,13 +626,18 @@ def dialog_stream():
 
                 stream = get_client_for_user(user).chat.completions.create(**api_params)
 
+                finish_reason = None
                 for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        content_piece = chunk.choices[0].delta.content
-                        full_content += content_piece
-                        yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            content_piece = delta.content
+                            full_content += content_piece
+                            yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
+                        if chunk.choices[0].finish_reason:
+                            finish_reason = chunk.choices[0].finish_reason
 
-                yield f"data: {json.dumps({'content': '', 'done': True})}\n\n"
+                yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason})}\n\n"
 
                 # 记录日志 - 获取实际使用的token数
                 # 在流式响应中无法获取usage，所以使用估算的方式
