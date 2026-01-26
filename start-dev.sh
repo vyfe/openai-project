@@ -76,7 +76,7 @@ trap cleanup INT TERM
 
 # 启动后端服务（在后台运行）
 echo "🔌 启动后端服务..."
-cd "$PROJECT_ROOT/cyf/project/server" && python server.py &
+cd "$PROJECT_ROOT/cyf/project/server" && $PROJECT_ROOT/.venv/bin/python server.py &
 BACKEND_PID=$!
 
 # 给后端一些时间来启动

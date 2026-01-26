@@ -2,7 +2,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #f9f7f0 0%, #e8f5e8 100%);
+  background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
   /* 修复移动端视口高度问题 */
   height: -webkit-fill-available;
 }
@@ -14,8 +14,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
-  box-shadow: 0 2px 10px rgba(144, 238, 144, 0.1);
+  border-bottom: 1px solid rgba(144, 200, 248, 0.3);
+  box-shadow: 0 2px 10px rgba(144, 200, 248, 0.1);
   flex-shrink: 0; /* 防止头部被压缩 */
   min-height: 60px; /* 确保头部有最小高度，防止内容拥挤 */
 }
@@ -49,8 +49,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
-  box-shadow: 0 2px 10px rgba(144, 238, 144, 0.1);
+  border-bottom: 1px solid rgba(144, 180, 248, 0.3);
+  box-shadow: 0 2px 10px rgba(144, 180, 248, 0.1);
 }
 
 .header-left {
@@ -61,7 +61,7 @@
 }
 
 .header-left h2 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 20px;
   font-weight: 600;
   margin: 0;
@@ -69,7 +69,7 @@
 }
 
 .user-info {
-  color: #7a9c7a;
+  color: #7a9ccc;
   font-size: 14px;
   flex-shrink: 0;
   max-width: 150px;
@@ -92,11 +92,11 @@
 }
 
 .chat-sidebar {
-  width: 300px;
+  width: 320px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   padding: 20px;
-  border-right: 1px solid rgba(144, 238, 144, 0.3);
+  border-right: 1px solid rgba(144, 180, 248, 0.3);
   overflow-y: auto;
   /* 新增以下属性 */
   -webkit-overflow-scrolling: touch;  /* 启用惯性滚动 */
@@ -109,7 +109,7 @@
 }
 
 .model-selector h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 12px;
 }
@@ -136,7 +136,7 @@
 }
 
 .dialog-history-section h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 12px;
 }
@@ -159,7 +159,7 @@
   margin-bottom: 8px;
   border-radius: 6px;
   cursor: pointer;
-  background: rgba(232, 245, 232, 0.5);
+  background: rgba(232, 240, 255, 0.5);
   transition: background-color 0.2s;
   display: flex;
   align-items: center;
@@ -168,12 +168,12 @@
 }
 
 .dialog-item.selected {
-  background: rgba(144, 238, 144, 0.5);
-  outline: 2px solid rgba(144, 238, 144, 0.8);
+  background: rgba(144, 180, 248, 0.5);
+  outline: 2px solid rgba(144, 180, 248, 0.8);
 }
 
 .dialog-item:hover {
-  background: rgba(144, 238, 144, 0.3);
+  background: rgba(144, 180, 248, 0.3);
 }
 
 .dialog-content {
@@ -202,7 +202,7 @@
 
 .dialog-title {
   font-weight: 500;
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
@@ -220,7 +220,7 @@
 
 .dialog-date {
   font-size: 12px;
-  color: #9caf9c;
+  color: #7a9ccc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -246,26 +246,26 @@
 
 .no-dialogs {
   padding: 10px;
-  color: #9caf9c;
+  color: #7a9ccc;
   font-style: italic;
   text-align: center;
 }
 
 .file-upload-section h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 12px;
 }
 
 .upload-demo {
-  border: 2px dashed #c0e0c0;
+  border: 2px dashed #c0d8e8;
   border-radius: 8px;
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
 }
 
 .upload-demo:hover {
-  border-color: #90ee90;
-  background: rgba(232, 245, 232, 0.5);
+  border-color: #90d8ff;
+  background: rgba(232, 240, 255, 0.5);
 }
 
 .chat-content {
@@ -278,7 +278,7 @@
 .chat-toolbar {
   padding: 10px 20px;
   background: rgba(255, 255, 255, 0.8);
-  border-bottom: 1px solid rgba(144, 238, 144, 0.3);
+  border-bottom: 1px solid rgba(144, 180, 248, 0.3);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -338,12 +338,12 @@
 
 .message-author {
   font-weight: 500;
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 14px;
 }
 
 .message-time {
-  color: #9caf9c;
+  color: #7a9ccc;
   font-size: 12px;
 }
 
@@ -354,7 +354,7 @@
 }
 
 .message-actions .el-button {
-  color: #9caf9c;
+  color: #7a9ccc;
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -367,7 +367,7 @@
   background: rgba(255, 255, 255, 0.9);
   padding: 12px 16px;
   border-radius: 12px;
-  border: 1px solid rgba(144, 238, 144, 0.3);
+  border: 1px solid rgba(144, 180, 248, 0.3);
   color: #333;
   line-height: 1.5;
   white-space: pre-line; /* 更改：保留换行符，但合并空格和制表符 */
@@ -472,7 +472,7 @@
 }
 
 .message-text :deep(blockquote) {
-  border-left: 3px solid #90ee90;
+  border-left: 3px solid #90d8ff;
   padding-left: 12px;
   margin: 10px 0;
   color: #666;
@@ -538,8 +538,8 @@
 }
 
 .message.user .message-text {
-  background: rgba(144, 238, 144, 0.2);
-  border-color: rgba(144, 238, 144, 0.5);
+  background: rgba(144, 180, 248, 0.2);
+  border-color: rgba(144, 180, 248, 0.5);
 }
 
 /* 移动端适配：确保代码块和表格不超出容器 */
@@ -609,10 +609,10 @@
   gap: 8px;
   margin-top: 8px;
   padding: 8px 12px;
-  background: rgba(232, 245, 232, 0.5);
+  background: rgba(232, 240, 255, 0.5);
   border-radius: 8px;
   font-size: 14px;
-  color: #5a8a5a;
+  color: #5a7bc1;
 }
 
 .error-actions {
@@ -630,7 +630,7 @@
 .typing-dot {
   width: 8px;
   height: 8px;
-  background: #7a9c7a;
+  background: #7a9ccc;
   border-radius: 50%;
   animation: typing 1.4s infinite ease-in-out;
 }
@@ -646,7 +646,7 @@
 .input-area {
   padding: 20px;
   background: rgba(255, 255, 255, 0.9);
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
   flex-shrink: 0; /* 防止输入区域被压缩 */
 }
 
@@ -661,15 +661,15 @@
 }
 
 .message-input textarea {
-  background: rgba(232, 245, 232, 0.3);
-  border: 1px solid #c0e0c0;
+  background: rgba(232, 240, 255, 0.3);
+  border: 1px solid #c0d8e8;
   border-radius: 12px;
   resize: none;
 }
 
 .message-input textarea:focus {
-  border-color: #90ee90;
-  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
+  border-color: #90d8ff;
+  box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
 }
 
 .input-actions {
@@ -693,7 +693,7 @@
   left: 0;
   right: 0;
   z-index: 100;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
 /* 修复Element Plus按钮默认边距在移动端的影响 */
@@ -707,17 +707,17 @@
 }
 
 .messages-container::-webkit-scrollbar-track {
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
   border-radius: 3px;
 }
 
 .messages-container::-webkit-scrollbar-thumb {
-  background: rgba(144, 238, 144, 0.5);
+  background: rgba(144, 180, 248, 0.5);
   border-radius: 3px;
 }
 
 .messages-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 238, 144, 0.7);
+  background: rgba(144, 180, 248, 0.7);
 }
 
 /* 对话历史滚动条样式 */
@@ -726,17 +726,17 @@
 }
 
 .dialog-list::-webkit-scrollbar-track {
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
   border-radius: 3px;
 }
 
 .dialog-list::-webkit-scrollbar-thumb {
-  background: rgba(144, 238, 144, 0.5);
+  background: rgba(144, 180, 248, 0.5);
   border-radius: 3px;
 }
 
 .dialog-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 238, 144, 0.7);
+  background: rgba(144, 180, 248, 0.7);
 }
 
 /* 侧边栏滚动条样式 */
@@ -745,23 +745,23 @@
 }
 
 .chat-sidebar::-webkit-scrollbar-track {
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
   border-radius: 3px;
 }
 
 .chat-sidebar::-webkit-scrollbar-thumb {
-  background: rgba(144, 238, 144, 0.5);
+  background: rgba(144, 180, 248, 0.5);
   border-radius: 3px;
 }
 
 .chat-sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(144, 238, 144, 0.7);
+  background: rgba(144, 180, 248, 0.7);
 }
 
 .divider {
   border: none;
   height: 1px;
-  background: linear-gradient(to right, transparent, rgba(144, 238, 144, 0.3), transparent);
+  background: linear-gradient(to right, transparent, rgba(144, 180, 248, 0.3), transparent);
   margin: 10px 0;
 }
 
@@ -775,7 +775,7 @@
 
 .typing-placeholder {
   margin-bottom: 8px;
-  color: #7a9c7a;
+  color: #7a9ccc;
   font-style: italic;
   font-size: 14px;
 }
@@ -876,11 +876,11 @@
 .context-settings-section {
   margin-top: 30px;
   padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
 .context-settings-section h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 16px;
 }
@@ -898,7 +898,7 @@
 
 .context-hint {
   font-size: 12px;
-  color: #9caf9c;
+  color: #7a9ccc;
   margin-top: 20px;
 }
 
@@ -913,35 +913,35 @@
 .system-prompt-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
 .system-prompt-section h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 12px;
 }
 
 .system-prompt-section :deep(.el-textarea__inner) {
-  background: rgba(232, 245, 232, 0.3);
-  border: 1px solid #c0e0c0;
+  background: rgba(232, 240, 255, 0.3);
+  border: 1px solid #c0d8e8;
   border-radius: 8px;
 }
 
 .system-prompt-section :deep(.el-textarea__inner:focus) {
-  border-color: #90ee90;
-  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
+  border-color: #90d8ff;
+  box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
 }
 
 /* 发送键偏好设置部分样式 */
 .send-preference-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(144, 238, 144, 0.3);
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
 .send-preference-section h3 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 12px;
 }
@@ -952,7 +952,7 @@
 
 .send-preference-hint {
   font-size: 12px;
-  color: #9caf9c;
+  color: #7a9ccc;
   margin-top: 8px;
 }
 
@@ -1257,7 +1257,7 @@
 
 .system-prompt-hint {
   font-size: 12px;
-  color: #9caf9c;
+  color: #7a9ccc;
   margin-top: 8px;
 }
 
@@ -1272,9 +1272,9 @@
 .role-tab {
   padding: 6px 12px;
   font-size: 12px;
-  border: 1px solid #c0e0c0;
+  border: 1px solid #c0d8e8;
   border-radius: 4px 4px 0 0;
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -1283,11 +1283,11 @@
 }
 
 .role-tab:hover {
-  background: rgba(144, 238, 144, 0.3);
+  background: rgba(144, 180, 248, 0.3);
 }
 
 .role-tab.active {
-  background: rgba(144, 238, 144, 0.5);
+  background: rgba(144, 180, 248, 0.5);
   border-bottom-color: transparent;
   font-weight: 500;
 }
@@ -1318,18 +1318,18 @@
   bottom: 8px;
   right: 12px;
   font-size: 11px;
-  color: rgba(90, 138, 90, 0.5);
+  color: rgba(90, 123, 193, 0.5);
   z-index: 100;
   pointer-events: auto;
 }
 
 .copyright-watermark-fixed a {
-  color: rgba(90, 138, 90, 0.6);
+  color: rgba(90, 123, 193, 0.6);
   text-decoration: none;
 }
 
 .copyright-watermark-fixed a:hover {
-  color: #5a8a5a;
+  color: #5a7bc1;
   text-decoration: underline;
 }
 
@@ -1339,8 +1339,8 @@
   padding: 16px 0;
   margin-top: 20px;
   font-size: 11px;
-  color: rgba(90, 138, 90, 0.4);
-  border-top: 1px dashed rgba(144, 238, 144, 0.3);
+  color: rgba(90, 123, 193, 0.4);
+  border-top: 1px dashed rgba(144, 180, 248, 0.3);
 }
 
 .github-link-inline {
@@ -1348,12 +1348,12 @@
   padding: 8px 0;
   margin-top: 8px;
   font-size: 12px;
-  color: rgba(90, 138, 90, 0.6);
-  border-top: 1px dotted rgba(144, 238, 144, 0.2);
+  color: rgba(90, 123, 193, 0.6);
+  border-top: 1px dotted rgba(144, 180, 248, 0.2);
 }
 
 .github-link-inline a {
-  color: rgba(90, 138, 90, 0.8);
+  color: rgba(90, 123, 193, 0.8);
   text-decoration: none;
   font-weight: 500;
   display: inline-flex;
@@ -1362,13 +1362,13 @@
 }
 
 .github-link-inline a:hover {
-  color: #5a8a5a;
+  color: #5a7bc1;
   text-decoration: underline;
 }
 
 .github-link-inline .wechat-info {
   margin-left: 15px;
-  color: rgba(90, 138, 90, 0.8);
+  color: rgba(90, 123, 193, 0.8);
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -1377,7 +1377,7 @@
 }
 
 .github-link-inline .wechat-info:hover {
-  color: #5a8a5a;
+  color: #5a7bc1;
 }
 
 /* 回到顶部按钮样式 */
@@ -1390,7 +1390,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(90, 138, 90, 0.8);
+  background: rgba(90, 123, 193, 0.8);
   color: white;
   display: flex;
   align-items: center;
@@ -1402,7 +1402,7 @@
 }
 
 .back-to-top-btn:hover {
-  background: rgba(90, 138, 90, 1);
+  background: rgba(90, 123, 193, 1);
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
@@ -1494,7 +1494,7 @@
 
 .attachment-preview:hover {
   transform: scale(1.05);
-  border-color: #c0e0c0;
+  border-color: #c0d8e8;
 }
 
 /* 针对小屏幕设备的图片优化 */
@@ -1525,7 +1525,7 @@
 
 .attachment-link:hover {
   background: #e6f7ff;
-  border-color: #90ee90;
+  border-color: #90d8ff;
   color: #1890ff;
 }
 
@@ -1792,7 +1792,7 @@ body.dark-theme .message-text :deep(code) {
 }
 
 body.dark-theme .message-text :deep(blockquote) {
-  border-left: 3px solid #7aa87a;
+  border-left: 3px solid #5a7bc1;
   color: #ccc;
   max-width: 100%;
   overflow-wrap: break-word;
@@ -1885,8 +1885,8 @@ body.dark-theme .message-input textarea {
 }
 
 body.dark-theme .message-input textarea:focus {
-  border-color: #7aa87a;
-  box-shadow: 0 0 0 2px rgba(122, 168, 122, 0.2);
+  border-color: #5a7bc1;
+  box-shadow: 0 0 0 2px rgba(90, 123, 193, 0.2);
 }
 
 body.dark-theme .upload-popover-content {
@@ -1947,11 +1947,11 @@ body.dark-theme .messages-container::-webkit-scrollbar-track {
 }
 
 body.dark-theme .messages-container::-webkit-scrollbar-thumb {
-  background: rgba(122, 168, 122, 0.5);
+  background: rgba(90, 123, 193, 0.5);
 }
 
 body.dark-theme .messages-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(122, 168, 122, 0.7);
+  background: rgba(90, 123, 193, 0.7);
 }
 
 body.dark-theme .dialog-list::-webkit-scrollbar-track {
@@ -1959,11 +1959,11 @@ body.dark-theme .dialog-list::-webkit-scrollbar-track {
 }
 
 body.dark-theme .dialog-list::-webkit-scrollbar-thumb {
-  background: rgba(122, 168, 122, 0.5);
+  background: rgba(90, 123, 193, 0.5);
 }
 
 body.dark-theme .dialog-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(122, 168, 122, 0.7);
+  background: rgba(90, 123, 193, 0.7);
 }
 
 body.dark-theme .chat-sidebar::-webkit-scrollbar-track {
@@ -1971,25 +1971,25 @@ body.dark-theme .chat-sidebar::-webkit-scrollbar-track {
 }
 
 body.dark-theme .chat-sidebar::-webkit-scrollbar-thumb {
-  background: rgba(122, 168, 122, 0.5);
+  background: rgba(90, 123, 193, 0.5);
 }
 
 body.dark-theme .chat-sidebar::-webkit-scrollbar-thumb:hover {
-  background: rgba(122, 168, 122, 0.7);
+  background: rgba(90, 123, 193, 0.7);
 }
 
 body.dark-theme .divider {
-  background: linear-gradient(to right, transparent, rgba(122, 168, 122, 0.3), transparent);
+  background: linear-gradient(to right, transparent, rgba(90, 123, 193, 0.3), transparent);
 }
 
 body.dark-theme .copyright-watermark-inline {
   color: rgba(224, 224, 224, 0.4);
-  border-top: 1px dashed rgba(122, 168, 122, 0.3);
+  border-top: 1px dashed rgba(90, 123, 193, 0.3);
 }
 
 body.dark-theme .github-link-inline {
   color: rgba(224, 224, 224, 0.6);
-  border-top: 1px dotted rgba(122, 168, 122, 0.2);
+  border-top: 1px dotted rgba(90, 123, 193, 0.2);
 }
 
 body.dark-theme .github-link-inline a {
@@ -2001,12 +2001,12 @@ body.dark-theme .github-link-inline a:hover {
 }
 
 body.dark-theme .back-to-top-btn {
-  background: rgba(122, 168, 122, 0.8);
+  background: rgba(90, 123, 193, 0.8);
   color: white;
 }
 
 body.dark-theme .back-to-top-btn:hover {
-  background: rgba(122, 168, 122, 1);
+  background: rgba(90, 123, 193, 1);
 }
 
 body.dark-theme .message-attachments {
@@ -2018,7 +2018,7 @@ body.dark-theme .attachment-preview {
 }
 
 body.dark-theme .attachment-preview:hover {
-  border-color: #7aa87a;
+  border-color: #5a7bc1;
 }
 
 body.dark-theme .attachment-link {
@@ -2029,7 +2029,7 @@ body.dark-theme .attachment-link {
 
 body.dark-theme .attachment-link:hover {
   background: #555;
-  border-color: #7aa87a;
+  border-color: #5a7bc1;
   color: #fff;
 }
 
@@ -2060,7 +2060,7 @@ body.dark-theme .theme-toggle-btn {
 .truncated-actions {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed rgba(144, 238, 144, 0.4);
+  border-top: 1px dashed rgba(144, 180, 248, 0.4);
   display: flex;
   align-items: center;
   justify-content: space-between;

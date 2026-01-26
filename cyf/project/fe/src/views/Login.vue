@@ -135,7 +135,7 @@ const handleLogin = async () => {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, #d4e8d4 0%, #e8f5e8 50%, #f0f8e8 100%);
+  background: linear-gradient(135deg, #d4e4f0 0%, #e8f2ff 50%, #f0f8ff 100%);
   position: relative;
   overflow: hidden;
 }
@@ -147,7 +147,7 @@ const handleLogin = async () => {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, rgba(144, 238, 144, 0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(144, 200, 248, 0.1) 0%, transparent 70%);
   animation: float 6s ease-in-out infinite;
 }
 
@@ -161,8 +161,8 @@ const handleLogin = async () => {
   backdrop-filter: blur(10px);
   border-radius: 20px;
   padding: 40px;
-  box-shadow: 0 20px 40px rgba(144, 238, 144, 0.2);
-  border: 1px solid rgba(144, 238, 144, 0.3);
+  box-shadow: 0 20px 40px rgba(144, 200, 248, 0.2);
+  border: 1px solid rgba(144, 200, 248, 0.3);
   width: 400px;
   max-width: 90%;
   position: relative;
@@ -175,14 +175,14 @@ const handleLogin = async () => {
 }
 
 .login-header h1 {
-  color: #5a8a5a;
+  color: #5a7bc1;
   font-size: 28px;
   font-weight: 600;
   margin-bottom: 8px;
 }
 
 .login-header p {
-  color: #7a9c7a;
+  color: #7a9ccc;
   font-size: 16px;
   margin: 0;
 }
@@ -196,28 +196,28 @@ const handleLogin = async () => {
 }
 
 .login-form .el-input {
-  background: rgba(232, 245, 232, 0.3);
+  background: rgba(232, 240, 255, 0.3);
   border-radius: 10px;
 }
 
 .login-form .el-input__wrapper {
   background: transparent;
-  border: 1px solid #c0e0c0;
+  border: 1px solid #c0d8e8;
   box-shadow: none;
 }
 
 .login-form .el-input__wrapper:hover {
-  border-color: #90ee90;
+  border-color: #90d8ff;
 }
 
 .login-form .el-input__wrapper:focus-within {
-  border-color: #7dd87d;
-  box-shadow: 0 0 0 2px rgba(144, 238, 144, 0.2);
+  border-color: #7ab8f0;
+  box-shadow: 0 0 0 2px rgba(144, 200, 248, 0.2);
 }
 
 .login-button {
   width: 100%;
-  background: linear-gradient(135deg, #9acd32 0%, #7dd87d 100%);
+  background: linear-gradient(135deg, #4a8bc1 0%, #7ab8f0 100%);
   border: none;
   border-radius: 10px;
   font-size: 16px;
@@ -227,9 +227,9 @@ const handleLogin = async () => {
 }
 
 .login-button:hover {
-  background: linear-gradient(135deg, #8fbc8f 0%, #6cc06c 100%);
+  background: linear-gradient(135deg, #5a9bc1 0%, #8ac8f0 100%);
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(144, 238, 144, 0.3);
+  box-shadow: 0 10px 20px rgba(144, 200, 248, 0.3);
 }
 
 .login-button:active {
@@ -242,7 +242,7 @@ const handleLogin = async () => {
 }
 
 .login-footer p {
-  color: #7a9c7a;
+  color: #7a9ccc;
   font-size: 14px;
   margin: 0;
 }
@@ -252,7 +252,7 @@ const handleLogin = async () => {
 }
 
 .login-footer .github-link-login a {
-  color: #7a9c7a;
+  color: #7a9ccc;
   text-decoration: none;
   font-size: 13px;
   font-weight: 500;
@@ -262,13 +262,13 @@ const handleLogin = async () => {
 }
 
 .login-footer .github-link-login a:hover {
-  color: #5a8a5a;
+  color: #5a7bc1;
   text-decoration: underline;
 }
 
 .login-footer .github-link-login .wechat-info {
   margin-left: 15px;
-  color: #7a9c7a;
+  color: #7a9ccc;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -277,7 +277,7 @@ const handleLogin = async () => {
 }
 
 .login-footer .github-link-login .wechat-info:hover {
-  color: #5a8a5a;
+  color: #5a7bc1;
 }
 
 /* 深色主题样式 */
@@ -311,16 +311,16 @@ body.dark-theme .login-form .el-input__wrapper {
 }
 
 body.dark-theme .login-form .el-input__wrapper:hover {
-  border-color: #7aa87a;
+  border-color: #5a7bc1;
 }
 
 body.dark-theme .login-form .el-input__wrapper:focus-within {
-  border-color: #7aa87a;
-  box-shadow: 0 0 0 2px rgba(122, 168, 122, 0.2);
+  border-color: #5a7bc1;
+  box-shadow: 0 0 0 2px rgba(90, 123, 193, 0.2);
 }
 
 body.dark-theme .login-button {
-  background: linear-gradient(135deg, #5a8a5a 0%, #7aa87a 100%);
+  background: linear-gradient(135deg, #5a7bc1 0%, #7a9ccc 100%);
   border: none;
   color: white;
 }
