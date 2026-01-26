@@ -61,10 +61,27 @@
           </div>
         </div>
       </el-popover>
-        <!-- TODO(human): 确保移动端也显示登录用户名，而不是被CSS隐藏 -->
-        <!-- 已完成: 通过修改CSS文件，移除了@media (max-width: 768px)中.user-info { display: none; }的设置 -->
+        <!-- TODO(human): 在此处添加用户信息和操作按钮，确保在移动端布局正确 -->
+        <!-- 已完成: 移动端按钮并排显示优化 -->
       </div>
       <div class="header-right">
+        <!-- LaTeX 公式帮助按钮 - 使用问号图标 -->
+        <el-tooltip content="专业输出帮助" placement="top">
+          <el-button
+            :icon="QuestionFilled"
+            circle
+            size="small"
+            @click="showLatexHelp"
+          />
+        </el-tooltip>
+        <!-- 主题切换按钮 -->
+        <el-button
+          class="theme-toggle-btn"
+          :icon="themeIcon"
+          circle
+          size="small"
+          @click="toggleTheme"
+        />
         <el-button
           type="danger"
           size="small"
@@ -114,10 +131,21 @@
                 <el-option
                   v-for="model in filteredModels"
                   :key="model.value"
-                  :label="model.label"
                   :value="model.value"
-                />
+                >
+                  <span>{{ model.label }}</span>
+                  <el-tag v-if="model.recommend" size="small" type="warning" style="margin-left: 8px;">荐</el-tag>
+                </el-option>
               </el-select>
+            </div>
+          </div>
+          <div class="dialog-history-section">
+            <!-- 显示选中模型的描述 -->
+            <div v-if="currentModelDesc" class="model-description">
+              <div class="model-desc-text">
+                <el-icon><InfoFilled /></el-icon>
+                <span>{{ currentModelDesc }}</span>
+              </div>
             </div>
           </div>
 
@@ -231,6 +259,20 @@
                 :marks="{ 500: '500', 8000: '8千', 30000: '3万' }" />
               <div class="context-hint">限制AI回复的最大长度</div>
             </div>
+
+            <!-- 流式输出开关 -->
+            <div class="context-switch-wrapper">
+              <div class="context-label">
+                <span>逐字输出</span>
+                <el-switch
+                  v-model="streamEnabled"
+                  active-text="开启"
+                  inactive-text="关闭"
+                  size="default"
+                />
+              </div>
+              <div class="context-hint">开启时逐字逐句显示AI回复，关闭时等待完整回复</div>
+            </div>
           </div>
 
           <!-- 角色设定部分 -->
@@ -332,7 +374,7 @@
               size="small"
               @click="clearCurrentSession"
             >
-              <el-icon><Message /></el-icon>
+              <el-icon><CirclePlus /></el-icon>
               开启另一个会话
             </el-button>
 
@@ -387,6 +429,8 @@
                 </div>
               </div>
               <div class="message-text" v-html="renderMarkdown(getTextContent(message.content))"></div>
+              <!-- TODO(human): 添加响应式表格和代码块的移动端优化，确保在小屏幕上能够良好显示 -->
+              <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
               <!-- 图片预览 -->
               <div v-if="extractFileUrls(message.content).length > 0" class="message-attachments">
                 <template v-for="url in extractFileUrls(message.content)" :key="url">
@@ -407,7 +451,7 @@
                 <hr class="divider" />
                 <div v-if="message.content === ''" class="typing-initial">
                   <div class="typing-placeholder">
-                    答案马上就到
+                    答案马上就到，不要担心！
                   </div>
                   <div class="typing">
                     <span class="typing-dot"></span>
@@ -432,6 +476,17 @@
                 >
                   <el-icon><RefreshLeft /></el-icon>
                   重试
+                </el-button>
+              </div>
+              <!-- 截断消息继续生成按钮 -->
+              <div v-if="message.type === 'ai' && message.isTruncated && !message.isError && !isStreaming(index)" class="truncated-actions">
+                <div class="truncated-indicator">
+                  <span class="ellipsis">...</span>
+                  <span class="truncated-hint">内容被截断</span>
+                </div>
+                <el-button type="primary" size="small" @click="continueGeneration(index)" :disabled="isLoading">
+                  <el-icon><CaretRight /></el-icon>
+                  继续生成
                 </el-button>
               </div>
               <div v-if="message.file" class="message-file">
@@ -493,14 +548,14 @@
                 </div>
               </el-popover>
 
-              <el-button
-                type="primary"
-                :icon="Position"
-                :disabled="!inputMessage.trim() || isLoading"
-                @click="sendMessage"
-              >
-                发送
-              </el-button>
+            <el-button
+              type="primary"
+              :icon="Position"
+              :disabled="!inputMessage.trim() || isLoading"
+              @click="sendMessage"
+            >
+              发送
+            </el-button>
             </div>
           </div>
         </div>
@@ -519,6 +574,36 @@
     @close="showImagePreview = false"
   >
     <img :src="previewImageUrl" style="width: 100%; height: auto;" />
+  </el-dialog>
+
+  <!-- 格式帮助弹窗 -->
+  <el-dialog
+    v-model="showLatexHelpDialog"
+    title="专业格式帮助"
+    width="60%"
+    :modal="true"
+    :show-close="true"
+    @close="showLatexHelpDialog = false"
+  >
+    <div class="latex-help-content">
+      <h3>如何在对话中使用 LaTeX 数学公式</h3>
+      <p>您可以使用以下语法在对话中插入数学公式：</p>
+
+      <h4>内联公式（行内）</h4>
+      <p>使用 <code>$...$</code> 包围公式，例如：<code>$E=mc^2$</code></p>
+
+      <h4>独立公式（居中显示）</h4>
+      <p>使用 <code>$$...$$</code> 包围公式，例如：<code>$$y = X\\beta + \\epsilon$$</code></p>
+
+      <h4>示例</h4>
+      <div class="example-formulas">
+        <p><strong>二次公式：</strong> $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$</p>
+        <p><strong>欧拉恒等式：</strong> $$e^{i\\pi} + 1 = 0$$</p>
+        <p><strong>矩阵：</strong> $A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$</p>
+      </div>
+
+      <p>公式将在消息中自动渲染为美观的数学符号。</p>
+    </div>
   </el-dialog>
 </template>
 
@@ -546,14 +631,22 @@ import {
   Top,
   Link,
   Coin,
-  Loading
+  Loading,
+  Sunny,
+  Moon,
+  CaretRight,
+  InfoFilled,
+  QuestionFilled
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
 import '@/views/styles/chat.css'
+import VersionService from '@/services/version'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -564,6 +657,7 @@ const loadingHistory = ref(false)
 const inputMessage = ref('')
 const uploadedFile = ref<File | null>(null)
 const showUploadPopover = ref(false)
+const showLatexHelpDialog = ref(false)
 
 // 添加对话标题状态
 const dialogTitle = ref('')
@@ -601,6 +695,9 @@ const maxResponseChars = ref(parseInt(localStorage.getItem('maxResponseChars') |
 // 添加侧边栏折叠状态
 const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('sidebarCollapsed') || 'false'))
 const isMobile = ref(false)
+
+// 流式输出开关
+const streamEnabled = ref(JSON.parse(localStorage.getItem('streamEnabled') || 'true'))
 
 // TODO(human): 添加发送键偏好设置，默认为 'ctrl_enter'，表示使用Ctrl+Enter发送；若为 'enter' 则直接按Enter发送
 const sendPreference = ref(localStorage.getItem('sendPreference') || 'ctrl_enter')
@@ -651,13 +748,48 @@ const loadCustomRoles = () => {
   }
 }
 
+// 主题相关状态
+const isDarkTheme = ref(localStorage.getItem('isDarkTheme') === 'true')
+
+// 根据主题状态选择图标
+const themeIcon = computed(() => {
+  return isDarkTheme.value ? Moon : Sunny
+})
+
+// 切换主题函数
+const toggleTheme = () => {
+  isDarkTheme.value = !isDarkTheme.value
+  localStorage.setItem('isDarkTheme', isDarkTheme.value.toString())
+
+  // 切换主题类到body元素
+  if (isDarkTheme.value) {
+    document.body.classList.add('dark-theme')
+  } else {
+    document.body.classList.remove('dark-theme')
+  }
+
+  ElMessage.success(isDarkTheme.value ? '已切换到深色主题' : '已切换到浅色主题')
+}
+
+// 在组件挂载时应用主题
+onMounted(() => {
+  if (isDarkTheme.value) {
+    document.body.classList.add('dark-theme')
+  } else {
+    document.body.classList.remove('dark-theme')
+  }
+})
+
 // 当前选中的角色ID
 const activeRoleId = ref(localStorage.getItem('activeRoleId') || 'default')
 
-const models = ref<Array<{ label: string, value: string }>>([])
+const models = ref<Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>>([])
+
+// 添加当前模型描述的状态
+const currentModelDesc = ref<string>('')
 
 // 添加分组模型数据
-const groupedModels = ref<Record<string, Array<{ label: string, value: string }>>>({});
+const groupedModels = ref<Record<string, Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>>>({});
 
 // 新增：独立的模型选择器状态
 const providerValue = ref<string>('')
@@ -665,11 +797,18 @@ const modelValue = ref<string>('')
 const providers = ref<string[]>([])
 const filteredModels = computed(() => {
   if (!providerValue.value) return []
-  // 根据当前选择的厂商过滤模型
-  return models.value.filter(model => {
+  // 根据当前选择的厂商过滤模型，并按推荐状态排序
+  const providerModels = models.value.filter(model => {
     // 检查模型值是否包含厂商名称
     return model.value.toLowerCase().includes(providerValue.value.toLowerCase()) ||
            model.label.toLowerCase().includes(providerValue.value.toLowerCase())
+  })
+
+  // 按推荐状态排序：推荐的模型在前面
+  return providerModels.sort((a, b) => {
+    if (a.recommend && !b.recommend) return -1
+    if (!a.recommend && b.recommend) return 1
+    return 0
   })
 })
 
@@ -735,6 +874,11 @@ watch(fontSize, (newVal) => {
 // 监听 sendPreference 变化并持久化
 watch(sendPreference, (newVal) => {
   localStorage.setItem('sendPreference', newVal)
+})
+
+// 监听 streamEnabled 变化并持久化
+watch(streamEnabled, (newVal) => {
+  localStorage.setItem('streamEnabled', JSON.stringify(newVal))
 })
 
 // 监听 activeRoleId 变化并持久化
@@ -835,6 +979,10 @@ const handleProviderChange = (value: string) => {
 const handleModelChange = (value: string) => {
   // 更新主selectedModel变量
   selectedModel.value = value
+
+  // 更新当前模型描述
+  const selectedModelObj = models.value.find(model => model.value === value)
+  currentModelDesc.value = selectedModelObj?.model_desc || ''
 }
 
 // 更新厂商列表
@@ -1023,6 +1171,19 @@ const handleCascaderChange = (value: string[]) => {
   }
 }
 
+// 用于测试 LaTeX 渲染的函数（开发用途）
+const testLatexRendering = () => {
+  const testMessage = {
+    type: 'ai' as const,
+    content: '这是一个包含数学公式的示例：$$y = X\\beta + \\epsilon$$ 和内联公式 $E=mc^2$。',
+    time: getCurrentTime()
+  };
+  messages.push(testMessage);
+  nextTick(() => {
+    scrollToBottom();
+  });
+}
+
 // 监听selectedModel变化，同步更新级联选择器
 watch(selectedModel, (newValue) => {
   if (newValue) {
@@ -1045,6 +1206,8 @@ const messages = reactive<Array<{
   time: string
   file?: File
   isError?: boolean  // 添加错误状态
+  finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls'  // 新增
+  isTruncated?: boolean  // 新增
 }>>([
   {
     type: 'ai',
@@ -1053,15 +1216,66 @@ const messages = reactive<Array<{
   }
 ])
 
-const renderMarkdown = (content: string) => {
-  const parsedContent = marked.parse(content || '');
-  // 确保返回的是字符串
+// 自定义 renderer 用于处理数学公式
+const mathRenderer = {
+  inlineMath: (math: string) => {
+    try {
+      return katex.renderToString(math, {
+        throwOnError: false,
+        displayMode: false
+      });
+    } catch (error) {
+      console.warn('KaTeX rendering error:', error);
+      // 如果渲染失败，返回原始公式文本
+      return `$${math}$`;
+    }
+  },
+  displayMath: (math: string) => {
+    try {
+      return katex.renderToString(math, {
+        throwOnError: false,
+        displayMode: true
+      });
+    } catch (error) {
+      console.warn('KaTeX rendering error:', error);
+      // 如果渲染失败，返回原始公式文本
+      return `$$${math}$$`;
+    }
+  }
+};
+
+// 解析包含数学公式的Markdown内容
+const renderMarkdownWithMath = (content: string) => {
+  // 首先处理显示数学公式 $$...$$
+  let processedContent = content.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
+    return mathRenderer.displayMath(math.trim());
+  });
+
+  // 然后处理内联数学公式 $...$
+  processedContent = processedContent.replace(/\$([^\$]+)\$/g, (match, math) => {
+    // 确保 $ 不是紧跟在字母或数字后面的（避免将价格等误认为数学公式）
+    // 检查匹配项之前是否有字母或数字，或者检查是否为常见价格格式
+    const prevChar = content[content.indexOf(match) - 1];
+    const pricePattern = /^\$\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
+
+    if (match.startsWith('\\$') || (prevChar && /\w/.test(prevChar)) || pricePattern.test(match + ' ')) {
+      return match; // 如果是类似 $50 的格式或前面紧接字母/数字，不处理
+    }
+    return mathRenderer.inlineMath(math.trim());
+  });
+
+  // 解析 Markdown
+  const parsedContent = marked.parse(processedContent || '');
   let result = typeof parsedContent === 'string' ? parsedContent.trim() : parsedContent;
 
   // 为Markdown生成的图片添加CSS类
   result = result.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
 
   return result;
+}
+
+const renderMarkdown = (content: string) => {
+  return renderMarkdownWithMath(content);
 }
 
 function getCurrentTime() {
@@ -1178,37 +1392,79 @@ const sendMessage = async () => {
         time: getCurrentTime()
       })
     } else {
-      // 文本聊天使用流式API
-      const aiMessageIndex = messages.length
-      messages.push({
-        type: 'ai',
-        content: '',  // 初始内容为空
-        time: getCurrentTime()
-      })
+      // 根据开关决定使用流式还是非流式API
+      if (streamEnabled.value) {
+        // 使用流式API
+        const aiMessageIndex = messages.length
+        messages.push({
+          type: 'ai',
+          content: '',  // 初始内容为空
+          time: getCurrentTime()
+        })
 
-      // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
-      const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content)
+        // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
+        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content)
 
-      await chatAPI.sendChatStream(
-        selectedModel.value,
-        userMessage.content,
-        (content, done) => {
-          messages[aiMessageIndex].content += content
-          if (done) {
-            isLoading.value = false
-          }
-          // 只在用户位于底部时才滚动
-          nextTick(() => {
-            if (isScrolledToBottom.value) {
-              scrollToBottom()
+        await chatAPI.sendChatStream(
+          selectedModel.value,
+          userMessage.content,
+          (content, done, finishReason) => {
+            messages[aiMessageIndex].content += content
+            if (done) {
+              isLoading.value = false
+              if (finishReason === 'length') {
+                messages[aiMessageIndex].finishReason = 'length'
+                messages[aiMessageIndex].isTruncated = true
+              }
             }
-          })
-        },
-        contextCount.value > 0 ? 'multi' : 'single',
-        dialogArray,
-        dialogTitle.value,  // 添加dialogTitle参数
-        maxResponseChars.value * 2 // 添加最大回复tokens参数（字数×2）
-      )
+            // 只在用户位于底部时才滚动
+            nextTick(() => {
+              if (isScrolledToBottom.value) {
+                scrollToBottom()
+              }
+            })
+          },
+          contextCount.value > 0 ? 'multi' : 'single',
+          dialogArray,
+          dialogTitle.value,  // 添加dialogTitle参数
+          Math.round(maxResponseChars.value * 1.2 + 30) // 添加最大回复tokens参数（字数×2）
+        )
+      } else {
+        // 使用非流式API
+        const aiMessageIndex = messages.length
+        messages.push({
+          type: 'ai',
+          content: '',  // 初始内容为空
+          time: getCurrentTime()
+        })
+
+        // 使用之前保存的上下文快照构建对话数组
+        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content)
+
+        const response: any = await chatAPI.sendChat(
+          selectedModel.value,
+          userMessage.content,
+          contextCount.value > 0 ? 'multi' : 'single',
+          dialogArray,
+          dialogTitle.value,
+          Math.round(maxResponseChars.value * 2.4) // 添加最大回复tokens参数（字数×2）
+        )
+
+        // 更新AI消息内容
+        messages[aiMessageIndex].content = response.content
+        if (response.finish_reason === 'length') {
+          messages[aiMessageIndex].finishReason = response.finish_reason as 'length'
+          messages[aiMessageIndex].isTruncated = true
+        }
+
+        isLoading.value = false
+        // 滚动到底部
+        nextTick(() => {
+          if (isScrolledToBottom.value) {
+            scrollToBottom()
+          }
+        })
+      }
     }
   } catch (error: any) {
     console.error('API Error:', error)
@@ -1405,13 +1661,17 @@ const exportConversationScreenshot = async () => {
       return;
     }
 
+    // 根据当前主题确定背景色
+    const isDarkTheme = document.body.classList.contains('dark-theme');
+    const bgColor = isDarkTheme ? '#1a1a1a' : '#f9f7f0';
+
     // 创建一个临时的容器来存放完整的消息列表
     const tempContainer = document.createElement('div');
     tempContainer.className = 'messages-container-temp';
     tempContainer.style.position = 'absolute';
     tempContainer.style.left = '-9999px'; // 隐藏元素
     tempContainer.style.width = messagesContainer.clientWidth + 'px';
-    tempContainer.style.backgroundColor = '#f9f7f0';
+    tempContainer.style.backgroundColor = bgColor;
     tempContainer.style.padding = '20px';
     tempContainer.style.boxSizing = 'border-box';
 
@@ -1426,7 +1686,7 @@ const exportConversationScreenshot = async () => {
       scale: 2, // 提高清晰度
       useCORS: true,
       allowTaint: true,
-      backgroundColor: '#f9f7f0',
+      backgroundColor: bgColor,
       width: tempContainer.scrollWidth,
       height: tempContainer.scrollHeight,
       scrollX: 0,
@@ -1799,6 +2059,11 @@ const exitEditMode = () => {
   selectedDialogs.value = []
 }
 
+// 显示 LaTeX 帮助对话框
+const showLatexHelp = () => {
+  showLatexHelpDialog.value = true
+}
+
 // 切换选择对话
 const toggleSelectDialog = (dialogId: number) => {
   const index = selectedDialogs.value.indexOf(dialogId)
@@ -1869,8 +2134,115 @@ const handleLogout = () => {
   router.push('/login')
 }
 
+// 继续生成函数
+const continueGeneration = async (index: number) => {
+  if (contextCount.value < 3) {
+    ElMessageBox.alert('请将携带历史消息数量设置为3或更高，以支持连续续写功能', '提示', {
+      confirmButtonText: '确定',
+    })
+    return
+  }
+
+  if (isLoading.value) return
+
+  const truncatedMessage = messages[index]
+  if (!truncatedMessage || !truncatedMessage.isTruncated) return
+
+  // 创建一条新的AI消息用于继续生成
+  const continueMessageIndex = messages.length
+  messages.push({
+    type: 'ai',
+    content: '',
+    time: getCurrentTime(),
+    isTruncated: false // 新消息初始状态不是截断的
+  })
+
+  isLoading.value = true
+
+  try {
+    // 使用上一次截断的AI消息作为上下文，要求继续生成
+    const userPrompt = "请继续生成未完成的内容，直接从上次中断的地方继续，不要重复已生成的内容。"
+
+    // 构建包含截断回答的上下文，确保包含当前截断的消息
+    const dialogArray = buildDialogArrayFromSnapshot(messages.slice(0, index + 1), userPrompt)
+
+    // 根据开关决定使用流式还是非流式API
+    if (streamEnabled.value) {
+      // 使用流式API
+      await chatAPI.sendChatStream(
+        selectedModel.value,
+        userPrompt,
+        (content, done, finishReason) => {
+          messages[continueMessageIndex].content += content
+          if (done) {
+            isLoading.value = false
+            if (finishReason === 'length') {
+              messages[continueMessageIndex].finishReason = 'length'
+              messages[continueMessageIndex].isTruncated = true
+            }
+          }
+          // 只在用户位于底部时才滚动
+          nextTick(() => {
+            if (isScrolledToBottom.value) {
+              scrollToBottom()
+            }
+          })
+        },
+        'multi', // 使用多轮对话模式以包含上下文
+        dialogArray,
+        dialogTitle.value,
+        Math.round(maxResponseChars.value * 2.4) // 添加最大回复tokens参数
+      )
+    } else {
+      // 使用非流式API
+      const response: any = await chatAPI.sendChat(
+        selectedModel.value,
+        userPrompt,
+        'multi', // 使用多轮对话模式以包含上下文
+        dialogArray,
+        dialogTitle.value,
+        Math.round(maxResponseChars.value * 2.4) // 添加最大回复tokens参数
+      )
+
+      // 更新AI消息内容
+      messages[continueMessageIndex].content = response.content
+      if (response.finish_reason === 'length') {
+        messages[continueMessageIndex].finishReason = response.finish_reason as 'length'
+        messages[continueMessageIndex].isTruncated = true
+      }
+
+      isLoading.value = false
+      // 滚动到底部
+      nextTick(() => {
+        if (isScrolledToBottom.value) {
+          scrollToBottom()
+        }
+      })
+    }
+  } catch (error: any) {
+    console.error('继续生成错误:', error)
+    let errorMessage = '继续生成失败，请重试'
+    if (error.response) {
+      errorMessage = `错误: ${error.response.data?.msg || error.response.statusText}`
+    } else if (error.request) {
+      errorMessage = '网络请求失败，请检查后端服务是否正常运行'
+    } else if (error.message) {
+      errorMessage = error.message
+    }
+
+    // 标记当前消息为错误状态
+    messages[continueMessageIndex].content = errorMessage
+    messages[continueMessageIndex].isError = true
+  } finally {
+    isLoading.value = false
+  }
+}
+
 // 组件挂载时加载模型列表
 onMounted(async () => {
+  // 检查版本更新并处理缓存
+  VersionService.checkAndHandleVersionChange();
+
   // 首先加载自定义角色
   loadCustomRoles()
 
@@ -1887,7 +2259,9 @@ onMounted(async () => {
         (modelList as Array<any>).forEach((model: any) => {
           models.value.push({
             label: `${prefix}: ${model.label || model.id}`,
-            value: model.id
+            value: model.id,
+            recommend: model.recommend || false,
+            model_desc: model.model_desc || ''
           });
         });
       }
@@ -1897,15 +2271,17 @@ onMounted(async () => {
       if (normalResponse && normalResponse.success && normalResponse.models) {
         models.value = normalResponse.models.map((model: any) => ({
           label: model.label,
-          value: model.id
+          value: model.id,
+          recommend: model.recommend || false,
+          model_desc: model.model_desc || ''
         }));
       } else {
         console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
         // 设置默认模型列表作为备选
         models.value = [
-          { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-          { label: 'GPT-4o', value: 'gpt-4o' },
-          { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
+          { label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
+          { label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
+          { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
         ]
       }
     }
@@ -1913,9 +2289,9 @@ onMounted(async () => {
     console.error('加载模型列表时出错:', error)
     // 设置默认模型列表作为备选
     models.value = [
-      { label: 'GPT-4o mini', value: 'gpt-4o-mini' },
-      { label: 'GPT-4o', value: 'gpt-4o' },
-      { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo' }
+      { label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
+      { label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
+      { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
     ]
   }
 
@@ -1947,6 +2323,9 @@ onMounted(async () => {
         }
       }
       modelValue.value = selectedModel.value
+
+      // 设置当前模型描述
+      currentModelDesc.value = selectedModelInfo.model_desc || ''
     }
   }
 
@@ -1978,6 +2357,9 @@ onMounted(async () => {
     // 初始化滚动位置状态
     handleScroll()
   }
+
+  // 初始化测试数学公式渲染（注释掉此行，仅用于开发测试）
+  // testLatexRendering()
 })
 
 // 组件卸载时移除事件监听
@@ -1990,4 +2372,90 @@ onUnmounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.chat-container {
+  /* 原有样式 */
+}
+
+.chat-header {
+  /* 原有样式 */
+}
+
+/* 主题切换按钮样式 */
+.theme-toggle-btn {
+  margin-right: 10px;
+  background-color: #f5f5f5;
+  border: 1px solid #dcdfe6;
+}
+
+/* 模型描述样式 */
+.model-description {
+  margin-top: 10px;
+}
+
+.model-desc-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.5;
+}
+
+/* 数学公式样式 */
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* LaTeX 帮助对话框样式 */
+.latex-help-content h3,
+.latex-help-content h4 {
+  margin: 16px 0 8px 0;
+  color: #303133;
+}
+
+.latex-help-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.latex-help-content code {
+  padding: 2px 4px;
+  margin: 0 2px;
+  border-radius: 3px;
+  background-color: #f5f5f5;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.example-formulas {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 5px;
+  margin: 10px 0;
+}
+
+/* 深色主题下的 LaTeX 帮助对话框样式 */
+body.dark-theme .latex-help-content h3,
+body.dark-theme .latex-help-content h4 {
+  color: #e0e0e0;
+}
+
+body.dark-theme .latex-help-content p {
+  color: #e0e0e0;
+}
+
+body.dark-theme .latex-help-content code {
+  background-color: #4a4a4a;
+  color: #e0e0e0;
+}
+
+body.dark-theme .example-formulas {
+  background-color: #3a3a3a;
+  color: #e0e0e0;
+}
+</style>
 
