@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>更新对话标题功能测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>更新对话标题功能测试</h1>
+
+    <div>
+        <h3>测试表单</h3>
+        <form id="updateTitleForm">
+            <div>
+                <label>用户名:</label>
+                <input type="text" id="user" value="test_user" required>
+            </div>
+
+            <div>
+                <label>密码:</label>
+                <input type="password" id="password" value="test_password" required>
+            </div>
+
+            <div>
+                <label>对话ID:</label>
+                <input type="number" id="dialogId" value="1" required>
+            </div>
+
+            <div>
+                <label>新标题:</label>
+                <input type="text" id="newTitle" value="测试更新后的标题" required>
+            </div>
+
+            <button type="submit">更新标题</button>
+        </form>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('updateTitleForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const user = document.getElementById('user').value;
+            const password = document.getElementById('password').value;
+            const dialogId = parseInt(document.getElementById('dialogId').value);
+            const newTitle = document.getElementById('newTitle').value;
+
+            const formData = new URLSearchParams();
+            formData.append('user', user);
+            formData.append('password', password);
+            formData.append('dialog_id', dialogId);
+            formData.append('new_title', newTitle);
+
+            try {
+                const response = await axios.post('http://localhost:39997/never_guess_my_usage/update_dialog_title', formData, {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+
+                document.getElementById('result').innerHTML = `
+                    <h4>响应:</h4>
+                    <pre>${JSON.stringify(response.data, null, 2)}</pre>
+                    <p>状态码: ${response.status}</p>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h4>错误:</h4>
+                    <pre>${error.response ? JSON.stringify(error.response.data, null, 2) : error.message}</pre>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -266,6 +266,14 @@ export const chatAPI = {
   // 获取分组系统提示词
   getSystemPromptsByGroup: () => {
     return api.get('/never_guess_my_usage/system_prompts_by_group')
+  },
+
+  // 更新对话标题
+  updateDialogTitle: (dialogId: number, newTitle: string) => {
+    return api.post('/never_guess_my_usage/update_dialog_title', {
+      dialog_id: dialogId,
+      new_title: newTitle
+    })
   }
 }
 

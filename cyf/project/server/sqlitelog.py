@@ -118,6 +118,19 @@ def delete_dialogs(user: str, dialog_ids: list) -> int:
     return query.execute()
 
 
+def update_dialog_title(user: str, dialog_id: int, new_title: str) -> bool:
+    """更新指定对话的标题"""
+    try:
+        query = Dialog.update(dialog_name=new_title).where(
+            (Dialog.username == user) & (Dialog.id == dialog_id)
+        )
+        rows_modified = query.execute()
+        return rows_modified > 0
+    except Exception as e:
+        print(f"更新对话标题时发生错误: {e}")  # 添加调试信息
+        return False
+
+
 def get_model_meta_list(model_names: list = None, recommend: bool = None, status_valid: bool = None):
     """
     查询模型元数据列表，支持复合条件查询，所有参数均为可选项

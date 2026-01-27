@@ -1390,6 +1390,39 @@ body.dark-theme .enhanced-role-interface :deep(.el-tabs__item.is-active) {
   flex-wrap: wrap;
 }
 
+
+/* 对话标题编辑区域样式 */
+.dialog-title-editor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 16px;
+  flex: 1;
+  flex-direction: row;
+  flex-wrap: no-wrap;
+}
+
+.update-title-btn {
+  height: 32px;
+  padding: 6px 12px;
+  flex-shrink: 0;
+}
+
+.update-title-btn-mobile {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.current-dialog-indicator {
+  flex-shrink: 0;
+}
+
+.current-dialog-indicator-mobile {
+  margin-top: 8px;
+  width: 100%;
+}
+
 /* 响应式断点 */
 @media (max-width: 768px) {
   .chat-sidebar { width: 280px; }
@@ -1411,6 +1444,7 @@ body.dark-theme .enhanced-role-interface :deep(.el-tabs__item.is-active) {
   .font-size-controls {
     width: 100%;
     margin-right: 0;
+    flex-wrap: wrap;
   }
 
   .font-size-controls {

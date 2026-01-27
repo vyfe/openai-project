@@ -362,7 +362,7 @@
                       :key="role.role_name"
                       class="enhanced-role-item"
                     >
-                      <el-radio :label="role.role_name" border class="enhanced-role-radio">
+                      <el-radio :value="role.role_name" border class="enhanced-role-radio">
                         <div class="role-info">
                           <div class="role-name">{{ role.role_name }}</div>
                           <div class="role-desc">{{ role.role_desc }}</div>
@@ -370,12 +370,6 @@
                       </el-radio>
                     </div>
                   </el-radio-group>
-                </div>
-
-                <!-- 当前选中角色内容预览 -->
-                <div v-if="selectedEnhancedRole" class="enhanced-role-preview">
-                  <h4>角色内容预览</h4>
-                  <div class="role-content-preview">{{ currentEnhancedRoleContent }}</div>
                 </div>
               </div>
             </div>
@@ -414,6 +408,17 @@
                 size="small"
                 @blur="handleTitleBlur"
               />
+              <!-- 更新标题按钮：当有当前对话ID时显示 -->
+              <el-button
+                v-if="currentDialogId"
+                type="primary"
+                size="small"
+                @click="updateDialogTitle"
+                class="update-title-btn"
+                :disabled="!dialogTitle.trim()"
+              >
+                更新标题
+              </el-button>
             </div>
 
             <!-- 新增：字体大小控制 -->
@@ -481,6 +486,17 @@
                   size="default"
                   @blur="handleTitleBlur"
                 />
+                <!-- 更新标题按钮：当有当前对话ID时显示 -->
+                <el-button
+                  v-if="currentDialogId"
+                  type="primary"
+                  size="default"
+                  @click="updateDialogTitle"
+                  class="update-title-btn-mobile"
+                  :disabled="!dialogTitle.trim()"
+                >
+                  更新标题
+                </el-button>
               </div>
 
               <!-- 字体大小控制 -->
@@ -811,6 +827,8 @@ const showLatexHelpDialog = ref(false)
 
 // 添加对话标题状态
 const dialogTitle = ref('')
+// 添加当前对话ID状态
+const currentDialogId = ref<number | null>(null)
 
 // 添加字体大小控制
 const fontSize = ref(localStorage.getItem('fontSize') || 'medium')
@@ -1186,8 +1204,8 @@ const loadEnhancedRoles = async () => {
         if (enhancedRoleGroups.value[firstGroup] && enhancedRoleGroups.value[firstGroup].length > 0) {
           selectedEnhancedRole.value = enhancedRoleGroups.value[firstGroup][0].role_name
 
-          // 应用所选角色的内容到systemPrompt
-          applyEnhancedRoleContent()
+          // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
+          // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
         }
       }
     } else {
@@ -1206,20 +1224,13 @@ const handleEnhancedRoleToggle = (enabled: boolean) => {
   localStorage.setItem('enhancedRoleEnabled', JSON.stringify(enabled))
 
   if (enabled) {
-    // 启用增强角色时，将角色标签切换到默认状态，避免覆盖用户的自定义角色人设
-    const defaultRole = rolePresets.value.find(r => r.id === 'default')
-    if (defaultRole) {
-      activeRoleId.value = 'default'
-      systemPrompt.value = defaultRole.prompt
-    }
-    // 加载数据并应用第一个角色
+    // 启用增强角色时，只需要更新状态，不在这里修改systemPrompt
+    // systemPrompt值将在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
+    // 加载数据并准备使用第一个角色
     loadEnhancedRoles()
   } else {
-    // 禁用增强角色时，恢复原来的预设角色内容
-    const currentRole = rolePresets.value.find(r => r.id === activeRoleId.value)
-    if (currentRole) {
-      systemPrompt.value = currentRole.prompt
-    }
+    // 禁用增强角色时，也不需要恢复原来的预设角色内容到systemPrompt
+    // 因为现在是在请求时根据状态来决定使用哪个内容
   }
 }
 
@@ -1232,8 +1243,8 @@ const handleGroupChange = (groupName: string) => {
   if (enhancedRoleGroups.value[groupName] && enhancedRoleGroups.value[groupName].length > 0) {
     selectedEnhancedRole.value = enhancedRoleGroups.value[groupName][0].role_name
 
-    // 应用所选角色的内容到systemPrompt
-    applyEnhancedRoleContent()
+    // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
+    // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
 
     // 保存到localStorage
     localStorage.setItem('selectedEnhancedRole', selectedEnhancedRole.value)
@@ -1245,17 +1256,18 @@ const handleEnhancedRoleSelect = (roleName: string) => {
   selectedEnhancedRole.value = roleName
   localStorage.setItem('selectedEnhancedRole', roleName)
 
-  // 应用所选角色的内容到systemPrompt
-  applyEnhancedRoleContent()
+  // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
+  // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
 }
 
-// 应用增强角色内容到systemPrompt
-const applyEnhancedRoleContent = () => {
-  const currentRoleContent = currentEnhancedRoleContent.value
-  if (currentRoleContent) {
-    systemPrompt.value = currentRoleContent
-  }
-}
+// 重构：不再主动将增强角色内容应用到systemPrompt
+// 根据enhancedRoleEnabled状态在发送请求时决定使用哪个内容作为system角色的内容
+// const applyEnhancedRoleContent = () => {
+//   const currentRoleContent = currentEnhancedRoleContent.value
+//   if (currentRoleContent) {
+//     systemPrompt.value = currentRoleContent
+//   }
+// }
 
 // 重命名角色函数
 const renameRole = (roleId: string) => {
@@ -1915,8 +1927,9 @@ const clearCurrentSession = () => {
     content: '您好！我是AI助手，有什么可以帮助您的吗？',
     time: getCurrentTime()
   })
-  // 清空对话标题
+  // 清空对话标题和当前对话ID
   dialogTitle.value = ''
+  currentDialogId.value = null
   ElMessage.success('已开启新会话')
 }
 
@@ -1957,7 +1970,8 @@ const loadDialogContent = async (dialogId: number) => {
         })
       }
 
-      // 从对话历史中获取该对话的标题
+      // 设置当前对话ID和标题
+      currentDialogId.value = dialogId
       const dialogItem = dialogHistory.value.find(d => d.id === dialogId)
       if (dialogItem) {
         dialogTitle.value = dialogItem.dialog_name
@@ -1978,6 +1992,37 @@ const handleTitleBlur = () => {
   // if (dialogTitle.value.trim()) {
   //   localStorage.setItem('dialogTitle', dialogTitle.value.trim())
   // }
+}
+
+// 当用户点击更新标题按钮时
+const updateDialogTitle = async () => {
+  if (!currentDialogId.value) {
+    ElMessage.warning('当前没有打开的对话，无法更新标题')
+    return
+  }
+
+  if (!dialogTitle.value.trim()) {
+    ElMessage.warning('对话标题不能为空')
+    return
+  }
+
+  try {
+    const response: any = await chatAPI.updateDialogTitle(currentDialogId.value, dialogTitle.value.trim())
+    if (response && response.success) {
+      ElMessage.success('对话标题更新成功')
+
+      // 更新对话历史列表中的标题
+      const dialogItem = dialogHistory.value.find(d => d.id === currentDialogId.value)
+      if (dialogItem) {
+        dialogItem.dialog_name = dialogTitle.value.trim()
+      }
+    } else {
+      ElMessage.error(response.msg || '更新对话标题失败')
+    }
+  } catch (error: any) {
+    console.error('更新对话标题错误:', error)
+    ElMessage.error('更新对话标题失败')
+  }
 }
 
 // 处理字体大小变化
@@ -2096,8 +2141,10 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
   const dialogArray: Array<{role: string, content: string}> = []
 
   // 如果有角色设定，添加到最前面
-  if (systemPrompt.value.trim()) {
-    dialogArray.push({ role: 'system', content: systemPrompt.value.trim() })
+  // 根据enhancedRoleEnabled状态决定使用systemPrompt还是currentEnhancedRoleContent作为system角色的内容
+  const systemContent = enhancedRoleEnabled.value ? currentEnhancedRoleContent.value : systemPrompt.value
+  if (systemContent && systemContent.trim()) {
+    dialogArray.push({ role: 'system', content: systemContent.trim() })
   }
 
   // 如果上下文数量为 0，只发送当前消息（但仍需包含 system 消息）
