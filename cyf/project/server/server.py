@@ -1010,6 +1010,17 @@ def dialog_delete():
 @app.route('/never_guess_my_usage/system_prompt', methods=['GET'])
 def system_prompt():
     return {"msg": "api return content not ok"}, 200
+
+
+@app.route('/never_guess_my_usage/system_prompts_by_group', methods=['GET'])
+def get_system_prompts_by_group():
+    """按role_group分类获取系统提示词"""
+    try:
+        grouped_prompts = sqlitelog.get_system_prompts_by_group()
+        return {"success": True, "groups": grouped_prompts}, 200
+    except Exception as e:
+        app.logger.error(f"获取按组分类的系统提示词失败: {str(e)}")
+        return {"success": False, "msg": f"获取系统提示词失败: {str(e)}"}, 200
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
 sqlitelog.init_db()

@@ -22,7 +22,7 @@ def create_tarball(output_filename, extensions):
 
 if __name__ == "__main__":
     # 需要打包的文件后缀
-    extensions = ['.py', '.ini', '.priv', '.sh']
+    extensions = ['.py', '.ini', '.priv', '.sh', '.sql']
     # 输出 tar.gz 文件的名称
     output_filename = 'dist/server.tar.gz'
     os.makedirs(os.path.dirname(output_filename), exist_ok=True)

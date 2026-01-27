@@ -261,6 +261,11 @@ export const chatAPI = {
   // 获取用量信息
   getUsage: () => {
     return api.get('/never_guess_my_usage/usage')
+  },
+
+  // 获取分组系统提示词
+  getSystemPromptsByGroup: () => {
+    return api.get('/never_guess_my_usage/system_prompts_by_group')
   }
 }
 

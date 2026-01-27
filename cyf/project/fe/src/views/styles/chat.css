@@ -284,6 +284,48 @@
   align-items: center;
 }
 
+/* 桌面端toolbar样式 */
+.toolbar-desktop {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 移动端toolbar样式 */
+.toolbar-mobile {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mobile-toolbar-btn {
+  margin-left: auto;
+}
+
+/* 移动端抽屉内容样式 */
+.mobile-toolbar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.mobile-form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #5a7bc1;
+}
+
+.drawer-button {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.drawer-button:last-child {
+  margin-bottom: 0;
+}
+
 .dialog-title-editor {
   flex: 1;
   max-width: 460px;
@@ -388,6 +430,21 @@
 /* 对特定元素的处理 */
 .message-text p:last-child {
   margin-bottom: 0;
+}
+
+.message-text pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .message-text pre {
+    white-space: pre-wrap;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+  }
 }
 
 .message-text div:last-child {
@@ -665,6 +722,32 @@
   border: 1px solid #c0d8e8;
   border-radius: 12px;
   resize: none;
+  padding: 12px; /* 添加内边距 */
+  font-family: inherit; /* 使用继承字体 */
+  font-size: 14px; /* 明确设置字体大小 */
+  line-height: 1.5; /* 提升行高 */
+  transition: border-color 0.2s, box-shadow 0.2s; /* 添加平滑过渡效果 */
+  /* 为textarea添加滚动条样式 */
+  overflow-y: auto;
+}
+
+/* 为主输入区域textarea添加滚动条样式 */
+.message-input textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-input textarea::-webkit-scrollbar-track {
+  background: rgba(232, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+.message-input textarea::-webkit-scrollbar-thumb {
+  background: rgba(144, 180, 248, 0.5);
+  border-radius: 3px;
+}
+
+.message-input textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 180, 248, 0.7);
 }
 
 .message-input textarea:focus {
@@ -926,11 +1009,301 @@
   background: rgba(232, 240, 255, 0.3);
   border: 1px solid #c0d8e8;
   border-radius: 8px;
+  padding: 12px; /* 添加内边距 */
+  font-family: inherit; /* 使用继承字体 */
+  font-size: 14px; /* 明确设置字体大小 */
+  line-height: 1.5; /* 提升行高 */
+  transition: border-color 0.2s, box-shadow 0.2s; /* 添加平滑过渡效果 */
+  /* 为系统提示textarea添加滚动条样式 */
+  overflow-y: auto;
+}
+
+/* 为系统提示textarea添加滚动条样式 */
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar) {
+  width: 6px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-track) {
+  background: rgba(232, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+  background: rgba(144, 180, 248, 0.5);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+  background: rgba(144, 180, 248, 0.7);
+}
+
+/* 系统提示textarea禁用状态滚动条样式 */
+.system-prompt-section :deep(.el-textarea.is-disabled .el-textarea__inner::-webkit-scrollbar) {
+  width: 6px;
+}
+
+.system-prompt-section :deep(.el-textarea.is-disabled .el-textarea__inner::-webkit-scrollbar-track) {
+  background: rgba(232, 240, 255, 0.2);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea.is-disabled .el-textarea__inner::-webkit-scrollbar-thumb) {
+  background: rgba(144, 180, 248, 0.3);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea.is-disabled .el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+  background: rgba(144, 180, 248, 0.4);
 }
 
 .system-prompt-section :deep(.el-textarea__inner:focus) {
   border-color: #90d8ff;
   box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
+}
+
+/* 增强角色部分样式 */
+.enhanced-role-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(64, 158, 255, 0.3);
+}
+
+.enhanced-role-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.enhanced-role-interface {
+  margin-top: 12px;
+}
+
+.enhanced-role-interface :deep(.el-tabs__nav-wrap::after) {
+  background: rgba(64, 158, 255, 0.2);
+}
+
+.enhanced-role-interface :deep(.el-tabs__item) {
+  color: #606266;
+}
+
+.enhanced-role-interface :deep(.el-tabs__item.is-active) {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.1);
+}
+
+.enhanced-role-list {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #c0d8e8; /* 采用与整体UI一致的蓝色系边框 */
+  border-radius: 8px; /* 与整体设计保持一致 */
+  background: rgba(232, 240, 255, 0.3); /* 采用与整体UI一致的背景 */
+  -webkit-overflow-scrolling: touch; /* 启用iOS平滑滚动 */
+}
+
+/* 为增强角色列表添加滚动条样式 */
+.enhanced-role-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-track {
+  background: rgba(232, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-thumb {
+  background: rgba(144, 180, 248, 0.5);
+  border-radius: 3px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 180, 248, 0.7);
+}
+
+.enhanced-role-item {
+  margin-bottom: 8px;
+}
+
+.enhanced-role-item:last-child {
+  margin-bottom: 0;
+}
+
+.enhanced-role-radio {
+  width: 100%;
+  min-height: 64px; /* 设置最小高度，确保单选框看起来足够高 */
+  padding: 14px 16px; /* 调整内边距 */
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center; /* 垂直居中对齐 */
+  transition: all 0.2s; /* 添加过渡效果 */
+}
+
+.enhanced-role-radio :deep(.el-radio__input) {
+  margin-top: 0; /* 微调单选按钮的垂直位置 */
+  margin-right: 12px; /* 增加单选按钮与内容间的间距 */
+}
+
+.enhanced-role-radio :deep(.el-radio__label) {
+  flex: 1;
+  padding-left: 0;
+}
+
+.enhanced-role-radio :deep(.el-radio__input .el-radio__inner) {
+  border-color: #c0c4cc;
+  width: 18px;
+  height: 18px;
+  margin-top: 0; /* 微调单选按钮的位置 */
+}
+
+.enhanced-role-radio.is-checked :deep(.el-radio__input .el-radio__inner) {
+  background: #409eff;
+  border-color: #409eff;
+}
+
+.enhanced-role-radio.is-checked {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: transparent; /* 移除边框 */
+}
+
+.role-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* 调整间距 */
+  align-items: flex-start; /* 左对齐文字 */
+  flex: 1; /* 占据剩余空间 */
+}
+
+.role-name {
+  font-weight: 500;
+  color: #303133;
+  margin: 0;
+  padding: 0;
+}
+
+.role-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4; /* 保持适当的行高 */
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+.enhanced-role-preview {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgba(64, 158, 255, 0.05);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 6px;
+}
+
+.enhanced-role-preview h4 {
+  margin: 0 0 8px 0;
+  color: #409eff;
+  font-size: 14px;
+}
+
+.role-content-preview {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #606266;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* 深色主题下的增强角色样式 */
+body.dark-theme .enhanced-role-section {
+  border-top: 1px dashed rgba(85, 85, 85, 0.3);
+}
+
+body.dark-theme .enhanced-role-list {
+  border: 1px solid #5a7bc1; /* 蓝色系边框 */
+  background: rgba(50, 50, 50, 0.3);
+  color: #e0e0e0;
+}
+
+/* 深色主题下增强角色列表的滚动条样式 */
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-track {
+  background: rgba(50, 50, 50, 0.3);
+}
+
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-thumb {
+  background: rgba(90, 123, 193, 0.5);
+}
+
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(90, 123, 193, 0.7);
+}
+
+body.dark-theme .enhanced-role-radio {
+  background: rgba(50, 50, 50, 0.3);
+  border: 1px solid #4c4d4f;
+  color: #e0e0e0;
+  min-height: 64px; /* 保持一致的最小高度 */
+  padding: 14px 16px; /* 调整内边距 */
+  border-radius: 8px;
+  display: flex;
+  align-items: center; /* 垂直居中对齐 */
+  transition: all 0.2s; /* 添加过渡效果 */
+}
+
+body.dark-theme .enhanced-role-radio :deep(.el-radio__input) {
+  margin-top: 0; /* 微调单选按钮的垂直位置 */
+  margin-right: 12px; /* 增加单选按钮与内容间的间距 */
+}
+
+body.dark-theme .enhanced-role-radio :deep(.el-radio__label) {
+  flex: 1;
+  padding-left: 0;
+}
+
+body.dark-theme .enhanced-role-radio :deep(.el-radio__input .el-radio__inner) {
+  border-color: #555;
+  background: #333;
+  width: 18px;
+  height: 18px;
+  margin-top: 0; /* 微调单选按钮的位置 */
+}
+
+body.dark-theme .enhanced-role-radio.is-checked :deep(.el-radio__input .el-radio__inner) {
+  background: #409eff;
+  border-color: #409eff;
+}
+
+body.dark-theme .enhanced-role-radio.is-checked {
+  background: rgba(64, 158, 255, 0.1);
+  border-color: transparent; /* 移除边框 */
+}
+
+body.dark-theme .role-name {
+  color: #e0e0e0;
+}
+
+body.dark-theme .role-desc {
+  color: #9a9a9a;
+}
+
+body.dark-theme .enhanced-role-preview {
+  background: rgba(64, 158, 255, 0.05);
+  border: 1px solid rgba(85, 85, 85, 0.2);
+  color: #e0e0e0;
+}
+
+body.dark-theme .role-content-preview {
+  color: #aaa;
+}
+
+body.dark-theme .enhanced-role-interface :deep(.el-tabs__item) {
+  color: #aaa;
+}
+
+body.dark-theme .enhanced-role-interface :deep(.el-tabs__item.is-active) {
+  color: #409eff;
+  background: rgba(64, 158, 255, 0.1);
 }
 
 /* 发送键偏好设置部分样式 */
@@ -1025,24 +1398,29 @@
   .header-left { gap: 8px; }
   .sidebar-toggle-btn { margin-right: 8px; }
 
-  .chat-toolbar {
-    flex-direction: column;
-    align-items: stretch; /* 改为拉伸以填满宽度 */
-    gap: 12px;
+  /* 在移动端隐藏桌面端toolbar，显示移动端toolbar按钮 */
+  .toolbar-desktop {
+    display: none;
+  }
+
+  .toolbar-mobile {
+    display: flex;
   }
 
   .dialog-title-editor,
-  .font-size-controls,
-  .action-buttons {
-    width: 100%; /* 让各个组件填满宽度 */
-  }
-
-  .dialog-title-editor {
-    margin-right: 0; /* 移除移动端的右边距 */
+  .font-size-controls {
+    width: 100%;
+    margin-right: 0;
   }
 
   .font-size-controls {
-    justify-content: center; /* 在移动端居中对齐字体大小控制 */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .font-size-label {
+    margin-bottom: 8px;
   }
 
   .action-buttons {
@@ -1312,6 +1690,8 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  min-height: 28px; /* 确保有足够空间容纳按钮 */
+  box-sizing: border-box;
 }
 
 .role-tab:hover {
@@ -1324,17 +1704,29 @@
   font-weight: 500;
 }
 
+/* 为增强角色的tab文字添加深色样式 */
+.role-tab.enhanced-role {
+  color: #333; /* 深色文字 */
+}
+
 .role-tab.add-tab {
   padding: 6px 8px;
 }
 
 /* 角色选项卡操作按钮样式 */
 .role-tab-actions {
-  display: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+  position: relative; /* 确保不脱离文档流 */
 }
 
 .role-tab:hover .role-tab-actions {
-  display: block;
+  opacity: 1;
+  visibility: visible;
 }
 
 .role-action-btn {
@@ -1584,9 +1976,49 @@
   }
 }
 
+/* 深色主题下系统提示textarea禁用状态样式 */
+body.dark-theme .system-prompt-section :deep(.el-textarea.is-disabled .el-textarea__inner) {
+  background-color: #2a2a2a;
+  border: 1px solid #555555;
+  box-shadow: 0 0 0 1px #555555 inset;
+  color: #9a9a9a;
+  cursor: not-allowed;
+}
+
 /* 深色主题样式 */
 body.dark-theme .chat-container {
   background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  color: #e0e0e0;
+}
+
+/* 深色主题下抽屉样式 */
+body.dark-theme .el-drawer {
+  --el-bg-color: #2a2a2a;
+  --el-text-color-primary: #e0e0e0;
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+}
+
+body.dark-theme .el-drawer__header {
+  color: #e0e0e0;
+  border-bottom: 1px solid #4a4a4a;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+}
+
+body.dark-theme .el-drawer__body {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+  padding: 20px;
+}
+
+/* 深色主题下移动端抽屉内容样式 */
+body.dark-theme .mobile-toolbar-content {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+}
+
+body.dark-theme .mobile-form-label {
   color: #e0e0e0;
 }
 
@@ -1723,24 +2155,39 @@ body.dark-theme .system-prompt-hint {
   color: #9a9a9a;
 }
 
+/* 深色主题下的系统提示输入框样式 */
+body.dark-theme .system-prompt-section :deep(.el-textarea__inner) {
+  background: rgba(50, 50, 50, 0.3);
+  border: 1px solid #5a7bc1; /* 蓝色系边框 */
+  color: #e0e0e0;
+  padding: 12px; /* 保持一致的内边距 */
+}
+
 body.dark-theme .role-tabs {
   border-top: 1px solid rgba(85, 85, 85, 0.3);
 }
 
 body.dark-theme .role-tab {
   background: rgba(50, 50, 50, 0.3);
-  border: 1px solid #555;
-  color: #e0e0e0;
+  border: 1px solid #5a7bc1; /* 蓝色系边框 */
+  color: #e0e0e0; /* 保持原有文字颜色 */
+  min-height: 28px;
+  box-sizing: border-box;
 }
 
 body.dark-theme .role-tab:hover {
-  background: rgba(122, 168, 122, 0.3);
+  background: rgba(90, 123, 193, 0.3); /* 蓝色系悬停背景 */
 }
 
 body.dark-theme .role-tab.active {
-  background: rgba(122, 168, 122, 0.5);
+  background: rgba(90, 123, 193, 0.5); /* 蓝色系激活背景 */
   border-bottom-color: transparent;
   color: white;
+}
+
+/* 为增强角色的tab文字添加深色样式（白色字） */
+body.dark-theme .role-tab.enhanced-role {
+  color: white; /* 白色文字 */
 }
 
 body.dark-theme .send-preference-section {
@@ -1835,6 +2282,15 @@ body.dark-theme .message-text :deep(blockquote) {
 
 /* 深色主题下移动端适配 */
 @media (max-width: 768px) {
+  body.dark-theme .toolbar-mobile {
+    background: rgba(34, 34, 34, 0.8);
+    border-bottom: 1px solid rgba(85, 85, 85, 0.3);
+  }
+
+  body.dark-theme .mobile-form-label {
+    color: #e0e0e0;
+  }
+
   body.dark-theme .message-text :deep(pre) {
     max-width: 100vw;
     width: auto;
@@ -1912,8 +2368,22 @@ body.dark-theme .input-area {
 
 body.dark-theme .message-input textarea {
   background: rgba(50, 50, 50, 0.3);
-  border: 1px solid #555;
+  border: 1px solid #5a7bc1; /* 蓝色系边框 */
   color: #e0e0e0;
+  padding: 12px; /* 保持一致的内边距 */
+}
+
+/* 深色主题下主输入区域textarea滚动条样式 */
+body.dark-theme .message-input textarea::-webkit-scrollbar-track {
+  background: rgba(50, 50, 50, 0.3);
+}
+
+body.dark-theme .message-input textarea::-webkit-scrollbar-thumb {
+  background: rgba(90, 123, 193, 0.5);
+}
+
+body.dark-theme .message-input textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(90, 123, 193, 0.7);
 }
 
 body.dark-theme .message-input textarea:focus {
@@ -2088,6 +2558,12 @@ body.dark-theme .theme-toggle-btn {
   }
 }
 
+/* 禁用状态的样式 */
+.role-tabs.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* 截断消息样式 */
 .truncated-actions {
   margin-top: 12px;
@@ -2123,4 +2599,116 @@ body.dark-theme .theme-toggle-btn {
     align-items: flex-start;
     gap: 8px;
   }
+}
+
+.chat-container {
+  /* 原有样式 */
+}
+
+.chat-header {
+  /* 原有样式 */
+}
+
+/* 主题切换按钮样式 */
+.theme-toggle-btn {
+  margin-right: 10px;
+  background-color: #f5f5f5;
+  border: 1px solid #dcdfe6;
+}
+
+/* 模型描述样式 */
+.model-description {
+  margin-top: 10px;
+}
+
+.model-desc-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #606266;
+  line-height: 1.5;
+}
+
+/* 数学公式样式 */
+.katex-display {
+  margin: 0.5em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* LaTeX 帮助对话框样式 */
+.latex-help-content h3,
+.latex-help-content h4 {
+  margin: 16px 0 8px 0;
+  color: #303133;
+}
+
+.latex-help-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.latex-help-content code {
+  padding: 2px 4px;
+  margin: 0 2px;
+  border-radius: 3px;
+  background-color: #f5f5f5;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.example-formulas {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 5px;
+  margin: 10px 0;
+}
+
+/* 深色主题下的 LaTeX 帮助对话框样式 */
+body.dark-theme .latex-help-content h3,
+body.dark-theme .latex-help-content h4 {
+  color: #e0e0e0;
+}
+
+body.dark-theme .latex-help-content p {
+  color: #e0e0e0;
+}
+
+body.dark-theme .latex-help-content code {
+  background-color: #4a4a4a;
+  color: #e0e0e0;
+}
+
+/* 修复ElDialog标题的夜间模式样式 - 使用CSS变量 */
+body.dark-theme {
+  --el-text-color-primary: #e0e0e0;
+}
+
+/* 修复ElDialog头部和其他组件的夜间模式样式 */
+body.dark-theme .el-dialog__header {
+  border-bottom: 1px solid #4a4a4a;
+}
+
+body.dark-theme .el-dialog__body {
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+}
+
+body.dark-theme .example-formulas {
+  background-color: #3a3a3a;
+  color: #e0e0e0;
+}
+
+/* 空响应操作按钮样式 */
+.empty-response-actions {
+  margin-top: 8px;
+}
+
+.empty-response-actions .el-alert {
+  margin-bottom: 8px;
+}
+
+.empty-response-actions .el-button {
+  margin-left: 0;
 }

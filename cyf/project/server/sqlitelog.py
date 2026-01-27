@@ -54,11 +54,35 @@ class ModelMeta(Model):
             'recommend': self.recommend,
             'status_valid': self.status_valid
         }
+# system高级预设
+class SystemPrompt(Model):
+    role_name = CharField()  # 角色名称
+    role_group = CharField()  # 角色分组
+    role_desc = CharField()  # 角色描述
+    role_content = TextField() # 角色提示词
+    status_valid = BooleanField()  # 是否对外开放
+
+    class Meta:
+        database = db  # 指定数据库
+        indexes = (
+            (('role_name', 'role_group'), True),  # 定义唯一索引，确保角色名称不重复
+        )
+
+    def to_dict(self):
+        """将模型实例转换为字典格式"""
+        return {
+            'id': self.id,
+            'role_name': self.role_name,
+            'role_group': self.role_group,
+            'role_desc': self.role_desc,
+            'role_content': self.role_content,
+            'status_valid': self.status_valid
+        }
 
 def init_db():
     # 创建表
     db.connect()
-    db.create_tables([Log, Dialog, ModelMeta], safe=True)
+    db.create_tables([Log, Dialog, ModelMeta, SystemPrompt], safe=True)
 
 def set_log(user: str, usage: int, model: str, text: str):
     Log.create(username=user, usage=usage, modelname=model, request_text=text)
@@ -119,6 +143,44 @@ def get_model_meta_list(model_names: list = None, recommend: bool = None, status
         return [model for model in query.dicts().iterator()]
     else:
         return []
+
+def get_system_prompt_list(status_valid: bool = None):
+    """
+    查询系统提示词列表
+    """
+    query = SystemPrompt.select()
+
+    if status_valid is not None:
+        query = query.where(SystemPrompt.status_valid == status_valid)
+
+    # 返回字典格式的结果列表
+    if query.exists():
+        return [prompt for prompt in query.dicts().iterator()]
+    else:
+        return []
+
+
+def get_system_prompts_by_group():
+    """
+    按role_group分类聚合系统提示词
+    返回格式: { "group_name": [{"role_name": ..., "role_desc": ..., "role_content": ...}, ...] }
+    """
+    query = SystemPrompt.select().where(SystemPrompt.status_valid == True)
+
+    grouped_prompts = {}
+    for prompt in query.dicts().iterator():
+        group = prompt['role_group']
+        if group not in grouped_prompts:
+            grouped_prompts[group] = []
+
+        # 只返回需要的字段
+        grouped_prompts[group].append({
+            'role_name': prompt['role_name'],
+            'role_desc': prompt['role_desc'],
+            'role_content': prompt['role_content']
+        })
+
+    return grouped_prompts
 
 
 def message_query(sql: str, params=None):
