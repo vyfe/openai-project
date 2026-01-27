@@ -802,7 +802,7 @@ def dialog_his():
         return {"msg": error_msg}, 200
 
     app.logger.info(user)
-    min_time_str = (datetime.now() - timedelta(days=3)).date()
+    min_time_str = (datetime.now() - timedelta(days=7)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
     dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
     return {"content": dialog_list}, 200
@@ -1006,6 +1006,32 @@ def dialog_delete():
     # 执行删除
     deleted_count = sqlitelog.delete_dialogs(user, dialog_ids)
     return {"success": True, "deleted_count": deleted_count}
+
+
+@app.route('/never_guess_my_usage/update_dialog_title', methods=['POST'])
+def update_dialog_title():
+    """更新对话标题"""
+    user = request.values.get('user', '').strip()
+    password = request.values.get('password', '').strip()
+    dialog_id = request.values.get('dialog_id', type=int)
+    new_title = request.values.get('new_title', '').strip()
+
+    # 验证用户凭据
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"success": False, "msg": error_msg}, 200
+
+    # 验证参数
+    if dialog_id is None or not new_title:
+        return {"success": False, "msg": "dialog_id 和 new_title 参数不能为空"}, 200
+
+    # 更新对话标题
+    success = sqlitelog.update_dialog_title(user, dialog_id, new_title)
+
+    if success:
+        return {"success": True, "msg": "更新成功"}, 200
+    else:
+        return {"success": False, "msg": "更新失败，可能是对话不存在或不属于该用户"}, 200
 
 @app.route('/never_guess_my_usage/system_prompt', methods=['GET'])
 def system_prompt():
