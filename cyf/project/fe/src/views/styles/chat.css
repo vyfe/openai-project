@@ -1181,6 +1181,11 @@
   box-sizing: border-box;
   /* 防止横向滚动条影响布局 */
   -webkit-overflow-scrolling: touch;
+  /* 确保不会超出容器边界 */
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  display: block;
 }
 
 .message-text :deep(code) {
@@ -1190,8 +1195,19 @@
   word-break: break-word;
   box-sizing: border-box;
   /* 对于行内代码，确保不破坏布局 */
-  display: inline-block;
+  display: inline;
   vertical-align: middle;
+  /* 限制行内代码块的最大宽度 */
+  max-width: 100%;
+}
+
+.message-text :deep(pre code) {
+  background: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  font-size: inherit;
+  white-space: inherit;
+  display: block;
 }
 
 .message-text :deep(table) {
@@ -1203,17 +1219,33 @@
   box-sizing: border-box;
   /* 确保表格容器能够滚动 */
   -webkit-overflow-scrolling: touch;
+  margin: 0;
+  border-collapse: collapse;
+  /* 强制表格成为滚动容器 */
+  display: table;
+}
+
+.message-text :deep(tr) {
+  display: table-row;
+  width: 100%;
 }
 
 .message-text :deep(th),
 .message-text :deep(td) {
   word-break: break-word;
   overflow-wrap: break-word;
-  max-width: 100%;
   box-sizing: border-box;
   /* 设置最小宽度以确保内容可读性 */
-  min-width: 40px;
-  max-width: 250px;
+  min-width: 30px;
+  max-width: calc(100vw - 20px);
+  padding: 8px 12px;
+  /* 限制单元格的最大宽度 */
+  max-inline-size: 200px;
+  /* 在窄屏上强制内容换行 */
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  display: table-cell;
 }
 
 /* 移动端视口高度调整 */
