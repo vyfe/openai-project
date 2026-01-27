@@ -1,4 +1,5 @@
 /cyf/project/*/conf/conf.ini
+/cyf/project/*/conf/role_init.sql
 # 密钥
 /cyf/project/*/conf/key.*
 /cyf/project/server/*.db

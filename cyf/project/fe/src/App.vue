@@ -44,6 +44,33 @@ body.dark-theme {
   color: #e0e0e0;
 }
 
+/* Element Plus 禁用状态 CSS 变量 - 夜间模式 */
+body.dark-theme {
+  --el-disabled-bg-color: #2a2a2a;
+  --el-disabled-border-color: #555555;
+  --el-disabled-text-color: #9a9a9a;
+}
+
+/* Element Plus 禁用状态样式 - 夜间模式 */
+body.dark-theme .el-textarea.is-disabled .el-textarea__inner {
+  background-color: #2a2a2a !important;
+  box-shadow: 0 0 0 1px #555555 inset !important;
+  color: #9a9a9a !important;
+  cursor: not-allowed !important;
+}
+
+/* Element Plus input 禁用状态 - 夜间模式 */
+body.dark-theme .el-input.is-disabled .el-input__wrapper {
+  background-color: #2a2a2a !important;
+  box-shadow: 0 0 0 1px #555555 inset !important;
+  cursor: not-allowed !important;
+}
+
+body.dark-theme .el-input.is-disabled .el-input__inner {
+  color: #9a9a9a !important;
+  -webkit-text-fill-color: #9a9a9a !important;
+}
+
 /* Element Plus 组件深色主题覆盖 */
 body.dark-theme .el-button {
   background-color: #333333;

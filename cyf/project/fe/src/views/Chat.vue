@@ -282,14 +282,15 @@
               v-model="systemPrompt"
               type="textarea"
               :rows="3"
+              :disabled="enhancedRoleEnabled"
               placeholder="输入系统提示词，例如：你是一个专业的程序员助手..."
               resize="vertical"
               @blur="handleSystemPromptBlur"
             />
             <div class="system-prompt-hint">设定 AI 的行为和角色</div>
 
-            <!-- 角色设定选项卡 -->
-            <div class="role-tabs">
+            <!-- 角色设定选项卡 - 当启用增强角色时禁用 -->
+            <div :class="{ 'role-tabs': true, 'disabled': enhancedRoleEnabled }">
               <div
                 v-for="role in rolePresets"
                 :key="role.id"
@@ -321,6 +322,63 @@
                 <el-icon><Plus /></el-icon>
               </div>
             </div>
+
+            <!-- 增强角色选择 -->
+            <div class="enhanced-role-section">
+              <div class="enhanced-role-toggle">
+                <el-checkbox
+                  v-model="enhancedRoleEnabled"
+                  @change="handleEnhancedRoleToggle"
+                >
+                  启用增强角色
+                </el-checkbox>
+                <el-icon v-if="loadingEnhancedRoles" class="is-loading">
+                  <Loading />
+                </el-icon>
+              </div>
+
+              <!-- 增强角色界面，只有在启用时才显示 -->
+              <div v-if="enhancedRoleEnabled" class="enhanced-role-interface">
+                <!-- 分组标签 -->
+                <el-tabs
+                  v-model="activeEnhancedGroup"
+                  type="card"
+                  @tab-change="handleGroupChange"
+                >
+                  <el-tab-pane
+                    v-for="(roles, groupName) in enhancedRoleGroups"
+                    :key="groupName"
+                    :label="groupName"
+                    :name="groupName"
+                  >
+                  </el-tab-pane>
+                </el-tabs>
+
+                <!-- 角色列表 -->
+                <div v-if="activeEnhancedGroup && enhancedRoleGroups[activeEnhancedGroup]" class="enhanced-role-list">
+                  <el-radio-group v-model="selectedEnhancedRole" @change="handleEnhancedRoleSelect">
+                    <div
+                      v-for="role in enhancedRoleGroups[activeEnhancedGroup]"
+                      :key="role.role_name"
+                      class="enhanced-role-item"
+                    >
+                      <el-radio :label="role.role_name" border class="enhanced-role-radio">
+                        <div class="role-info">
+                          <div class="role-name">{{ role.role_name }}</div>
+                          <div class="role-desc">{{ role.role_desc }}</div>
+                        </div>
+                      </el-radio>
+                    </div>
+                  </el-radio-group>
+                </div>
+
+                <!-- 当前选中角色内容预览 -->
+                <div v-if="selectedEnhancedRole" class="enhanced-role-preview">
+                  <h4>角色内容预览</h4>
+                  <div class="role-content-preview">{{ currentEnhancedRoleContent }}</div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 发送键偏好设置 -->
@@ -346,48 +404,120 @@
       <!-- 聊天内容区域 -->
       <div class="chat-content">
         <div class="chat-toolbar">
-          <!-- 新增：对话标题编辑区域 -->
-          <div class="dialog-title-editor">
-            <el-input
-              v-model="dialogTitle"
-              placeholder="请输入对话标题..."
-              size="small"
-              @blur="handleTitleBlur"
+          <!-- 在桌面端显示完整toolbar，在移动端显示抽屉切换按钮 -->
+          <div v-if="!isMobile" class="toolbar-desktop">
+            <!-- 新增：对话标题编辑区域 -->
+            <div class="dialog-title-editor">
+              <el-input
+                v-model="dialogTitle"
+                placeholder="请输入对话标题..."
+                size="small"
+                @blur="handleTitleBlur"
+              />
+            </div>
+
+            <!-- 新增：字体大小控制 -->
+            <div class="font-size-controls">
+              <span class="font-size-label">文字大小:</span>
+              <el-tooltip content="文字大小" placement="bottom">
+                <el-radio-group v-model="fontSize" size="small" @change="handleFontSizeChange">
+                  <el-radio-button label="small">小</el-radio-button>
+                  <el-radio-button label="medium">中</el-radio-button>
+                  <el-radio-button label="large">大</el-radio-button>
+                </el-radio-group>
+              </el-tooltip>
+            </div>
+
+            <div class="action-buttons">
+              <el-button
+                type="warning"
+                size="small"
+                @click="clearCurrentSession"
+              >
+                <el-icon><CirclePlus /></el-icon>
+                开启另一个会话
+              </el-button>
+
+              <!-- 新增：导出对话截屏按钮 -->
+              <el-button
+                type="primary"
+                size="small"
+                @click="exportConversationScreenshot"
+              >
+                <el-icon><Download /></el-icon>
+                导出对话截图
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 移动端：显示抽屉切换按钮 -->
+          <div v-else class="toolbar-mobile">
+            <el-button
+              icon="Menu"
+              size="default"
+              circle
+              @click="showToolbarDrawer = true"
+              class="mobile-toolbar-btn"
             />
           </div>
 
-          <!-- 新增：字体大小控制 -->
-          <div class="font-size-controls">
-            <span class="font-size-label">文字大小:</span>
-            <el-tooltip content="文字大小" placement="bottom">
-              <el-radio-group v-model="fontSize" size="small" @change="handleFontSizeChange">
-                <el-radio-button label="small">小</el-radio-button>
-                <el-radio-button label="medium">中</el-radio-button>
-                <el-radio-button label="large">大</el-radio-button>
-              </el-radio-group>
-            </el-tooltip>
-          </div>
+          <!-- 移动端抽屉菜单 -->
+          <el-drawer
+            v-if="isMobile"
+            v-model="showToolbarDrawer"
+            title="工具栏"
+            direction="rtl"
+            size="80%"
+            :destroy-on-close="true"
+            :close-on-click-modal="true"
+          >
+            <div class="mobile-toolbar-content">
+              <!-- 对话标题编辑区域 -->
+              <div class="dialog-title-editor">
+                <span class="mobile-form-label">对话标题</span>
+                <el-input
+                  v-model="dialogTitle"
+                  placeholder="请输入对话标题..."
+                  size="default"
+                  @blur="handleTitleBlur"
+                />
+              </div>
 
-          <div class="action-buttons">
-            <el-button
-              type="warning"
-              size="small"
-              @click="clearCurrentSession"
-            >
-              <el-icon><CirclePlus /></el-icon>
-              开启另一个会话
-            </el-button>
+              <!-- 字体大小控制 -->
+              <div class="font-size-controls">
+                <span class="mobile-form-label">文字大小</span>
+                <el-radio-group v-model="fontSize" size="default" @change="handleFontSizeChange">
+                  <el-radio-button label="small">小</el-radio-button>
+                  <el-radio-button label="medium">中</el-radio-button>
+                  <el-radio-button label="large">大</el-radio-button>
+                </el-radio-group>
+              </div>
 
-            <!-- 新增：导出对话截屏按钮 -->
-            <el-button
-              type="primary"
-              size="small"
-              @click="exportConversationScreenshot"
-            >
-              <el-icon><Download /></el-icon>
-              导出对话截图
-            </el-button>
-          </div>
+              <!-- 操作按钮 -->
+              <div class="action-buttons">
+                <el-button
+                  type="warning"
+                  size="default"
+                  @click="clearCurrentSession"
+                  class="drawer-button"
+                >
+                  <el-icon><CirclePlus /></el-icon>
+                  开启另一个会话
+                </el-button>
+
+                <!-- 导出对话截屏按钮 -->
+                <el-button
+                  type="primary"
+                  size="default"
+                  @click="exportConversationScreenshot"
+                  class="drawer-button"
+                >
+                  <el-icon><Download /></el-icon>
+                  导出对话截图
+                </el-button>
+              </div>
+            </div>
+          </el-drawer>
         </div>
         <div class="messages-container" :class="'font-' + fontSize" ref="messagesContainer">
           <div
@@ -629,7 +759,7 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, ElCascader } from 'element-plus'
+import { ElMessage, ElMessageBox, ElCascader, ElDrawer } from 'element-plus'
 import {
   SwitchButton,
   UploadFilled,
@@ -655,7 +785,8 @@ import {
   Moon,
   CaretRight,
   InfoFilled,
-  QuestionFilled
+  QuestionFilled,
+  Menu
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
@@ -714,6 +845,7 @@ const maxResponseChars = ref(parseInt(localStorage.getItem('maxResponseChars') |
 // 添加侧边栏折叠状态
 const sidebarCollapsed = ref(JSON.parse(localStorage.getItem('sidebarCollapsed') || 'false'))
 const isMobile = ref(false)
+const showToolbarDrawer = ref(false)
 
 // 流式输出开关
 const streamEnabled = ref(JSON.parse(localStorage.getItem('streamEnabled') || 'true'))
@@ -723,6 +855,27 @@ const sendPreference = ref(localStorage.getItem('sendPreference') || 'ctrl_enter
 
 // 用于检测软键盘是否激活的状态
 const isKeyboardVisible = ref(false)
+
+// 记录之前的设备类型状态
+const previousIsMobile = ref(false)
+
+// 实现移动端设备检测逻辑，当屏幕宽度小于768px时将isMobile设为true，并监听窗口大小变化
+const checkIsMobile = () => {
+  // 当窗口宽度小于768px时，认为是移动端
+  const currentIsMobile = window.innerWidth < 768
+
+  // 如果设备类型发生变化，则相应地调整抽屉状态
+  if (currentIsMobile !== previousIsMobile.value) {
+    // 在从桌面端切换到移动端时，不自动打开抽屉
+    // 在从移动端切换到桌面端时，如果抽屉是打开的则关闭它
+    if (!currentIsMobile && showToolbarDrawer.value) {
+      showToolbarDrawer.value = false
+    }
+  }
+
+  isMobile.value = currentIsMobile
+  previousIsMobile.value = currentIsMobile
+}
 
 // 图片预览相关状态
 const previewImageUrl = ref('')
@@ -736,6 +889,13 @@ const openImagePreview = (url: string) => {
 
 // 角色设定（System Prompt）
 const systemPrompt = ref(localStorage.getItem('systemPrompt') || '')
+
+// 增强角色选择相关变量
+const enhancedRoleEnabled = ref(JSON.parse(localStorage.getItem('enhancedRoleEnabled') || 'false'))
+const enhancedRoleGroups = ref<Record<string, Array<{role_name: string, role_desc: string, role_content: string}>>>({})
+const activeEnhancedGroup = ref(localStorage.getItem('activeEnhancedGroup') || '')
+const selectedEnhancedRole = ref(localStorage.getItem('selectedEnhancedRole') || '')
+const loadingEnhancedRoles = ref(false)
 
 // 预设角色设定列表
 const rolePresets = ref<Array<{id: string, name: string, prompt: string}>>([
@@ -765,6 +925,19 @@ const loadCustomRoles = () => {
     }
   }
 }
+
+// 初始化时检测是否为移动端
+onMounted(() => {
+  checkIsMobile()
+
+  // 监听窗口大小变化
+  window.addEventListener('resize', checkIsMobile)
+})
+
+// 组件卸载时移除事件监听器
+onUnmounted(() => {
+  window.removeEventListener('resize', checkIsMobile)
+})
 
 // 主题相关状态
 const isDarkTheme = ref(localStorage.getItem('isDarkTheme') === 'true')
@@ -800,6 +973,18 @@ onMounted(() => {
 
 // 当前选中的角色ID
 const activeRoleId = ref(localStorage.getItem('activeRoleId') || 'default')
+
+// 当前增强角色内容的计算属性
+const currentEnhancedRoleContent = computed(() => {
+  if (activeEnhancedGroup.value && selectedEnhancedRole.value) {
+    const group = enhancedRoleGroups.value[activeEnhancedGroup.value]
+    if (group) {
+      const role = group.find(r => r.role_name === selectedEnhancedRole.value)
+      return role ? role.role_content : ''
+    }
+  }
+  return ''
+})
 
 const models = ref<Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>>([])
 
@@ -877,6 +1062,21 @@ watch(systemPrompt, (newVal) => {
     saveCustomRoles() // 保存自定义角色
   }
   localStorage.setItem('systemPrompt', newVal)
+})
+
+// 监听 enhancedRoleEnabled 变化并持久化
+watch(enhancedRoleEnabled, (newVal) => {
+  localStorage.setItem('enhancedRoleEnabled', JSON.stringify(newVal))
+})
+
+// 监听 activeEnhancedGroup 变化并持久化
+watch(activeEnhancedGroup, (newVal) => {
+  localStorage.setItem('activeEnhancedGroup', newVal)
+})
+
+// 监听 selectedEnhancedRole 变化并持久化
+watch(selectedEnhancedRole, (newVal) => {
+  localStorage.setItem('selectedEnhancedRole', newVal)
 })
 
 // 注释掉监听 dialogTitle 变化并持久化的功能，这样标题就不会保存到localStorage
@@ -964,6 +1164,96 @@ const handleSystemPromptBlur = () => {
   if (currentRole && !['default', 'programmer', 'translator', 'writer'].includes(currentRole.id)) {
     currentRole.prompt = systemPrompt.value
     saveCustomRoles() // 保存自定义角色
+  }
+}
+
+// 加载增强角色数据
+const loadEnhancedRoles = async () => {
+  if (!enhancedRoleEnabled.value) return
+
+  loadingEnhancedRoles.value = true
+  try {
+    const response: any = await chatAPI.getSystemPromptsByGroup()
+    if (response && response.success && response.groups) {
+      enhancedRoleGroups.value = response.groups
+
+      // 如果还没有激活的分组或角色，自动选择第一个
+      if (!activeEnhancedGroup.value && Object.keys(enhancedRoleGroups.value).length > 0) {
+        const firstGroup = Object.keys(enhancedRoleGroups.value)[0]
+        activeEnhancedGroup.value = firstGroup
+
+        // 选择该分组的第一个角色
+        if (enhancedRoleGroups.value[firstGroup] && enhancedRoleGroups.value[firstGroup].length > 0) {
+          selectedEnhancedRole.value = enhancedRoleGroups.value[firstGroup][0].role_name
+
+          // 应用所选角色的内容到systemPrompt
+          applyEnhancedRoleContent()
+        }
+      }
+    } else {
+      console.error('获取增强角色数据失败:', response?.msg)
+    }
+  } catch (error) {
+    console.error('加载增强角色时出错:', error)
+  } finally {
+    loadingEnhancedRoles.value = false
+  }
+}
+
+// 处理增强角色启用状态切换
+const handleEnhancedRoleToggle = (enabled: boolean) => {
+  enhancedRoleEnabled.value = enabled
+  localStorage.setItem('enhancedRoleEnabled', JSON.stringify(enabled))
+
+  if (enabled) {
+    // 启用增强角色时，将角色标签切换到默认状态，避免覆盖用户的自定义角色人设
+    const defaultRole = rolePresets.value.find(r => r.id === 'default')
+    if (defaultRole) {
+      activeRoleId.value = 'default'
+      systemPrompt.value = defaultRole.prompt
+    }
+    // 加载数据并应用第一个角色
+    loadEnhancedRoles()
+  } else {
+    // 禁用增强角色时，恢复原来的预设角色内容
+    const currentRole = rolePresets.value.find(r => r.id === activeRoleId.value)
+    if (currentRole) {
+      systemPrompt.value = currentRole.prompt
+    }
+  }
+}
+
+// 处理增强角色分组切换
+const handleGroupChange = (groupName: string) => {
+  activeEnhancedGroup.value = groupName
+  localStorage.setItem('activeEnhancedGroup', groupName)
+
+  // 选择该分组的第一个角色
+  if (enhancedRoleGroups.value[groupName] && enhancedRoleGroups.value[groupName].length > 0) {
+    selectedEnhancedRole.value = enhancedRoleGroups.value[groupName][0].role_name
+
+    // 应用所选角色的内容到systemPrompt
+    applyEnhancedRoleContent()
+
+    // 保存到localStorage
+    localStorage.setItem('selectedEnhancedRole', selectedEnhancedRole.value)
+  }
+}
+
+// 处理增强角色选择
+const handleEnhancedRoleSelect = (roleName: string) => {
+  selectedEnhancedRole.value = roleName
+  localStorage.setItem('selectedEnhancedRole', roleName)
+
+  // 应用所选角色的内容到systemPrompt
+  applyEnhancedRoleContent()
+}
+
+// 应用增强角色内容到systemPrompt
+const applyEnhancedRoleContent = () => {
+  const currentRoleContent = currentEnhancedRoleContent.value
+  if (currentRoleContent) {
+    systemPrompt.value = currentRoleContent
   }
 }
 
@@ -1941,17 +2231,117 @@ const isStreaming = (index: number) => {
   return false;
 }
 
+// 将Markdown内容转换为纯文本格式，保留结构信息
+const convertMarkdownToPlainText = (content: string) => {
+  // 创建一个临时div来解析HTML
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = renderMarkdownWithMath(content);
+
+  // 递归处理DOM节点，保留适当的格式
+  const processNode = (node: Node): string => {
+    let result = '';
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || '';
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      const tagName = element.tagName.toLowerCase();
+
+      // 根据标签类型添加适当的格式化
+      switch (tagName) {
+        case 'h1':
+        case 'h2':
+        case 'h3':
+        case 'h4':
+        case 'h5':
+        case 'h6':
+          // 标题添加对应的#号
+          result += '#'.repeat(parseInt(tagName.charAt(1))) + ' ';
+          break;
+        case 'li':
+          // 列表项前添加项目符号
+          result += '• ';
+          break;
+        case 'p':
+          // 段落之间添加换行
+          result += '\n';
+          break;
+        case 'br':
+          result += '\n';
+          break;
+        case 'strong':
+        case 'b':
+          // 粗体不添加标记，只保留内容
+          break;
+        case 'em':
+        case 'i':
+          // 斜体不添加标记，只保留内容
+          break;
+        case 'code':
+          // 代码块保留反引号
+          if (element.parentElement?.tagName.toLowerCase() !== 'pre') {
+            result += '`';
+          }
+          break;
+        case 'pre':
+          // 代码块前后添加三个反引号
+          result += '```\n';
+          break;
+      }
+
+      // 递归处理子节点
+      for (let i = 0; i < element.childNodes.length; i++) {
+        result += processNode(element.childNodes[i]);
+      }
+
+      // 添加闭合格式
+      switch (tagName) {
+        case 'pre':
+          result += '\n```';
+          break;
+        case 'code':
+          if (element.parentElement?.tagName.toLowerCase() !== 'pre') {
+            result += '`';
+          }
+          break;
+        case 'p':
+          result += '\n';
+          break;
+      }
+    }
+
+    return result;
+  };
+
+  // 处理整个div的内容
+  let plainText = '';
+  for (let i = 0; i < tempDiv.childNodes.length; i++) {
+    plainText += processNode(tempDiv.childNodes[i]);
+  }
+
+  // 清理多余的空白行
+  plainText = plainText.replace(/\n{3,}/g, '\n\n').trim();
+
+  return plainText;
+};
+
 // 复制消息内容到剪贴板
 const copyMessageContent = async (content: string) => {
   try {
-    await navigator.clipboard.writeText(content);
+    // 转换为带有结构的纯文本
+    const plainText = convertMarkdownToPlainText(content);
+    await navigator.clipboard.writeText(plainText);
     ElMessage.success('内容已复制到剪贴板');
   } catch (err) {
     console.error('复制失败:', err);
     // 如果 navigator.clipboard 不可用，使用传统的 document.execCommand 方法
     try {
       const textArea = document.createElement('textarea');
-      textArea.value = content;
+      // 转换为带有结构的纯文本
+      const plainText = convertMarkdownToPlainText(content);
+      textArea.value = plainText;
       document.body.appendChild(textArea);
       textArea.select();
       document.execCommand('copy');
@@ -2524,6 +2914,27 @@ onMounted(async () => {
     sendPreference.value = savedSendPreference
   }
 
+  // 从localStorage恢复增强角色设置
+  const savedEnhancedRoleEnabled = localStorage.getItem('enhancedRoleEnabled')
+  if (savedEnhancedRoleEnabled) {
+    enhancedRoleEnabled.value = JSON.parse(savedEnhancedRoleEnabled)
+  }
+
+  const savedActiveEnhancedGroup = localStorage.getItem('activeEnhancedGroup')
+  if (savedActiveEnhancedGroup) {
+    activeEnhancedGroup.value = savedActiveEnhancedGroup
+  }
+
+  const savedSelectedEnhancedRole = localStorage.getItem('selectedEnhancedRole')
+  if (savedSelectedEnhancedRole) {
+    selectedEnhancedRole.value = savedSelectedEnhancedRole
+  }
+
+  // 如果启用了增强角色，加载数据
+  if (enhancedRoleEnabled.value) {
+    await loadEnhancedRoles()
+  }
+
   // 自动加载历史会话
   await loadDialogHistory()
 
@@ -2555,118 +2966,49 @@ onUnmounted(() => {
   }
 })
 </script>
-
-<style scoped>
-.chat-container {
-  /* 原有样式 */
+<style>
+/* 系统提示textarea滚动条样式，强制解法 */
+.system-prompt-section .el-textarea__inner::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-
-.chat-header {
-  /* 原有样式 */
+.system-prompt-section .el-textarea__inner::-webkit-resizer{
+  width: 3px;
+  background: rgba(232, 240, 255, 0.3);
 }
-
-/* 主题切换按钮样式 */
-.theme-toggle-btn {
-  margin-right: 10px;
-  background-color: #f5f5f5;
-  border: 1px solid #dcdfe6;
-}
-
-/* 模型描述样式 */
-.model-description {
-  margin-top: 10px;
-}
-
-.model-desc-text {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.5;
-}
-
-/* 数学公式样式 */
-.katex-display {
-  margin: 0.5em 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-/* LaTeX 帮助对话框样式 */
-.latex-help-content h3,
-.latex-help-content h4 {
-  margin: 16px 0 8px 0;
-  color: #303133;
-}
-
-.latex-help-content p {
-  margin: 8px 0;
-  line-height: 1.6;
-}
-
-.latex-help-content code {
-  padding: 2px 4px;
-  margin: 0 2px;
+.system-prompt-section .el-textarea__inner::-webkit-scrollbar-track {
+  background: rgba(232, 240, 255, 0.3);
   border-radius: 3px;
-  background-color: #f5f5f5;
-  font-family: monospace;
-  font-size: 0.9em;
 }
 
-.example-formulas {
-  background-color: #f9f9f9;
-  padding: 15px;
-  border-radius: 5px;
-  margin: 10px 0;
+.system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb {
+  background: rgba(144, 180, 248, 0.5);
+  border-radius: 3px;
 }
 
-/* 深色主题下的 LaTeX 帮助对话框样式 */
-body.dark-theme .latex-help-content h3,
-body.dark-theme .latex-help-content h4 {
-  color: #e0e0e0;
+.system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 180, 248, 0.7);
 }
 
-body.dark-theme .latex-help-content p {
-  color: #e0e0e0;
-}
 
-body.dark-theme .latex-help-content code {
-  background-color: #4a4a4a;
-  color: #e0e0e0;
+/* 深色主题下系统提示textarea滚动条样式 */
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar{
+  width: 6px;
+  height: 6px;
 }
-
-/* 修复ElDialog标题的夜间模式样式 - 使用CSS变量 */
-body.dark-theme {
-  --el-text-color-primary: #e0e0e0;
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-track{
+  background: rgba(50,50,50,.3);
 }
-
-/* 修复ElDialog头部和其他组件的夜间模式样式 */
-body.dark-theme .el-dialog__header {
-  border-bottom: 1px solid #4a4a4a;
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb{
+  background: rgba(90,123,193,.5);
+  border-radius: 3px;
 }
-
-body.dark-theme .el-dialog__body {
-  background-color: #1a1a1a;
-  color: #e0e0e0;
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb:hover{
+  background: rgba(90,123,193,.7);
 }
-
-body.dark-theme .example-formulas {
-  background-color: #3a3a3a;
-  color: #e0e0e0;
-}
-
-/* 空响应操作按钮样式 */
-.empty-response-actions {
-  margin-top: 8px;
-}
-
-.empty-response-actions .el-alert {
-  margin-bottom: 8px;
-}
-
-.empty-response-actions .el-button {
-  margin-left: 0;
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-resizer{
+  width: 3px;
+  background: #ffffff00;
 }
 </style>
 
