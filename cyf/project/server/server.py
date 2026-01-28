@@ -78,6 +78,11 @@ user_list = set(user_credentials.keys())
 MODEL_CACHE = {}
 CACHE_EXPIRY_TIME = {}
 
+# 测试用户限制配置
+test_user_name = conf.get('common', 'test_user', fallback='')
+test_ip_default_limit = int(conf.get('common', 'test_ip_default_limit', fallback='20'))
+test_exceed_msg = conf.get('common', 'test_exceed_msg', fallback='请求次数已达上限')
+
 url = url_list[random.randint(0, len(url_list) - 1)]
 
 
@@ -215,6 +220,39 @@ def get_client_for_user(username: str) -> OpenAI:
     else:
         # 返回默认客户端
         return random_client()
+
+
+def get_client_ip() -> str:
+    """获取客户端真实 IP（支持反向代理）"""
+    # 优先从 X-Forwarded-For 获取（通过代理时）
+    forwarded = request.headers.get('X-Forwarded-For')
+    if forwarded:
+        # 取第一个 IP（最原始的客户端 IP）
+        return forwarded.split(',')[0].strip()
+    return request.remote_addr or '127.0.0.1'
+
+
+def check_test_user_limit(user: str) -> dict:
+    """
+    检查测试用户是否超过请求限制
+    返回 None 表示未超限或非测试用户，否则返回错误响应
+    """
+    if not test_user_name or user != test_user_name:
+        return {"success": True,}
+
+    client_ip = get_client_ip()
+
+    # 先检查是否已超限
+    if sqlitelog.check_test_limit_exceeded(client_ip, test_ip_default_limit):
+        return {
+            "success": False,
+            "msg": test_exceed_msg,
+            "error_type": "TEST_LIMIT_EXCEEDED"
+        }
+
+    # 增加计数
+    sqlitelog.increment_test_limit(client_ip, test_ip_default_limit)
+    return {"success": True,}
 
 
 def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
@@ -476,6 +514,11 @@ def dialog():
         if not is_valid:
             return {"msg": error_msg}, 200
 
+        # 检查测试用户限制
+        limit_error = check_test_user_limit(user)
+        if not limit_error["success"]:
+            return limit_error, 200
+
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if not is_valid_model(model):
@@ -554,6 +597,32 @@ def dialog_stream():
 
             return Response(
                 error_generator(),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'X-Accel-Buffering': 'no',
+                    'Connection': 'close'
+                }
+            )
+
+        # 检查测试用户限制
+        limit_error = check_test_user_limit(user)
+        if not limit_error["success"]:
+            def error_generator(error_msg):
+                error_response = {
+                    "success": False,
+                    "msg": error_msg,
+                    "done": True,
+                    "error": {
+                        "success": False,
+                        "msg": error_msg,
+                        "error_type": "TEST_EXCEED"
+                    }
+                }
+                yield f"data: {json.dumps(error_response)}\n\n"
+
+            return Response(
+                error_generator(limit_error["msg"]),
                 mimetype='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -676,14 +745,14 @@ def dialog_stream():
         app.logger.error(f"流式对话异常: {str(e)}")
 
         # 针对SSE请求，需要返回SSE格式的错误
-        def error_generator():
+        def error_generator(error_msg):
             error_response = {
                 "success": False,
-                "msg": f"流式对话异常: {str(e)}",
+                "msg": f"流式对话异常: {error_msg}",
                 "done": True,
                 "error": {
                     "success": False,
-                    "msg": f"流式对话异常: {str(e)}",
+                    "msg": f"流式对话异常: {error_msg}",
                     "error_type": "GENERAL_ERROR"
                 }
             }

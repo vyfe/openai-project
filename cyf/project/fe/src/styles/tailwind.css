@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 自定义 layer 用于 Element Plus 覆盖 */
+@layer components {
+  /* Element Plus 深色主题覆盖可以放在这里 */
+}

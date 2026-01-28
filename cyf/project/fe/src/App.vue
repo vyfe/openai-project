@@ -41,7 +41,7 @@ body {
 /* 全局深色主题样式 */
 body.dark-theme {
   background-color: #1a1a1a;
-  color: #e0e0e0;
+  color: #000000;
 }
 
 /* Element Plus 禁用状态 CSS 变量 - 夜间模式 */
@@ -263,9 +263,7 @@ body.dark-theme .el-message-box {
   color: #e0e0e0;
 }
 
-body.dark-theme .el-tooltip__popper {
-  background-color: #333333;
-  border: 1px solid #555555;
-  color: #e0e0e0;
+body.dark-theme .custom-dark-tooltip .el-tooltip__popper .popper__arrow {
+  background-color: #333 !important; /* 修改菱形颜色 */
 }
 </style>
