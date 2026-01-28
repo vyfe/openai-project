@@ -228,10 +228,8 @@ export const chatAPI = {
   },
 
   // 获取对话历史列表
-  getDialogHistory: (model: string) => {
-    return api.post('/never_guess_my_usage/split_his', {
-      model
-    })
+  getDialogHistory: () => {
+    return api.post('/never_guess_my_usage/split_his', {})
   },
 
   // 获取特定对话内容

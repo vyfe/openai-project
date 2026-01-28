@@ -11,6 +11,9 @@ users=
   admin:admin123:your_api_key_here
   user1:password1
   user2:password234:optional_api_key
+test_user=test_user
+test_ip_default_limit=20
+test_exceed_msg=异常123
 [log]
 sqlite3_file=
 [api]

@@ -79,10 +79,44 @@ class SystemPrompt(Model):
             'status_valid': self.status_valid
         }
 
+class TestLimit(Model):
+    user_ip = CharField()  # 用户ip
+    user_count = IntegerField(default=0)  # 使用次数
+    limit = IntegerField() # 上限
+
+    class Meta:
+        database = db  # 指定数据库
+        indexes = (
+            (('user_ip',), True),  # 定义唯一索引，确保每个IP只有一条记录
+        )
+
 def init_db():
     # 创建表
     db.connect()
-    db.create_tables([Log, Dialog, ModelMeta, SystemPrompt], safe=True)
+    db.create_tables([Log, Dialog, ModelMeta, SystemPrompt, TestLimit], safe=True)
+
+
+def get_or_create_test_limit(user_ip: str, default_limit: int) -> TestLimit:
+    """获取或创建 IP 限制记录"""
+    record, created = TestLimit.get_or_create(
+        user_ip=user_ip,
+        defaults={'user_count': 0, 'limit': default_limit}
+    )
+    return record
+
+
+def increment_test_limit(user_ip: str, default_limit: int) -> tuple[int, int]:
+    """增加计数并返回 (当前计数, 限制值)"""
+    record = get_or_create_test_limit(user_ip, default_limit)
+    record.user_count += 1
+    record.save()
+    return record.user_count, record.limit
+
+
+def check_test_limit_exceeded(user_ip: str, default_limit: int) -> bool:
+    """检查是否超过限制（不增加计数）"""
+    record = get_or_create_test_limit(user_ip, default_limit)
+    return record.user_count >= record.limit
 
 def set_log(user: str, usage: int, model: str, text: str):
     Log.create(username=user, usage=usage, modelname=model, request_text=text)
@@ -92,7 +126,7 @@ def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: 
     Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute()
 
 def get_dialog_list(user: str, date: date):
-    query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.dialog_name, Dialog.start_date)
+    query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.modelname, Dialog.dialog_name, Dialog.start_date)
              .where(Dialog.username == user, Dialog.start_date >= date)
              .order_by(Dialog.id.desc()))
     if query.exists():

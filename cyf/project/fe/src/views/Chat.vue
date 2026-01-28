@@ -66,7 +66,7 @@
       </div>
       <div class="header-right">
         <!-- LaTeX 公式帮助按钮 - 使用问号图标 -->
-        <el-tooltip content="专业输出帮助" placement="top">
+        <el-tooltip content="专业输出帮助" placement="top" popper-class="custom-dark-tooltip">
           <el-button
             :icon="QuestionFilled"
             circle
@@ -206,8 +206,35 @@
                   class="dialog-checkbox"
                 />
                 <div class="dialog-content" @click.stop="!isEditMode && loadDialogContent(dialog.id)">
-                  <div class="dialog-title">{{ dialog.dialog_name }}</div>
-                  <div class="dialog-date">{{ dialog.start_date }}</div>
+                  <el-tooltip
+                    :content="dialog.dialog_name"
+                    :disabled="!shouldShowTooltip(dialog.dialog_name, 'title')"
+                    placement="top"
+                    popper-class="custom-dark-tooltip"
+                  >
+                    <div
+                      class="dialog-title"
+                      :style="{ maxWidth: '100%' }"
+                    >
+                      {{ dialog.dialog_name }}
+                    </div>
+                  </el-tooltip>
+                  <div class="dialog-info">
+                    <el-tooltip
+                      :content="dialog.modelname"
+                      :disabled="!shouldShowTooltip(dialog.modelname, 'model')"
+                      placement="top"
+                      popper-class="custom-dark-tooltip"
+                    >
+                      <div
+                        class="dialog-model"
+                        :style="{ maxWidth: '80px' }"
+                      >
+                        {{ dialog.modelname }}
+                      </div>
+                    </el-tooltip>
+                    <div class="dialog-date">{{ dialog.start_date }}</div>
+                  </div>
                 </div>
                 <el-popconfirm
                   v-if="!isEditMode"
@@ -773,7 +800,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed } from 'vue'
+import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed, onUpdated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, ElCascader, ElDrawer } from 'element-plus'
 import {
@@ -1566,12 +1593,28 @@ const mathRenderer = {
 
 // 解析包含数学公式的Markdown内容
 const renderMarkdownWithMath = (content: string) => {
-  // 首先处理显示数学公式 $$...$$
-  let processedContent = content.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
+  // 保存代码块内容，防止其中的数学公式被错误处理
+  const codeBlockPlaceholders: string[] = [];
+  const inlineCodePlaceholders: string[] = [];
+
+  // 提取并替换代码块（```code```）
+  let processedContent = content.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlockPlaceholders.push(match);
+    return `__CODE_BLOCK_PLACEHOLDER_${codeBlockPlaceholders.length - 1}__`;
+  });
+
+  // 提取并替换行内代码（`code`）
+  processedContent = processedContent.replace(/`[^`]*`/g, (match) => {
+    inlineCodePlaceholders.push(match);
+    return `__INLINE_CODE_PLACEHOLDER_${inlineCodePlaceholders.length - 1}__`;
+  });
+
+  // 首先处理显示数学公式 $$...$$（只在非代码块内容中处理）
+  processedContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
     return mathRenderer.displayMath(math.trim());
   });
 
-  // 然后处理内联数学公式 $...$
+  // 然后处理内联数学公式 $...$（只在非代码块内容中处理）
   processedContent = processedContent.replace(/\$([^\$]+)\$/g, (match, math) => {
     // 确保 $ 不是紧跟在字母或数字后面的（避免将价格等误认为数学公式）
     // 检查匹配项之前是否有字母或数字，或者检查是否为常见价格格式
@@ -1583,6 +1626,22 @@ const renderMarkdownWithMath = (content: string) => {
     }
     return mathRenderer.inlineMath(math.trim());
   });
+
+  // 将代码块内容还原回去
+  for (let i = 0; i < codeBlockPlaceholders.length; i++) {
+    processedContent = processedContent.replace(
+      `__CODE_BLOCK_PLACEHOLDER_${i}__`,
+      codeBlockPlaceholders[i]
+    );
+  }
+
+  // 将行内代码内容还原回去
+  for (let i = 0; i < inlineCodePlaceholders.length; i++) {
+    processedContent = processedContent.replace(
+      `__INLINE_CODE_PLACEHOLDER_${i}__`,
+      inlineCodePlaceholders[i]
+    );
+  }
 
   // 解析 Markdown
   const parsedContent = marked.parse(processedContent || '');
@@ -1903,7 +1962,7 @@ const loadDialogHistory = async () => {
 
   loadingHistory.value = true
   try {
-    const response: any = await chatAPI.getDialogHistory(selectedModel.value)
+    const response: any = await chatAPI.getDialogHistory()
     if (response && response.content) {
       dialogHistory.value = response.content
       // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
@@ -1975,6 +2034,37 @@ const loadDialogContent = async (dialogId: number) => {
       const dialogItem = dialogHistory.value.find(d => d.id === dialogId)
       if (dialogItem) {
         dialogTitle.value = dialogItem.dialog_name
+
+        // 根据历史记录中的modelname更新模型选择框
+        if (dialogItem.modelname) {
+          selectedModel.value = dialogItem.modelname
+
+          // 更新提供商和模型选择器
+          const selectedModelInfo = models.value.find(model => model.value === dialogItem.modelname)
+          if (selectedModelInfo) {
+            const lowerValue = selectedModelInfo.value.toLowerCase()
+            if (lowerValue.includes('gpt')) {
+              providerValue.value = 'gpt'
+            } else if (lowerValue.includes('gemini')) {
+              providerValue.value = 'gemini'
+            } else if (lowerValue.includes('qwen')) {
+              providerValue.value = 'qwen'
+            } else if (lowerValue.includes('nano-banana')) {
+              providerValue.value = 'nano-banana'
+            } else if (lowerValue.includes('deepseek')) {
+              providerValue.value = 'deepseek'
+            } else {
+              const firstPart = selectedModelInfo.value.split('-')[0]
+              if (firstPart && firstPart.length > 1) {
+                providerValue.value = firstPart
+              }
+            }
+            modelValue.value = dialogItem.modelname
+
+            // 更新当前模型描述
+            currentModelDesc.value = selectedModelInfo.model_desc || ''
+          }
+        }
       }
 
       ElMessage.success('对话加载成功')
@@ -3012,6 +3102,48 @@ onUnmounted(() => {
     messagesContainer.value.removeEventListener('scroll', handleScroll)
   }
 })
+
+/**
+ * 异步检查文本溢出，确保DOM完全渲染后进行检测
+ * @param element DOM元素
+ * @returns Promise<boolean> 是否溢出
+ */
+const checkTextOverflowAsync = async (element: HTMLElement | null) => {
+  if (!element) return false
+  await nextTick()
+  return element.scrollWidth > element.offsetWidth
+}
+
+/**
+ * 判断是否应该显示tooltip
+ * @param text 文本内容
+ * @param type 类型（title 或 model）
+ * @returns 是否显示tooltip
+ */
+const shouldShowTooltip = (text: string, type: 'title' | 'model') => {
+  // 对于对话标题，如果长度超过30个字符则显示tooltip
+  if (type === 'title') {
+    return text && text.length > 20
+  }
+  // 对于模型名称，如果长度超过15个字符则显示tooltip
+  else if (type === 'model') {
+    return text && text.length > 12
+  }
+  return false
+}
+
+// TODO(human): 需要实现一个计算属性或方法来判断是否文本溢出，可能需要在 nextTick 后进行检测，以确保DOM完全渲染后再测量
+
+/**
+ * 检查文本元素是否发生溢出
+ * @param element DOM元素
+ * @returns 是否溢出
+ */
+const isTextOverflowing = (element: HTMLElement | null) => {
+  if (!element) return false
+  return element.scrollWidth > element.offsetWidth
+}
+
 </script>
 <style>
 /* 系统提示textarea滚动条样式，强制解法 */
@@ -3056,6 +3188,39 @@ body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-th
 body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-resizer{
   width: 3px;
   background: #ffffff00;
+}
+
+/* 对话历史项目中模型名称样式 */
+.dialog-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.dialog-model {
+  background-color: #ecf5ff;
+  color: #409eff;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+body.dark-theme .dialog-model {
+  background-color: #3178bf;
+  color: #fff;
+}
+
+body.dark-theme .custom-dark-tooltip {                                                         
+   background-color: #e0e0e0 !important;                                                        
+   border: 1px solid #555555 !important;                                                        
+   color: #000000 !important;                                                                   
 }
 </style>
 
