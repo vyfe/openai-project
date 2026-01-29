@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import tailwindcss from '@tailwindcss/vite'
 
 // 为了处理 process 变量的类型问题
 declare global {
@@ -16,7 +17,7 @@ declare global {
 const __dirname = resolve('.');
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(),tailwindcss(),],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')
