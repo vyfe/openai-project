@@ -1191,7 +1191,11 @@
   margin: 0;
   padding: 0;
   max-width: 100%;
+  word-break: break-word;
+  word-wrap: break-word;
   overflow-wrap: break-word;
+  white-space: pre-wrap;
+  hyphens: auto;
 }
 
 .enhanced-role-preview {
@@ -1286,6 +1290,11 @@ body.dark-theme .role-name {
 
 body.dark-theme .role-desc {
   color: #9a9a9a;
+  word-break: break-word;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  hyphens: auto;
 }
 
 body.dark-theme .enhanced-role-preview {

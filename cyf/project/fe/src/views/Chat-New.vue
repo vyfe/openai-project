@@ -83,7 +83,6 @@
         @update:collapsed="updateSidebarCollapsed"
         @load-dialog="loadDialog"
         @model-change="handleModelChange"
-        @settings-change="handleSettingsChange"
         @update:current-dialog-id="updateCurrentDialogId"
         v-model="formData"
       />
@@ -118,19 +117,26 @@
       :title="$t('chat.latexHelp')"
       width="60%"
     >
-      <div class="latex-help-content">
-        <p>LaTeX是一种专业的排版系统，常用于数学公式的书写。</p>
-        <ul>
-          <li>\frac{a}{b} - 分数形式，显示为 a/b</li>
-          <li>x^2 - 上标，显示为 x²</li>
-          <li>x_2 - 下标，显示为 x₂</li>
-          <li>\sqrt{x} - 平方根，显示为 √x</li>
-          <li>\sum_{i=1}^n - 求和符号</li>
-          <li>\int_a^b - 积分符号</li>
-          <li>\lim_{x \to \infty} - 极限符号</li>
-          <li>\alpha, \beta, \gamma - 希腊字母</li>
-        </ul>
+    <div class="latex-help-content">
+      <h2>专业输出帮助</h2>
+      <h3>如何在对话中使用 LaTeX 数学公式</h3>
+      <p>您可以使用以下语法在对话中插入数学公式：</p>
+
+      <h4>内联公式（行内）</h4>
+      <p>使用 <code>$...$</code> 包围公式，例如：<code>$E=mc^2$</code></p>
+
+      <h4>独立公式（居中显示）</h4>
+      <p>使用 <code>$$...$$</code> 包围公式，例如：<code>$$y = X\\beta + \\epsilon$$</code></p>
+
+      <h4>示例</h4>
+      <div class="example-formulas">
+        <p><strong>二次公式：</strong> $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$</p>
+        <p><strong>欧拉恒等式：</strong> $$e^{i\\pi} + 1 = 0$$</p>
+        <p><strong>矩阵：</strong> $A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$</p>
       </div>
+
+      <p>公式将在消息中自动渲染为美观的数学符号。</p>
+    </div>
     </el-dialog>
   </div>
 </template>
@@ -165,7 +171,7 @@ const formData = reactive({
   maxResponseChars: parseInt(localStorage.getItem('maxResponseChars') || '8000'),
   isMobile: false,
   streamEnabled: JSON.parse(localStorage.getItem('streamEnabled') || 'true'),
-  systemPrompt: '',
+  systemPrompt: localStorage.getItem('systemPrompt') || '',
   sendPreference: localStorage.getItem('sendPreference') || 'ctrl_enter',
 })
 const showToolbarDrawer = ref(false)
@@ -222,15 +228,6 @@ const loadDialog = (dialogId: number) => {
 // 处理模型变化
 const handleModelChange = (model: string) => {
   formData.selectedModel = model
-}
-
-// 处理设置变化
-const handleSettingsChange = (settings: any) => {
-  formData.contextCount = settings.contextCount
-  formData.maxResponseChars = settings.maxResponseChars
-  formData.streamEnabled = settings.streamEnabled
-  formData.systemPrompt = settings.systemPrompt
-  formData.sendPreference = settings.sendPreference
 }
 
 // 处理对话创建

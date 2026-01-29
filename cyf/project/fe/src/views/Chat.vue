@@ -3145,7 +3145,4 @@ const isTextOverflowing = (element: HTMLElement | null) => {
 }
 
 </script>
-<style>
-
-</style>
 
