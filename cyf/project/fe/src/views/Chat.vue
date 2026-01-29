@@ -326,7 +326,7 @@
               >
                 <span @click="switchRole(role)">{{ role.name }}</span>
                 <div class="role-tab-actions" v-if="!['default', 'programmer', 'translator', 'writer'].includes(role.id)">
-                  <el-dropdown trigger="click" @command="(command) => handleRoleAction(command, role.id)">
+                  <el-dropdown trigger="click" @command="(command: string) => handleRoleAction(command, role.id)">
                     <el-button text size="small" class="role-action-btn">
                       <el-icon><MoreFilled /></el-icon>
                     </el-button>
@@ -857,7 +857,7 @@ const dialogTitle = ref('')
 // 添加当前对话ID状态
 const currentDialogId = ref<number | null>(null)
 
-// 添加字体大小控制
+// 添加字体大小控制 对话框
 const fontSize = ref(localStorage.getItem('fontSize') || 'medium')
 
 // 添加状态跟踪用户是否手动滚动离开了底部

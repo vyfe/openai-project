@@ -4,9 +4,9 @@ import { createI18n } from 'vue-i18n'
 const messages = {
   zh: {
     chat: {
-      title: '聊天',
+      title: '智能聊天',
       model: '模型',
-      history: '历史记录',
+      history: '对话历史',
       settings: '设置',
       contextCount: '上下文数量',
       maxResponseChars: '最大回复字符数',

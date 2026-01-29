@@ -213,6 +213,7 @@ bash start-dev.sh
 - 日志记录所有用户交互和用量统计
 - **关键运行说明**：服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件
 - 前端通过 `http://localhost:39997` 访问后端API
+- CSS样式都通过tailwind4进行管理
 
 ## 关键运行说明
 - 服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件

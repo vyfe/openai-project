@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '@/views/Login.vue'
-import Chat from '@/views/Chat.vue'
+import Chat from '@/views/Chat-New.vue'
 import VersionService from '@/services/version'
 
 const router = createRouter({

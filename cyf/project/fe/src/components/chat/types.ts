@@ -38,6 +38,7 @@ export interface ChatSidebarProps {
   collapsed: boolean
   isMobile: boolean
   currentDialogId: number | null
+  selectedModel?: string
 }
 
 export interface ChatSidebarEmits {
