@@ -29,7 +29,7 @@ onMounted(() => {
   background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
 }
 
-* {
+/* * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -269,5 +269,5 @@ body.dark-theme .el-message-box {
 
 body.dark-theme .custom-dark-tooltip .el-tooltip__popper .popper__arrow {
   background-color: #333 !important; /* 修改菱形颜色 */
-}
+} */
 </style>
