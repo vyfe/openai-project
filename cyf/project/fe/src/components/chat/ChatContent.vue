@@ -303,7 +303,6 @@ const loadingHistory = ref(false)
 const inputMessage = ref('')
 const uploadedFile = ref<File | null>(null)
 const showUploadPopover = ref(false)
-const showLatexHelpDialog = ref(false)
 
 // 添加对话标题状态
 const dialogTitle = ref('')
@@ -318,19 +317,6 @@ const isScrolledToBottom = ref(true)
 
 // 控制是否显示回到顶部按钮
 const showBackToTop = ref(false)
-
-// 添加用量查询相关状态
-const showUsagePopover = ref(false)
-const loadingUsage = ref(false)
-const usageData = ref({
-  today_usage: 0,
-  week_usage: 0,
-  total_usage: 0,
-  quota: 0,
-  remaining: 0,
-  currency: 'CNY'
-})
-const usageError = ref('')
 
 const selectedModel = ref(localStorage.getItem('selectedModel') || '')
 

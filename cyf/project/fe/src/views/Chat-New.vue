@@ -149,7 +149,6 @@ import { useI18n } from 'vue-i18n'
 import { Menu, Expand, Fold, Coin, Document, Loading } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
-import { useChat } from '../composables/useChat'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
 
