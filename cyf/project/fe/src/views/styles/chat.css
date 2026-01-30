@@ -242,7 +242,10 @@
 
 .edit-mode-actions {
   display: flex;
-  gap: 8px;
+}
+
+.edit-mode-actions .el-button--small {
+  padding: 2px;
 }
 
 .no-dialogs {

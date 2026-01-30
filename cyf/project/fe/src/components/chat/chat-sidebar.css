@@ -1,0 +1,43 @@
+/* 修复暗色主题下文本按钮的样式 */
+.chat-sidebar :deep(.el-button--default.is-text),
+.chat-sidebar :deep(.el-button--default.is-link) {
+  color: var(--el-text-color-primary);
+}
+
+.chat-sidebar :deep(.el-button--danger.is-text),
+.chat-sidebar :deep(.el-button--danger.is-link) {
+  color: var(--el-color-danger);
+}
+
+.chat-sidebar :deep(.el-button.is-text:hover),
+.chat-sidebar :deep(.el-button.is-link:hover) {
+  background-color: transparent;
+}
+
+/* 确保按钮在暗色模式下有适当的颜色 */
+.dark-theme .chat-sidebar :deep(.el-button--default.is-text),
+.dark-theme .chat-sidebar :deep(.el-button--default.is-link) {
+  color: var(--el-text-color-primary);
+}
+
+.dark-theme .chat-sidebar :deep(.el-button--danger.is-text),
+.dark-theme .chat-sidebar :deep(.el-button--danger.is-link) {
+  color: var(--el-color-danger-light-3);
+}
+
+/* 特定按钮的样式 */
+.chat-sidebar :deep(.edit-mode-btn) {
+  color: var(--el-color-primary);
+}
+
+.chat-sidebar :deep(.refresh-history-btn) {
+  color: var(--el-text-color-primary);
+}
+
+.dark-theme .chat-sidebar :deep(.edit-mode-btn) {
+  color: var(--el-color-primary-light-3);
+}
+
+.dark-theme .chat-sidebar :deep(.refresh-history-btn) {
+  color: var(--el-text-color-primary);
+}

@@ -65,6 +65,16 @@
         </el-button>
       </div>
       <div class="header-right">
+        <!-- 语言切换按钮 -->
+        <el-button
+          @click="toggleLanguage"
+          class="language-toggle-btn"
+          :class="{'rounded-full': true}"
+          size="small"
+        >
+          {{ currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese') }}
+        </el-button>
+
         <el-button @click="toggleTheme">
           {{ formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme') }}
         </el-button>
@@ -82,6 +92,7 @@
         :current-dialog-id="formData.currentDialogId"
         @update:collapsed="updateSidebarCollapsed"
         @load-dialog="loadDialog"
+        @clear-session="clearSession"
         @model-change="handleModelChange"
         @update:current-dialog-id="updateCurrentDialogId"
         v-model="formData"
@@ -142,18 +153,18 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Menu, Expand, Fold, Coin, Document, Loading } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
 
 // 国际化和认证
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -172,19 +183,40 @@ const formData = reactive({
   streamEnabled: JSON.parse(localStorage.getItem('streamEnabled') || 'true'),
   systemPrompt: localStorage.getItem('systemPrompt') || '',
   sendPreference: localStorage.getItem('sendPreference') || 'ctrl_enter',
+
+  // ===== 新增属性 =====
+  // 对话相关
+  dialogTitle: '',
+  dialogHistory: [] as any[],
+  loadingHistory: false,
+  isLoading: false,
+  fontSize: localStorage.getItem('fontSize') || 'medium', // 字体大小控制
+  // 添加状态跟踪用户是否手动滚动离开了底部
+  isScrolledToBottom: true,
+
+  // 模型相关
+  models: [] as Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>,
+  groupedModels: {} as Record<string, any[]>,
+  providers: [] as string[],
+  providerValue: '',
+  modelValue: '',
+  currentModelDesc: '',
+
+  // 角色相关
+  enhancedRoleEnabled: JSON.parse(localStorage.getItem('enhancedRoleEnabled') || 'false'),
+  enhancedRoleGroups: {} as Record<string, any[]>,
+  activeEnhancedGroup: localStorage.getItem('activeEnhancedGroup') || '',
+  selectedEnhancedRole: localStorage.getItem('selectedEnhancedRole') || '',
+  rolePresets: [
+    { id: 'default', name: '默认', prompt: '' },
+    { id: 'translator', name: '翻译', prompt: '你是一个专业的翻译助手，擅长中英文互译，注重语义准确和表达流畅。' },
+    { id: 'writer', name: '写作', prompt: '你是一个专业的写作助手，擅长文章润色、创意写作和文案编辑。' }
+  ] as Array<{ id: string, name: string, prompt: string }>,
+  activeRoleId: localStorage.getItem('activeRoleId') || 'default',
 })
-const showToolbarDrawer = ref(false)
 
-
-// 用于检测软键盘是否激活的状态
-const isKeyboardVisible = ref(false)
-
-// 记录之前的设备类型状态
-const previousIsMobile = ref(false)
-
-// 弹窗控制
-const imagePreviewVisible = ref(false)
-const currentImageUrl = ref('')
+// 添加语言切换相关的响应式变量
+const currentLang = ref(locale.value)
 const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
 
@@ -192,6 +224,20 @@ const showUsagePopover = ref(false)
 const loadingUsage = ref(false)
 const usageError = ref('')
 const usageData = ref<any>(null)
+
+// 持久化监听器（统一在父组件管理）
+watch(() => formData.contextCount, (val) => localStorage.setItem('contextCount', val.toString()))
+watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxResponseChars', val.toString()))
+watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
+watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
+watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
+watch(() => formData.systemPrompt, (val) => localStorage.setItem('systemPrompt', val))
+watch(() => formData.sendPreference, (val) => localStorage.setItem('sendPreference', val))
+watch(() => formData.enhancedRoleEnabled, (val) => localStorage.setItem('enhancedRoleEnabled', JSON.stringify(val)))
+watch(() => formData.activeEnhancedGroup, (val) => localStorage.setItem('activeEnhancedGroup', val))
+watch(() => formData.selectedEnhancedRole, (val) => localStorage.setItem('selectedEnhancedRole', val))
+watch(() => formData.activeRoleId, (val) => localStorage.setItem('activeRoleId', val))
+watch(() => formData.fontSize, (val) => localStorage.setItem('fontSize', val))
 
 // 检测设备类型
 const checkDeviceType = () => {
@@ -235,8 +281,33 @@ const handleDialogCreated = (dialogId: number) => {
 }
 
 // 刷新历史
-const refreshHistory = () => {
-  // 触发侧边栏刷新历史
+const refreshHistory = async () => {
+  await loadDialogHistory()
+}
+
+// 加载对话历史
+const loadDialogHistory = async () => {
+  if (!authStore.user) {
+    ElMessage.warning('请先登录')
+    return
+  }
+
+  formData.loadingHistory = true
+  try {
+    const response: any = await chatAPI.getDialogHistory()
+    if (response && response.content) {
+      formData.dialogHistory = response.content
+      // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
+    } else {
+      formData.dialogHistory = []
+      ElMessage.info('暂无历史对话')
+    }
+  } catch (error: any) {
+    console.error('加载对话历史错误:', error)
+    ElMessage.error('加载对话历史失败')
+  } finally {
+    formData.loadingHistory = false
+  }
 }
 
 // 切换主题
@@ -255,6 +326,14 @@ const logout = () => {
   authStore.logout()
   router.push('/login')
   ElMessage.success(t('chat.logoutSuccess'))
+}
+
+// 切换语言
+const toggleLanguage = () => {
+  const newLocale = currentLang.value === 'zh' ? 'en' : 'zh'
+  locale.value = newLocale
+  currentLang.value = newLocale
+  localStorage.setItem('locale', newLocale)
 }
 
 // 获取用量信息
@@ -279,6 +358,10 @@ const handleResize = () => {
   checkDeviceType()
 }
 
+const clearSession = () => {
+  formData.currentDialogId = null
+}
+
 // 组件挂载
 onMounted(() => {
   checkDeviceType()
@@ -288,6 +371,9 @@ onMounted(() => {
   if (!authStore.isAuthenticated()) {
     router.push('/login')
   }
+
+  // 初始化当前语言
+  currentLang.value = locale.value
 })
 
 // 组件卸载
@@ -296,122 +382,20 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style>
 @import '@/views/styles/chat.css';
 
-.chat-container {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-}
-
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px;
-  height: 60px;
-  border-bottom: 1px solid var(--el-border-color);
-  background: var(--el-bg-color);
-  flex-shrink: 0;
-}
-
-.header-left {
+/* 语言切换按钮样式 */
+.language-toggle-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  gap: 16px;
-}
-
-.sidebar-toggle-btn {
-  display: none;
-}
-
-.header-right {
-  display: flex;
-  gap: 12px;
-}
-
-.chat-main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.sidebar-overlay {
-  position: fixed;
-  top: 60px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 999;
-  display: none;
-}
-
-.latex-help-content ul {
-  padding-left: 20px;
-}
-
-/* 用量弹窗样式 */
-.usage-content {
-  min-height: 100px;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-}
-
-.error {
-  color: var(--el-color-danger);
-  text-align: center;
-  padding: 20px;
-}
-
-.usage-data {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.usage-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px dashed var(--el-border-color);
-}
-
-.usage-item:last-child {
-  border-bottom: none;
-}
-
-.usage-item.low-balance {
-  color: var(--el-color-warning);
-}
-
-.label {
-  font-weight: 500;
-}
-
-.value {
-  font-weight: 600;
-  text-align: right;
-}
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .sidebar-toggle-btn {
-    display: block;
-  }
-
-  .chat-main {
-    position: relative;
-  }
-
-  .sidebar-overlay {
-    display: block;
-  }
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 10px;
+  border-radius: 50% !important;
+  padding: 0;
 }
 </style>
