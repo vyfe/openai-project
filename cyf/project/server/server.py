@@ -18,8 +18,21 @@ from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
 
+# 添加数据库认证相关的导入
+from sqlitelog import user_exists_in_db, verify_user_password, get_user_api_key, get_all_active_users
+
+# 导入 admin 接口（如果存在）
+try:
+    import server_admin
+    admin_app = server_admin.app
+except ImportError:
+    admin_app = None
+    print("警告: server_admin.py 不存在或导入失败，跳过 admin 接口注册")
+
 # 文件URL正则表达式
 FILE_URL_PATTERN = re.compile(r'\[FILE_URL:(https?://[^\]]+)\]')
+
+USE_DB_AUTH = True
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 52428800
@@ -44,35 +57,6 @@ url_list = conf['api']['api_host'].split(',')
 # 解析用户凭据，支持格式：用户名:密码:api_key（api_key可选）
 user_credentials = {}
 user_api_keys = {}  # 存储用户的专属API key
-
-# 支持多行格式的用户配置，每行一个用户信息
-users_config = conf['common']['users']
-# 按行分割，并去除空白行和仅包含空白字符的行
-user_lines = [line.strip() for line in users_config.split('\n') if line.strip()]
-
-for line in user_lines:
-    # 按逗号分割（兼容旧格式）
-    user_entries = line.split(',') if ',' in line else [line]
-
-    for item in user_entries:
-        # 使用最大分割次数2，确保即使密码或API密钥中包含冒号也能正确处理
-        parts = item.strip().split(':', 2)
-        if len(parts) >= 2:
-            username = parts[0].strip()
-            password = parts[1].strip()
-            user_credentials[username] = password
-
-            # 如果有第三个参数，则为该用户的专属API key
-            if len(parts) >= 3 and parts[2].strip():
-                user_api_keys[username] = parts[2].strip()
-            else:
-                user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
-        elif item.strip():  # 如果不是空行
-            username = item.strip()
-            user_credentials[username] = ''
-            user_api_keys[username] = conf['api']['api_key']  # 使用默认API key
-
-user_list = set(user_credentials.keys())
 
 # 模型缓存相关配置
 MODEL_CACHE = {}
@@ -180,6 +164,23 @@ def handle_api_exception(e, user=None, model=None, dialog_content=None):
             "error_type": "GENERAL_ERROR"
         }
 
+
+def generate_sse_error(error_msg, error_type="GENERAL_ERROR"):
+    """
+    生成SSE错误响应的通用函数
+    """
+    error_response = {
+        "success": False,
+        "msg": error_msg,
+        "done": True,
+        "error": {
+            "success": False,
+            "msg": error_msg,
+            "error_type": error_type
+        }
+    }
+    yield f"data: {json.dumps(error_response)}\n\n"
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,  # 设置日志级别
@@ -200,11 +201,36 @@ clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_li
 
 
 def verify_credentials(user, password):
-    if not user or user not in user_credentials:
-        return False, "用户不存在或未授权"
-    if user_credentials[user] != password:
-        return False, "密码错误"
-    return True, None
+    if USE_DB_AUTH:
+        success, error_msg, _ = sqlitelog.verify_user_password(user, password)
+        return success, error_msg
+    else:
+        if not user or user not in user_credentials:
+            return False, "用户不存在或未授权"
+        if user_credentials[user] != password:
+            return False, "密码错误"
+        return True, None
+
+
+def require_auth(f):
+    """用户认证装饰器，用于验证用户凭据"""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = request.values.get('user', '').strip()
+        password = request.values.get('password', '').strip()
+
+        # 验证用户凭据
+        is_valid, error_msg = verify_credentials(user, password)
+        if not is_valid:
+            return {"msg": error_msg}, 200
+
+        # 将用户信息注入到函数参数中
+        kwargs['user'] = user
+        kwargs['password'] = password
+
+        return f(*args, **kwargs)
+    return decorated_function
 
 def random_client() -> OpenAI:
     return clients[random.randint(0, len(url_list) - 1)]
@@ -212,9 +238,13 @@ def random_client() -> OpenAI:
 
 def get_client_for_user(username: str) -> OpenAI:
     """根据用户名获取对应的API客户端"""
-    if username in user_api_keys:
+    if USE_DB_AUTH:
+        api_key = sqlitelog.get_user_api_key(username)
+    else:
+        api_key = user_api_keys.get(username)
+
+    if api_key:
         # 为用户创建具有其专属API key的客户端
-        api_key = user_api_keys[username]
         url = url_list[random.randint(0, len(url_list) - 1)]
         return OpenAI(api_key=api_key, base_url=url)
     else:
@@ -345,7 +375,6 @@ def get_cached_models():
     except Exception as e:
         app.logger.error(f"获取模型列表失败: {str(e)}")
         return []
-        return []
 
 
 def is_valid_model(model_name):
@@ -441,10 +470,11 @@ def login():
 
     if not user:
         return {"success": False, "msg": "用户名不能为空"}, 200
-    if user not in user_credentials:
-        return {"success": False, "msg": "用户名不存在"}, 200
-    if user_credentials[user] != password:
-        return {"success": False, "msg": "密码错误"}, 200
+
+    # 使用统一的验证函数
+    is_valid, error_msg = verify_credentials(user, password)
+    if not is_valid:
+        return {"success": False, "msg": error_msg}, 200
 
     return {"success": True, "msg": "登录成功", "user": user}, 200
 
@@ -493,26 +523,36 @@ def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
     return 'Untitled'
 
 
+def parse_dialog_mode(dialogs, dialog_mode, dialog_title=None):
+    """
+    解析对话模式（single/multi）并返回相应的对话内容和标题
+    """
+    if dialog_mode == 'single':
+        dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
+        title = dialog_title or dialogs
+    elif dialog_mode == 'multi':
+        dialogvo = json.loads(dialogs)
+        title = dialog_title or extract_title_from_dialog(dialogvo)
+    else:
+        return None, "not supported dialog_mode"
+
+    return dialogvo, title
+
+
 @app.route('/never_guess_my_usage/split', methods=['POST', 'GET'])
-def dialog():
+@require_auth
+def dialog(user, password):
     # 对话接口
     app.logger.info(request.values)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
 
         # 获取最大回复token参数
         max_response_tokens = request.values.get('max_response_tokens', type=int)
-
-        # 验证用户凭据
-        is_valid, error_msg = verify_credentials(user, password)
-        if not is_valid:
-            return {"msg": error_msg}, 200
 
         # 检查测试用户限制
         limit_error = check_test_user_limit(user)
@@ -526,14 +566,10 @@ def dialog():
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
         dialog_mode = request.values.get('dialog_mode', 'single')
-        if dialog_mode == 'single':
-            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
-            title = dialog_title or dialogs
-        elif dialog_mode == 'multi':
-            dialogvo = json.loads(dialogs)
-            title = dialog_title or extract_title_from_dialog(dialogvo)
-        else:
-            return {"msg": "not supported dialog_mode"}, 200
+
+        dialogvo, title = parse_dialog_mode(dialogs, dialog_mode, dialog_title)
+        if dialogvo is None:
+            return {"msg": title}, 200
 
         # 构建API调用参数
         api_params = {
@@ -565,12 +601,11 @@ def dialog():
 
 
 @app.route('/never_guess_my_usage/split_stream', methods=['POST', 'GET'])
-def dialog_stream():
+@require_auth
+def dialog_stream(user, password):
     # 对话接口 - 流式响应
     app.logger.info(request.values)
     try:
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
@@ -578,51 +613,11 @@ def dialog_stream():
         # 获取最大回复token参数
         max_response_tokens = request.values.get('max_response_tokens', type=int)
 
-        # 验证用户凭据
-        is_valid, error_msg = verify_credentials(user, password)
-        if not is_valid:
-            # 针对SSE请求，需要返回SSE格式的错误
-            def error_generator():
-                error_response = {
-                    "success": False,
-                    "msg": error_msg,
-                    "done": True,
-                    "error": {
-                        "success": False,
-                        "msg": error_msg,
-                        "error_type": "AUTHENTICATION_ERROR"
-                    }
-                }
-                yield f"data: {json.dumps(error_response)}\n\n"
-
-            return Response(
-                error_generator(),
-                mimetype='text/event-stream',
-                headers={
-                    'Cache-Control': 'no-cache',
-                    'X-Accel-Buffering': 'no',
-                    'Connection': 'close'
-                }
-            )
-
         # 检查测试用户限制
         limit_error = check_test_user_limit(user)
         if not limit_error["success"]:
-            def error_generator(error_msg):
-                error_response = {
-                    "success": False,
-                    "msg": error_msg,
-                    "done": True,
-                    "error": {
-                        "success": False,
-                        "msg": error_msg,
-                        "error_type": "TEST_EXCEED"
-                    }
-                }
-                yield f"data: {json.dumps(error_response)}\n\n"
-
             return Response(
-                error_generator(limit_error["msg"]),
+                generate_sse_error(limit_error["msg"], "TEST_EXCEED"),
                 mimetype='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -635,21 +630,8 @@ def dialog_stream():
         logging.info(f"user:{user}， model: {model}")
         if not is_valid_model(model):
             # 针对SSE请求，需要返回SSE格式的错误
-            def error_generator():
-                error_response = {
-                    "success": False,
-                    "msg": "not supported user or model",
-                    "done": True,
-                    "error": {
-                        "success": False,
-                        "msg": "not supported user or model",
-                        "error_type": "MODEL_ERROR"
-                    }
-                }
-                yield f"data: {json.dumps(error_response)}\n\n"
-
             return Response(
-                error_generator(),
+                generate_sse_error("not supported user or model", "MODEL_ERROR"),
                 mimetype='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -660,29 +642,12 @@ def dialog_stream():
         dialogs = request.values.get('dialog')
         # 对话模式 single=单条 multi=上下文
         dialog_mode = request.values.get('dialog_mode', 'single')
-        if dialog_mode == 'single':
-            dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
-            title = dialog_title or dialogs
-        elif dialog_mode == 'multi':
-            dialogvo = json.loads(dialogs)
-            title = dialog_title or extract_title_from_dialog(dialogvo)
-        else:
-            # 针对SSE请求，需要返回SSE格式的错误
-            def error_generator():
-                error_response = {
-                    "success": False,
-                    "msg": "not supported dialog_mode",
-                    "done": True,
-                    "error": {
-                        "success": False,
-                        "msg": "not supported dialog_mode",
-                        "error_type": "DIALOG_MODE_ERROR"
-                    }
-                }
-                yield f"data: {json.dumps(error_response)}\n\n"
 
+        dialogvo, title = parse_dialog_mode(dialogs, dialog_mode, dialog_title)
+        if dialogvo is None:
+            # 针对SSE请求，需要返回SSE格式的错误
             return Response(
-                error_generator(),
+                generate_sse_error(title, "DIALOG_MODE_ERROR"),
                 mimetype='text/event-stream',
                 headers={
                     'Cache-Control': 'no-cache',
@@ -745,21 +710,8 @@ def dialog_stream():
         app.logger.error(f"流式对话异常: {str(e)}")
 
         # 针对SSE请求，需要返回SSE格式的错误
-        def error_generator(error_msg):
-            error_response = {
-                "success": False,
-                "msg": f"流式对话异常: {error_msg}",
-                "done": True,
-                "error": {
-                    "success": False,
-                    "msg": f"流式对话异常: {error_msg}",
-                    "error_type": "GENERAL_ERROR"
-                }
-            }
-            yield f"data: {json.dumps(error_response)}\n\n"
-
         return Response(
-            error_generator(),
+            generate_sse_error(f"流式对话异常: {str(e)}", "GENERAL_ERROR"),
             mimetype='text/event-stream',
             headers={
                 'Cache-Control': 'no-cache',
@@ -769,22 +721,16 @@ def dialog_stream():
         )
 
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
-def dialog_pic():
+@require_auth
+def dialog_pic(user, password):
     # 图片对话接口
     app.logger.info(request.values)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
         model = request.values.get('model')
         # 获取前端传入的对话标题
         dialog_title = request.values.get('dialog_title')
-
-        # 验证用户凭据
-        is_valid, error_msg = verify_credentials(user, password)
-        if not is_valid:
-            return {"msg": error_msg}, 200
 
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
@@ -860,16 +806,9 @@ def dialog_pic():
         return {"msg": "api return json not ok"}, 200
 
 @app.route('/never_guess_my_usage/split_his', methods=['POST'])
-def dialog_his():
+@require_auth
+def dialog_his(user, password):
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
-    user = request.values.get('user', '').strip()
-    password = request.values.get('password', '').strip()
-
-    # 验证用户凭据
-    is_valid, error_msg = verify_credentials(user, password)
-    if not is_valid:
-        return {"msg": error_msg}, 200
-
     app.logger.info(user)
     min_time_str = (datetime.now() - timedelta(days=7)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
@@ -877,17 +816,11 @@ def dialog_his():
     return {"content": dialog_list}, 200
 
 @app.route('/never_guess_my_usage/split_his_content', methods=['POST'])
-def dialog_content():
+@require_auth
+def dialog_content(user, password):
     try:
         # 根据用户名+id获取历史纪录详情context
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
         id = request.values.get('dialogId')
-
-        # 验证用户凭据
-        is_valid, error_msg = verify_credentials(user, password)
-        if not is_valid:
-            return {"msg": error_msg}, 200
 
         app.logger.info(user + "," + id)
         # 理想状态下是列表
@@ -899,16 +832,10 @@ def dialog_content():
 
 
 @app.route('/never_guess_my_usage/usage', methods=['GET'])
-def get_usage():
+@require_auth
+def get_usage(user, password):
     """获取用户用量信息"""
-    user = request.values.get('user', '').strip()
-    password = request.values.get('password', '').strip()
-
-    # 验证用户凭据
-    is_valid, error_msg = verify_credentials(user, password)
-    if not is_valid:
-        return {"success": False, "msg": error_msg}, 200
-
+    # 验证用户凭据在装饰器中已经完成
     # 检查用户是否有专属API Key
     if user not in user_api_keys or not user_api_keys[user]:
         return {"success": False, "msg": "用户没有配置API密钥"}, 200
@@ -1058,16 +985,10 @@ def get_usage():
 
 
 @app.route('/never_guess_my_usage/split_his_delete', methods=['POST'])
-def dialog_delete():
+@require_auth
+def dialog_delete(user, password):
     """删除用户的历史会话（支持批量删除）"""
-    user = request.values.get('user', '').strip()
-    password = request.values.get('password', '').strip()
     dialog_ids_str = request.values.get('dialog_ids', '[]')
-
-    # 验证用户凭据
-    is_valid, error_msg = verify_credentials(user, password)
-    if not is_valid:
-        return {"success": False, "msg": error_msg}
 
     # 解析并验证 dialog_ids
     dialog_ids = json.loads(dialog_ids_str)
@@ -1078,17 +999,11 @@ def dialog_delete():
 
 
 @app.route('/never_guess_my_usage/update_dialog_title', methods=['POST'])
-def update_dialog_title():
+@require_auth
+def update_dialog_title(user, password):
     """更新对话标题"""
-    user = request.values.get('user', '').strip()
-    password = request.values.get('password', '').strip()
     dialog_id = request.values.get('dialog_id', type=int)
     new_title = request.values.get('new_title', '').strip()
-
-    # 验证用户凭据
-    is_valid, error_msg = verify_credentials(user, password)
-    if not is_valid:
-        return {"success": False, "msg": error_msg}, 200
 
     # 验证参数
     if dialog_id is None or not new_title:
@@ -1122,12 +1037,37 @@ sqlitelog.init_db()
 
 # 初始化模型元数据
 try:
-    from init_model_meta import init_model_meta_data
+    from init.init_model_meta import init_model_meta_data
     init_model_meta_data()
 except ImportError:
     print("警告: init_model_meta.py 文件不存在或导入失败，跳过模型元数据初始化")
 except Exception as e:
     print(f"模型元数据初始化过程中发生错误: {e}")
+
+# 注册 admin 路由（如果存在）
+if admin_app:
+    print("正在注册 admin 路由...")
+    # 将 admin 路由复制到主应用
+    rule_count = 0
+    for rule in admin_app.url_map.iter_rules():
+        try:
+            # 获取视图函数
+            view_func = admin_app.view_functions[rule.endpoint]
+            # 注册到主应用，添加 /admin_api 前缀
+            admin_rule = rule.rule
+            if not admin_rule.startswith('/admin_api'):
+                admin_rule = '/admin_api' + admin_rule
+            # 使用新的 endpoint 名称避免冲突
+            new_endpoint = f"admin_{rule.endpoint}"
+            print(f"尝试注册路由: {admin_rule} -> {new_endpoint} (原endpoint: {rule.endpoint})")
+            app.add_url_rule(admin_rule, endpoint=new_endpoint, view_func=view_func, methods=rule.methods)
+            rule_count += 1
+            print(f"成功注册路由: {admin_rule}")
+        except Exception as e:
+            print(f"跳过路由 {rule.rule}: {e}")
+            import traceback
+            traceback.print_exc()
+    print(f"成功注册 {rule_count} 个 admin 路由")
 
 if __name__ == '__main__':
     # 上传文件夹初始化

@@ -2,6 +2,8 @@
 import configparser
 import json
 from datetime import datetime, date
+import hashlib
+import secrets
 
 from peewee import *
 
@@ -90,10 +92,65 @@ class TestLimit(Model):
             (('user_ip',), True),  # 定义唯一索引，确保每个IP只有一条记录
         )
 
+class User(Model):
+    username = CharField(unique=True)      # 用户名
+    password_hash = CharField()            # 密码哈希值
+    salt = CharField()                     # 密码盐值
+    api_key = CharField(null=True)         # 用户专属API密钥
+    role = CharField(default='user') # 账户是否激活
+    is_active = BooleanField(default=True) # 账户是否激活
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        database = db
+        indexes = ((('username',), True),)
+
+    @staticmethod
+    def hash_password(password: str, salt: str = None) -> tuple:
+        if salt is None:
+            salt = secrets.token_hex(16)
+        password_hash = hashlib.sha256((password + salt).encode()).hexdigest()
+        return password_hash, salt
+
+    def verify_password(self, password: str) -> bool:
+        password_hash, _ = User.hash_password(password, self.salt)
+        return password_hash == self.password_hash
+
+class Notification(Model):
+    title = CharField()  # 通知标题
+    content = TextField()  # 通知内容
+    publish_time = DateTimeField(default=datetime.now)  # 发布时间
+    status = CharField(default='active')  # 状态：active-有效，inactive-无效
+    priority = IntegerField(default=0)  # 优先级，数字越大优先级越高
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        database = db
+        indexes = (
+            (('status',), False),  # 状态索引
+            (('priority',), False),  # 优先级索引
+            (('publish_time',), False),  # 发布时间索引
+        )
+
+    def to_dict(self):
+        """将通知实例转换为字典格式"""
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'publish_time': self.publish_time.strftime('%Y-%m-%d %H:%M:%S') if self.publish_time else None,
+            'status': self.status,
+            'priority': self.priority,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
+            'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None
+        }
+
 def init_db():
     # 创建表
     db.connect()
-    db.create_tables([Log, Dialog, ModelMeta, SystemPrompt, TestLimit], safe=True)
+    db.create_tables([Log, Dialog, ModelMeta, SystemPrompt, TestLimit, User, Notification], safe=True)
 
 
 def get_or_create_test_limit(user_ip: str, default_limit: int) -> TestLimit:
@@ -233,7 +290,125 @@ def get_system_prompts_by_group():
 def message_query(sql: str, params=None):
     return json.dumps(db.execute_sql(sql, params).fetchall())
 
+def get_user_by_username(username: str, role: str):
+    try:
+        return User.get(User.username == username, User.is_active == True, User.role == role)
+    except DoesNotExist:
+        return None
 
+def verify_user_password(username: str, password: str, role: str = 'user') -> tuple:
+    user = get_user_by_username(username, role)
+    if not user:
+        return False, "用户不存在或未授权", None
+    if not user.verify_password(password):
+        return False, "密码错误", None
+    return True, None, user
+
+def create_user(username: str, password: str, api_key: str = None):
+    password_hash, salt = User.hash_password(password)
+    return User.create(username=username, password_hash=password_hash,
+                       salt=salt, api_key=api_key, is_active=True)
+
+def get_user_api_key(username: str) -> str:
+    user = get_user_by_username(username)
+    return user.api_key if user else None
+
+def get_all_active_users() -> list:
+    return [u.username for u in User.select().where(User.is_active == True)]
+
+def user_exists_in_db() -> bool:
+    return User.select().count() > 0
+
+
+def get_notification_list(status: str = None, limit: int = None, offset: int = None):
+    """
+    查询通知公告列表
+    :param status: 状态过滤（可选）
+    :param limit: 限制数量（可选）
+    :param offset: 偏移量（可选）
+    :return: 通知列表
+    """
+    query = Notification.select().order_by(Notification.priority.desc(), Notification.publish_time.desc())
+    
+    if status is not None:
+        query = query.where(Notification.status == status)
+    
+    if limit is not None:
+        query = query.limit(limit)
+    
+    if offset is not None:
+        query = query.offset(offset)
+    
+    if query.exists():
+        return [notification.to_dict() for notification in query.iterator()]
+    else:
+        return []
+
+
+def get_active_notifications(limit: int = 10):
+    """
+    获取有效的通知公告
+    :param limit: 限制数量
+    :return: 有效通知列表
+    """
+    return get_notification_list(status='active', limit=limit)
+
+
+def create_notification(title: str, content: str, priority: int = 0, status: str = 'active') -> Notification:
+    """
+    创建通知公告
+    :param title: 通知标题
+    :param content: 通知内容
+    :param priority: 优先级
+    :param status: 状态
+    :return: 通知实例
+    """
+    return Notification.create(
+        title=title,
+        content=content,
+        priority=priority,
+        status=status
+    )
+
+
+def update_notification(notification_id: int, **kwargs) -> bool:
+    """
+    更新通知公告
+    :param notification_id: 通知ID
+    :param kwargs: 更新的字段
+    :return: 是否成功
+    """
+    try:
+        notification = Notification.get_by_id(notification_id)
+        
+        if 'title' in kwargs:
+            notification.title = kwargs['title']
+        if 'content' in kwargs:
+            notification.content = kwargs['content']
+        if 'priority' in kwargs:
+            notification.priority = kwargs['priority']
+        if 'status' in kwargs:
+            notification.status = kwargs['status']
+        
+        notification.updated_at = datetime.now()
+        notification.save()
+        return True
+    except DoesNotExist:
+        return False
+
+
+def delete_notification(notification_id: int) -> bool:
+    """
+    删除通知公告
+    :param notification_id: 通知ID
+    :return: 是否成功
+    """
+    try:
+        notification = Notification.get_by_id(notification_id)
+        notification.delete_instance()
+        return True
+    except DoesNotExist:
+        return False
 
 
 

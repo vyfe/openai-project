@@ -120,9 +120,6 @@
 
 /* 桌面端隐藏移动端按钮组 */
 @media (min-width: 768px) {
-  .header-mobile-buttons {
-    display: none;
-  }
 
   .header-left-flex {
     display: flex;
