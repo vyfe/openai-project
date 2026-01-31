@@ -1,0 +1,348 @@
+/* InputArea组件的样式 */
+.input-area {
+  padding: 20px;
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
+  flex-shrink: 0; /* 防止输入区域被压缩 */
+}
+
+.input-container {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.message-input {
+  flex: 1;
+}
+
+.message-input textarea {
+  background: rgba(232, 240, 255, 0.3);
+  border: 1px solid #c0d8e8;
+  border-radius: 12px;
+  resize: none;
+  padding: 12px; /* 添加内边距 */
+  font-family: inherit; /* 使用继承字体 */
+  font-size: 14px; /* 明确设置字体大小 */
+  line-height: 1.5; /* 提升行高 */
+  transition: border-color 0.2s, box-shadow 0.2s; /* 添加平滑过渡效果 */
+  /* 为textarea添加滚动条样式 */
+  overflow-y: auto;
+}
+
+/* 为主输入区域textarea添加滚动条样式 */
+.message-input textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.message-input textarea::-webkit-scrollbar-track {
+  background: rgba(232, 240, 255, 0.3);
+  border-radius: 3px;
+}
+
+.message-input textarea::-webkit-scrollbar-thumb {
+  background: rgba(144, 180, 248, 0.5);
+  border-radius: 3px;
+}
+
+.message-input textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 180, 248, 0.7);
+}
+
+.message-input textarea:focus {
+  border-color: #90d8ff;
+  box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
+}
+
+/* 按钮编组容器 */
+.button-group {
+  display: inline-flex;
+  gap: 4px; /* 缩小组内按钮间隙 */
+  border-radius: 8px; /* 圆角边框 */
+  overflow: hidden; /* 确保内部元素圆角一致 */
+  box-shadow: 0 0 0 1px rgba(144, 180, 248, 0.5); /* 添加统一边框 */
+}
+
+.button-group .el-button {
+  margin: 0; /* 重置外边距 */
+  border-radius: 0 !important; /* 让中间按钮没有圆角 */
+  border: none; /* 移除单个按钮的边框 */
+  box-shadow: none; /* 移除阴影以避免重叠 */
+  height: 42px; /* 设置固定高度确保一致 */
+  min-width: 42px; /* 设置最小宽度，使圆形按钮也能正确显示 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-group .el-button:first-child {
+  border-radius: 7px 0 0 7px !important; /* 第一个按钮左圆角 */
+}
+
+.button-group .el-button:last-child {
+  border-radius: 0 7px 7px 0 !important; /* 最后一个按钮右圆角 */
+}
+
+.button-group .el-button .el-icon {
+  margin-right: 0; /* 移除图标右边距，让图标居中 */
+}
+
+/* 特别设置上传按钮样式，移除circle属性以匹配高度 */
+.button-group .upload-trigger-btn {
+  width: 42px; /* 设置与高度相同，保持正方形 */
+}
+
+/* 确保移动端输入区域的按钮都可见 */
+.upload-trigger-btn {
+  align-self: flex-start;
+  margin-bottom: 12px;
+}
+
+.upload-popover-content {
+  padding: 12px;
+}
+
+.upload-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+/* 针对移动端设备的样式 */
+@media (max-width: 768px) {
+  .input-area {
+    padding: 12px; /* 减少移动端的内边距 */
+    position: relative; /* 确保定位正常 */
+  }
+
+  .input-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .input-actions {
+    flex-direction: row;
+    align-items: center;
+    margin-top: 12px;
+    justify-content: flex-start; /* 修改：让按钮靠左对齐而不是靠右 */
+    width: 100%; /* 确保动作区占满整行 */
+    flex-wrap: wrap; /* 允许换行以适应小屏幕 */
+  }
+
+  /* 移动端按钮组样式调整 */
+  .button-group {
+    box-shadow: 0 0 0 1px rgba(144, 180, 248, 0.3); /* 轻微边框 */
+    border-radius: 6px; /* 适当减小圆角 */
+    height: auto; /* 允许自适应高度 */
+  }
+
+  .button-group .el-button {
+    height: 40px; /* 移动端稍微减小高度 */
+    min-width: 40px;
+  }
+
+  .upload-trigger-btn {
+    align-self: flex-end;
+    margin-bottom: 0;
+  }
+
+  .input-actions .el-button + .el-button {
+    margin-left: 0;
+  }
+
+  /* 确保输入框和按钮都能适应小屏幕 */
+  .input-area {
+    padding: 12px;
+  }
+
+  /* 确保按钮不会因为太宽而挤压输入框 */
+  .input-actions .el-button {
+    flex-shrink: 0;
+  }
+
+  /* 确保发送按钮在移动端可见 */
+  .input-actions .el-button--primary {
+    min-width: 60px; /* 确保发送按钮有最小宽度 */
+  }
+}
+
+/* 移动端键盘未弹出时的样式，确保输入区域可见 */
+.input-area-mobile:not(.keyboard-visible) {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  padding: 12px;
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
+  border-radius: 0 0 0 0; /* 标准圆角 */
+  box-shadow: none;
+  transform: none;
+  width: 100%;
+  flex-shrink: 0; /* 防止输入区域被压缩 */
+}
+
+.input-area-mobile:not(.keyboard-visible) .input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.input-area-mobile:not(.keyboard-visible) .input-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+/* 针对更小屏幕的优化 */
+@media (max-width: 480px) {
+  .input-actions {
+    width: 100%;
+  }
+
+  .input-actions .el-button {
+    width: 100%;
+    max-width: 100%;
+    min-width: auto;
+  }
+
+  /* 在小屏幕上，按钮组变为垂直排列 */
+  .button-group {
+    flex-direction: row;
+    box-shadow: 0 0 0 1px rgba(144, 180, 248, 0.3);
+    border-radius: 6px;
+    width: auto; /* 让按钮组宽度自适应 */
+  }
+
+  .button-group .el-button {
+    width: 100%; /* 在小屏幕上按钮占满整个宽度 */
+    border-radius: 0 !important;
+    height: 44px; /* 在小屏幕上设置合适的高度 */
+  }
+
+  .button-group .el-button:first-child {
+    border-radius: 5px 5px 0 0 !important; /* 第一个按钮上下圆角 */
+  }
+
+  .button-group .el-button:last-child {
+    border-radius: 0 0 5px 5px !important; /* 最后一个按钮上下圆角 */
+  }
+}
+
+/* 移动端输入法弹出时的特殊样式 */
+.input-area-mobile.keyboard-visible {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000; /* 确保输入区域始终在最上层 */
+  background: white; /* 在键盘弹出时使用纯白色背景，防止透明度问题 */
+  padding: 8px 12px;
+  border-top: 1px solid #ccc;
+  border-radius: 0; /* 移除圆角，适应屏幕边缘 */
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1); /* 添加阴影，使其更突出 */
+  transform: translateZ(0); /* 启用硬件加速，提高渲染性能 */
+}
+
+.input-area-mobile.keyboard-visible .input-container {
+  flex-direction: row; /* 键盘弹出时恢复水平布局，节省空间 */
+  align-items: flex-end;
+  gap: 8px; /* 减小输入框和按钮之间的间距 */
+}
+
+.input-area-mobile.keyboard-visible .message-input {
+  flex: 1; /* 确保输入框占据剩余空间 */
+}
+
+.input-area-mobile.keyboard-visible .input-actions {
+  margin-top: 0;
+  margin-left: 8px; /* 减小左边距 */
+  display: flex;
+  align-items: flex-end; /* 让按钮与输入框底部对齐 */
+}
+
+.input-area-mobile.keyboard-visible .button-group {
+  display: flex;
+  flex-direction: column; /* 键盘弹出时按钮组改为垂直排列 */
+  gap: 2px; /* 减小按钮间距 */
+}
+
+.input-area-mobile.keyboard-visible .button-group .el-button {
+  width: 100%; /* 让按钮充满其容器 */
+  min-width: auto; /* 重置最小宽度 */
+  border-radius: 6px !important; /* 统一按钮圆角 */
+  margin: 0; /* 重置按钮外边距 */
+}
+
+.input-area-mobile.keyboard-visible .button-group .el-button:first-child {
+  border-radius: 6px 6px 0 0 !important; /* 第一个按钮上下圆角 */
+}
+
+.input-area-mobile.keyboard-visible .button-group .el-button:last-child {
+  border-radius: 0 0 6px 6px !important; /* 最后一个按钮上下圆角 */
+}
+
+/* 在小屏幕且键盘弹出时的适配 */
+@media (max-width: 480px) {
+  .input-area-mobile.keyboard-visible .input-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .input-area-mobile.keyboard-visible .input-actions {
+    margin-top: 8px;
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .input-area-mobile.keyboard-visible .button-group {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .input-area-mobile.keyboard-visible .button-group .el-button {
+    width: 100%;
+    height: 40px;
+  }
+}
+
+/* 永远固定在底部的样式 - 不受键盘弹出影响 */
+.input-area-mobile.always-fixed-bottom {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  border-top: 1px solid rgba(144, 180, 248, 0.3) !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
+  padding: 12px !important;
+  border-radius: 0 !important;
+  transform: translateZ(0) !important; /* 启用硬件加速 */
+}
+
+.input-area-mobile.always-fixed-bottom .input-container {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.input-area-mobile.always-fixed-bottom .input-actions {
+  width: 100%;
+  margin-top: 8px;
+  margin-left: 0;
+}
+
+.input-area-mobile.always-fixed-bottom .button-group {
+  width: 100%;
+}
+
+/* 在小屏幕时，按钮组改为两列 */
+.input-area-mobile.always-fixed-bottom .button-group .el-button {
+  width: 42.5%;
+  margin-left: 5%;
+}

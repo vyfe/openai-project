@@ -6,22 +6,22 @@
       <div v-if="!formData.isMobile" class="toolbar-desktop">
         <!-- 新增：对话标题编辑区域 -->
         <div class="dialog-title-editor">
-          <el-input v-model="formData.dialogTitle" placeholder="请输入对话标题..." size="small"/>
+          <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="small"/>
           <!-- 更新标题按钮：当有当前对话ID时显示 -->
           <el-button v-if="formData.currentDialogId" type="primary" size="small" @click="updateDialogTitle"
             class="update-title-btn" :disabled="!formData.dialogTitle.trim()">
-            更新标题
+            {{ t('chat.updateDialogTitle') }}
           </el-button>
         </div>
 
         <!-- 新增：字体大小控制 -->
         <div class="font-size-controls">
-          <span class="font-size-label">文字大小:</span>
-          <el-tooltip content="文字大小" placement="bottom">
+          <span class="font-size-label">{{ t('chat.fontSizeLabel') }}:</span>
+          <el-tooltip :content="t('chat.fontSizeLabel')" placement="bottom">
             <el-radio-group v-model="fontSize" size="small" @change="handleFontSizeChange">
-              <el-radio-button label="small">小</el-radio-button>
-              <el-radio-button label="medium">中</el-radio-button>
-              <el-radio-button label="large">大</el-radio-button>
+              <el-radio-button label="small">{{ t('chat.small') }}</el-radio-button>
+              <el-radio-button label="medium">{{ t('chat.medium') }}</el-radio-button>
+              <el-radio-button label="large">{{ t('chat.large') }}</el-radio-button>
             </el-radio-group>
           </el-tooltip>
         </div>
@@ -31,7 +31,7 @@
             <el-icon>
               <CirclePlus />
             </el-icon>
-            开启另一个会话
+            {{ t('chat.openAnotherSession') }}
           </el-button>
 
           <!-- 新增：导出对话截屏按钮 -->
@@ -39,13 +39,25 @@
             <el-icon>
               <Download />
             </el-icon>
-            导出对话截图
+            {{ t('chat.exportScreenshot') }}
           </el-button>
         </div>
       </div>
 
       <!-- 移动端：显示抽屉切换按钮 -->
       <div v-else class="toolbar-mobile">
+        <!-- 回到顶部按钮 -->
+        <div v-if="showBackToTop" class="back-to-top-btn" @click="scrollToTop">
+          <el-icon>
+            <Top />
+          </el-icon>
+        </div>
+        <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
+        <div class="back-to-top-btn input-btn" @click="toggleMobileInput">
+          <el-icon>
+            <component :is="showMobileInput ? 'Hide' : 'View'" />
+          </el-icon>
+        </div>
         <el-button icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
       </div>
 
@@ -55,22 +67,22 @@
         <div class="mobile-toolbar-content">
           <!-- 对话标题编辑区域 -->
           <div class="dialog-title-editor">
-            <span class="mobile-form-label">对话标题</span>
-            <el-input v-model="formData.dialogTitle" placeholder="请输入对话标题..." size="default" />
+            <span class="mobile-form-label">{{ t('chat.dialogTitle') }}</span>
+            <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="default" />
             <!-- 更新标题按钮：当有当前对话ID时显示 -->
             <el-button v-if="formData.currentDialogId" type="primary" size="default" @click="updateDialogTitle"
               class="update-title-btn-mobile" :disabled="!formData.dialogTitle.trim()">
-              更新标题
+              {{ t('chat.updateDialogTitle') }}
             </el-button>
           </div>
 
           <!-- 字体大小控制 -->
           <div class="font-size-controls">
-            <span class="mobile-form-label">文字大小</span>
+            <span class="mobile-form-label">{{ t('chat.fontSizeLabel') }}</span>
             <el-radio-group v-model="fontSize" size="default" @change="handleFontSizeChange">
-              <el-radio-button label="small">小</el-radio-button>
-              <el-radio-button label="medium">中</el-radio-button>
-              <el-radio-button label="large">大</el-radio-button>
+              <el-radio-button label="small">{{ t('chat.small') }}</el-radio-button>
+              <el-radio-button label="medium">{{ t('chat.medium') }}</el-radio-button>
+              <el-radio-button label="large">{{ t('chat.large') }}</el-radio-button>
             </el-radio-group>
           </div>
 
@@ -80,7 +92,7 @@
               <el-icon>
                 <CirclePlus />
               </el-icon>
-              开启另一个会话
+              {{ t('chat.openAnotherSession') }}
             </el-button>
 
             <!-- 导出对话截屏按钮 -->
@@ -88,13 +100,17 @@
               <el-icon>
                 <Download />
               </el-icon>
-              导出对话截图
+              {{ t('chat.exportScreenshot') }}
             </el-button>
           </div>
         </div>
       </el-drawer>
     </div>
     <div class="messages-container" :class="'font-' + fontSize" ref="messagesContainer">
+      <!-- 对话区域内嵌水印（用于长截图） -->
+      <div class="message-author">
+        <p v-if="formData.dialogTitle" class="conversation-title">{{ formData.dialogTitle }}</p>
+      </div>
       <div v-for="(message, index) in messages" :key="index" :class="['message', message.type]">
         <div class="message-avatar">
           <el-icon v-if="message.type === 'user'">
@@ -106,7 +122,7 @@
         </div>
         <div class="message-content">
           <div class="message-header">
-            <span class="message-author">{{ message.type === 'user' ? authStore.user : 'AI助手' }}</span>
+            <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') }}</span>
             <span class="message-time">{{ message.time }}</span>
             <div class="message-actions">
               <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(message.content)" />
@@ -197,7 +213,6 @@
         </div>
       </div>
 
-      <!-- 对话区域内嵌水印（用于长截图） -->
       <div class="copyright-watermark-inline">
         <span>© 2026 vyfe | aichat.609088523.xyz | vx:pata_data_studio</span>
       </div>
@@ -213,44 +228,45 @@
       </div>
 
       <!-- 回到顶部按钮 -->
-      <div v-if="showBackToTop" class="back-to-top-btn" @click="scrollToTop">
+      <div v-if="showBackToTop" class="back-to-top-btn-normal" @click="scrollToTop">
         <el-icon>
           <Top />
         </el-icon>
       </div>
+      <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
+      <!-- <div v-if="formData.isMobile" class="toggle-input-btn" @click="toggleMobileInput">
+        <el-icon>
+          <component :is="showMobileInput ? 'Hide' : 'View'" />
+        </el-icon>
+      </div> -->
     </div>
 
     <!-- 输入区域 -->
-    <div class="input-area">
-      <div class="input-container">
-        <el-input v-model="inputMessage" type="textarea" :rows="3"
-          :placeholder="`请输入您的问题... (${formData.sendPreference === 'enter' ? '回车发送，Shift+回车换行' : '回车换行，Ctrl+回车发送'})`"
-          class="message-input" @keydown="handleKeydown" />
-        <div class="input-actions">
-          <!-- 文件上传按钮移到输入框上方，右侧 -->
-          <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
-            <template #reference>
-              <el-button class="upload-trigger-btn" :icon="Plus" circle size="large" />
-            </template>
-            <div class="upload-popover-content">
-              <div class="upload-popover-header">
-                <span>上传文件</span>
-                <el-button v-if="uploadedFile" type="danger" size="small" text @click="clearFile">清除</el-button>
-              </div>
-              <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
-                accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.md,.markdown">
-                <el-icon><upload-filled /></el-icon>
-                <div class="el-upload__text">拖拽或点击上传</div>
-              </el-upload>
-            </div>
-          </el-popover>
+    <InputArea
+      v-if="!formData.isMobile || showMobileInput"
+      v-model="inputMessage"
+      :send-preference="formData.sendPreference"
+      :is-loading="isLoading"
+      :selected-model="formData.selectedModel"
+      :context-count="formData.contextCount"
+      :enhanced-role-enabled="formData.enhancedRoleEnabled"
+      :system-prompt="formData.systemPrompt"
+      :active-enhanced-group="formData.activeEnhancedGroup"
+      :selected-enhanced-role="formData.selectedEnhancedRole"
+      :enhanced-role-groups="formData.enhancedRoleGroups"
+      :stream-enabled="formData.streamEnabled"
+      :max-response-chars="formData.maxResponseChars"
+      :dialog-title="formData.dialogTitle"
+      :current-dialog-id="formData.currentDialogId"
+      :is-scrolled-to-bottom="formData.isScrolledToBottom"
+      :is-mobile="formData.isMobile"
+      :font-size="fontSize"
+      @send-message="handleSendMessage"
+      @file-change="handleFileChange"
+      @clear-file="clearFile"
+    />
 
-          <el-button type="primary" :icon="Position" :disabled="!inputMessage.trim() || formData.isLoading" @click="sendMessage">
-            发送
-          </el-button>
-        </div>
-      </div>
-    </div>
+    <!-- TODO(human): 实现移动端输入框按钮的状态指示器，例如添加一个小标签显示当前状态（如"隐藏输入框"或"显示输入框"） -->
   </div>
   <!-- 图片预览弹窗 -->
   <el-dialog
@@ -268,7 +284,8 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, ElDrawer } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import {
   UploadFilled,
   UserFilled,
@@ -282,10 +299,13 @@ import {
   Top,
   Link,
   CaretRight,
+  Hide,
+  View,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
 import { FormData } from '@/utils/main'
+import InputArea from './InputArea.vue' // 新增：导入InputArea组件
 import 'highlight.js/styles/github-dark.css'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -318,7 +338,9 @@ const loadDialogContent = async (dialogId: number) => {
       // 这里需要根据实际API返回的格式来处理
       if (Array.isArray(context)) {
         // 如果返回的是消息数组
-        context.forEach((msg: any) => {
+        // 过滤掉role为"system"的消息，不显示在聊天界面上
+        const filteredContext = filterSystemMessages(context);
+        filteredContext.forEach((msg: any) => {
           messages.push({
             type: msg.role === 'user' ? 'user' : 'ai',
             content: msg.content,
@@ -330,7 +352,9 @@ const loadDialogContent = async (dialogId: number) => {
         try {
           const contentObj = JSON.parse(context)
           if (Array.isArray(contentObj)) {
-            contentObj.forEach((msg: any) => {
+            // 过滤掉role为"system"的消息
+            const filteredContentObj = filterSystemMessages(contentObj);
+            filteredContentObj.forEach((msg: any) => {
               messages.push({
                 type: msg.role === 'user' ? 'user' : 'ai',
                 content: msg.content,
@@ -360,6 +384,45 @@ const loadDialogContent = async (dialogId: number) => {
 defineExpose({
   loadDialogContent
 })
+
+// 过滤掉role为"system"的消息的辅助函数
+const filterSystemMessages = (messages: any[]) => {
+  return messages.filter((msg: any) => msg.role !== 'system')
+}
+
+// 统一的异常消息过滤函数
+const filterAbnormalMessages = (messages: any[], options: { excludeIndex?: number, includeCurrent?: boolean } = {}) => {
+  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？';
+  return messages.filter((msg, msgIndex) => {
+    // 保留欢迎消息
+    if (msg.type === 'ai' && msg.content === welcomeMessage) {
+      return true;
+    }
+
+    // 如果指定了excludeIndex，跳过该索引的消息（用于重试等场景）
+    if (options.excludeIndex !== undefined && msgIndex === options.excludeIndex) {
+      return options.includeCurrent || false;
+    }
+
+    // 过滤掉带有错误标记的消息
+    if (msg.isError) {
+      return false;
+    }
+    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
+    if (msg.type === 'ai' && msg.content === '') {
+      return false;
+    }
+    // 过滤掉带有截断标记的消息
+    if (msg.isTruncated) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// 统一的欢迎消息常量
+const WELCOME_MESSAGE = '您好！我是AI助手，有什么可以帮助您的吗？';
+
 // 待发送的消息队列
 const messages = reactive<Array<{
   type: 'user' | 'ai'
@@ -376,6 +439,9 @@ const messages = reactive<Array<{
     time: getCurrentTime()
   }
 ])
+
+// 国际化
+const { t } = useI18n()
 
 // 自定义 renderer 用于处理数学公式
 const mathRenderer = {
@@ -431,9 +497,12 @@ const fontSize = computed({
 // 控制是否显示回到顶部按钮
 const showBackToTop = ref(false)
 
+
 // 添加侧边栏折叠状态
 const isMobile = ref(false)
 const showToolbarDrawer = ref(false)
+// 控制移动端输入框显示/隐藏
+const showMobileInput = ref(true)
 
 // 记录之前的设备类型状态
 const previousIsMobile = ref(false)
@@ -441,6 +510,26 @@ const messagesContainer = ref<HTMLElement>()
 // 图片预览相关状态
 const previewImageUrl = ref('')
 const showImagePreview = ref(false)
+
+// 添加键盘可见性检测
+const isKeyboardVisible = ref(false)
+const originalViewportHeight = ref(window.innerHeight)
+
+// 检测视口高度变化以判断软键盘是否弹出
+const checkKeyboardVisibility = () => {
+  const currentHeight = window.innerHeight
+  const heightDifference = originalViewportHeight.value - currentHeight
+
+  // 如果视口高度减少超过150px，我们认为键盘弹出了
+  isKeyboardVisible.value = heightDifference > 150
+}
+
+// 监听视口变化以检测键盘状态
+const handleViewportChange = () => {
+  if (formData.isMobile) {
+    checkKeyboardVisibility()
+  }
+}
 
 // 当用户点击更新标题按钮时
 const updateDialogTitle = async () => {
@@ -496,16 +585,9 @@ const clearCurrentSession = () => {
 // 导出对话截屏（长截图）
 const exportConversationScreenshot = async () => {
   try {
-    let html2canvas: any;
-    try {
-      // 尝试动态导入 html2canvas
-      const html2canvasModule = await import('html2canvas');
-      html2canvas = html2canvasModule.default || html2canvasModule;
-    } catch (e) {
-      // 如果没有安装，提示用户安装
-      ElMessage.warning('截图功能需要安装 html2canvas 库：npm install html2canvas');
-      return;
-    }
+    // 动态导入html-to-image库
+    const htmlToImageModule = await import('html-to-image');
+    const { toPng } = htmlToImageModule;
 
     const messagesContainer = document.querySelector('.messages-container') as HTMLElement;
     if (!messagesContainer) {
@@ -513,57 +595,48 @@ const exportConversationScreenshot = async () => {
       return;
     }
 
-    // 根据当前主题确定背景色
-    const isDarkTheme = document.body.classList.contains('dark-theme');
-    const bgColor = isDarkTheme ? '#1a1a1a' : '#f9f7f0';
+    // 保存原始样式
+    const originalStyles = {
+      overflow: messagesContainer.style.overflow,
+      maxHeight: messagesContainer.style.maxHeight,
+      height: messagesContainer.style.height,
+    };
 
-    // 创建一个临时的容器来存放完整的消息列表
-    const tempContainer = document.createElement('div');
-    tempContainer.className = 'messages-container-temp';
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px'; // 隐藏元素
-    tempContainer.style.width = messagesContainer.clientWidth + 'px';
-    tempContainer.style.backgroundColor = bgColor;
-    tempContainer.style.padding = '20px';
-    tempContainer.style.boxSizing = 'border-box';
+    // 临时修改样式以显示全部内容
+    messagesContainer.style.overflow = 'visible';
+    messagesContainer.style.maxHeight = 'none';
+    messagesContainer.style.height = 'auto';
 
-    // 在顶部添加对话标题（如果存在）
-    if (formData.dialogTitle.trim()) {
-      const titleElement = document.createElement('div');
-      titleElement.style.textAlign = 'center';
-      titleElement.style.fontSize = '24px';
-      titleElement.style.fontWeight = 'bold';
-      titleElement.style.marginBottom = '20px';
-      titleElement.style.color = isDarkTheme ? '#ffffff' : '#333333';
-      titleElement.textContent = formData.dialogTitle;
-      tempContainer.appendChild(titleElement);
-    }
-
-    // 复制消息内容到临时容器
-    tempContainer.innerHTML += messagesContainer.innerHTML;
-
-    // 将临时容器添加到文档中
-    document.body.appendChild(tempContainer);
-
-    // 生成截图
-    const canvas = await html2canvas(tempContainer, {
-      scale: 2, // 提高清晰度
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: bgColor,
-      width: tempContainer.scrollWidth,
-      height: tempContainer.scrollHeight,
-      scrollX: 0,
-      scrollY: 0
+    // 使用html-to-image直接生成图像，不需要克隆节点
+    const dataUrl = await toPng(messagesContainer, {
+      cacheBust: true, // 防止缓存问题
+      pixelRatio: 2.5, // 提高清晰度
+      style: {
+        // 确保元素在截图中显示完整内容
+        overflow: 'visible',
+        maxHeight: 'none',
+        height: 'auto',
+        filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
+      },
+      // 排除不需要截图的元素
+      filter: (node: Node) => {
+        if (node instanceof HTMLElement) {
+          // 不排除任何元素，因为我们希望截图完整对话
+          return true;
+        }
+        return true;
+      }
     });
 
-    // 移除临时容器
-    document.body.removeChild(tempContainer);
+    // 恢复原始样式
+    messagesContainer.style.overflow = originalStyles.overflow;
+    messagesContainer.style.maxHeight = originalStyles.maxHeight;
+    messagesContainer.style.height = originalStyles.height;
 
     // 创建下载链接
     const link = document.createElement('a');
     link.download = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.href = dataUrl;
     link.click();
 
     ElMessage.success('对话截图已导出');
@@ -592,12 +665,12 @@ const renderMarkdownWithMath = (content: string) => {
   });
 
   // 首先处理显示数学公式 $$...$$（只在非代码块内容中处理）
-  processedContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
+  let resultContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
     return mathRenderer.displayMath(math.trim());
   });
 
   // 然后处理内联数学公式 $...$（只在非代码块内容中处理）
-  processedContent = processedContent.replace(/\$([^\$]+)\$/g, (match, math) => {
+  resultContent = resultContent.replace(/\$([^\$]+)\$/g, (match, math) => {
     // 确保 $ 不是紧跟在字母或数字后面的（避免将价格等误认为数学公式）
     // 检查匹配项之前是否有字母或数字，或者检查是否为常见价格格式
     const prevChar = content[content.indexOf(match) - 1];
@@ -611,7 +684,7 @@ const renderMarkdownWithMath = (content: string) => {
 
   // 将代码块内容还原回去
   for (let i = 0; i < codeBlockPlaceholders.length; i++) {
-    processedContent = processedContent.replace(
+    resultContent = resultContent.replace(
       `__CODE_BLOCK_PLACEHOLDER_${i}__`,
       codeBlockPlaceholders[i]
     );
@@ -619,15 +692,27 @@ const renderMarkdownWithMath = (content: string) => {
 
   // 将行内代码内容还原回去
   for (let i = 0; i < inlineCodePlaceholders.length; i++) {
-    processedContent = processedContent.replace(
+    resultContent = resultContent.replace(
       `__INLINE_CODE_PLACEHOLDER_${i}__`,
       inlineCodePlaceholders[i]
     );
   }
 
   // 解析 Markdown
-  const parsedContent = marked.parse(processedContent || '');
-  let result = typeof parsedContent === 'string' ? parsedContent.trim() : parsedContent;
+  let result: string;
+  try {
+    // marked.parse 应该是同步函数，但如果它返回Promise，我们处理这种情况
+    const parsedContent = marked.parse(resultContent || '');
+    if (parsedContent instanceof Promise) {
+      // 如果是Promise，我们无法在此同步上下文中处理它，使用原始内容
+      result = resultContent || '';
+    } else {
+      result = typeof parsedContent === 'string' ? parsedContent.trim() : String(parsedContent);
+    }
+  } catch (error) {
+    console.error('Markdown parsing error:', error);
+    result = resultContent || '';
+  }
 
   // 为Markdown生成的图片添加CSS类
   result = result.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
@@ -1006,26 +1091,7 @@ const sendMessage = async () => {
   }
 
   // 清除异常类的消息（包含重试或继续输出按钮的消息）
-  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
-  const normalMessages = messages.filter(msg => {
-    // 保留欢迎消息
-    if (msg.type === 'ai' && msg.content === welcomeMessage) {
-      return true
-    }
-    // 过滤掉带有错误标记的消息
-    if (msg.isError) {
-      return false
-    }
-    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
-    if (msg.type === 'ai' && msg.content === '') {
-      return false
-    }
-    // 过滤掉带有截断标记的消息
-    if (msg.isTruncated) {
-      return false
-    }
-    return true
-  })
+  const normalMessages = filterAbnormalMessages(messages);
 
   // 如果消息数组被过滤，则替换原数组
   if (normalMessages.length !== messages.length) {
@@ -1068,6 +1134,52 @@ const sendMessage = async () => {
   await callApi(userMessage, contextSnapshot)
 }
 
+// 处理InputArea组件的发送消息事件
+const handleSendMessage = async (message: string, file?: File) => {
+  if (!message.trim()) return
+  if (!formData.selectedModel) {
+    ElMessage.warning('请先选择一个模型')
+    return
+  }
+
+  // 清除异常类的消息（包含重试或继续输出按钮的消息）
+  const normalMessages = filterAbnormalMessages(messages);
+
+  // 如果消息数组被过滤，则替换原数组
+  if (normalMessages.length !== messages.length) {
+    // 保留正常的消息
+    messages.splice(0, messages.length, ...normalMessages)
+  }
+
+  const userMessage = {
+    type: 'user' as const,
+    content: message,
+    time: getCurrentTime(),
+    file: file || undefined
+  }
+
+  // 在构建对话数组之前先保存当前的上下文消息
+  const contextSnapshot = [...messages]; // 创建当前消息快照用于构建上下文
+
+  // 添加用户消息到数组
+  messages.push(userMessage)
+
+  // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
+  if (!formData.dialogTitle.trim()) {
+    // 截取前50个字符作为标题
+    formData.dialogTitle = message.length > 50
+      ? message.substring(0, 50) + '...'
+      : message
+  }
+
+  // 滚动到底部
+  await nextTick()
+  scrollToBottom()
+
+  // 调用通用API函数
+  await callApi(userMessage, contextSnapshot)
+}
+
 // 重试发送特定AI消息（重新发送该消息所属的上下文）
 const retryMessage = async (index: number) => {
   if (index < 0 || index >= messages.length || messages[index].type !== 'ai') {
@@ -1075,31 +1187,8 @@ const retryMessage = async (index: number) => {
   }
 
   // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要重试的消息
-  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
   const currentMessageToRetry = messages[index]; // 保存当前要重试的消息
-  const normalMessages = messages.filter((msg, msgIndex) => {
-    // 保留欢迎消息
-    if (msg.type === 'ai' && msg.content === welcomeMessage) {
-      return true
-    }
-    // 保留当前要重试的消息
-    if (msgIndex === index) {
-      return true
-    }
-    // 过滤掉带有错误标记的消息
-    if (msg.isError) {
-      return false
-    }
-    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
-    if (msg.type === 'ai' && msg.content === '') {
-      return false
-    }
-    // 过滤掉带有截断标记的消息
-    if (msg.isTruncated) {
-      return false
-    }
-    return true
-  })
+  const normalMessages = filterAbnormalMessages(messages, { excludeIndex: index, includeCurrent: true });
 
   // 如果消息数组被过滤，则替换原数组
   if (normalMessages.length !== messages.length) {
@@ -1163,31 +1252,8 @@ const continueGeneration = async (index: number) => {
   if (!truncatedMessage || !truncatedMessage.isTruncated) return
 
   // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要继续生成的消息
-  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
   const currentMessageToContinue = messages[index]; // 保存当前要继续生成的消息
-  const normalMessages = messages.filter((msg, msgIndex) => {
-    // 保留欢迎消息
-    if (msg.type === 'ai' && msg.content === welcomeMessage) {
-      return true
-    }
-    // 保留当前要继续生成的消息
-    if (msgIndex === index) {
-      return true
-    }
-    // 过滤掉带有错误标记的消息
-    if (msg.isError) {
-      return false
-    }
-    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
-    if (msg.type === 'ai' && msg.content === '') {
-      return false
-    }
-    // 过滤掉带有截断标记的消息（除了当前要处理的这条消息外）
-    if (msg.isTruncated) {
-      return false
-    }
-    return true
-  })
+  const normalMessages = filterAbnormalMessages(messages, { excludeIndex: index, includeCurrent: true });
 
   // 如果消息数组被过滤，则替换原数组
   if (normalMessages.length !== messages.length) {
@@ -1249,8 +1315,7 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
   }
 
   // 获取快照中的有效消息（user 和 ai 类型），但排除初始欢迎消息
-  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？'
-  const validMessages = snapshot.filter((msg: any) => (msg.type === 'user' || msg.type === 'ai') && msg.content !== welcomeMessage)
+  const validMessages = snapshot.filter((msg: any) => (msg.type === 'user' || msg.type === 'ai') && msg.content !== WELCOME_MESSAGE)
 
   // 获取要包含的上下文消息
   const messagesToInclude = validMessages.slice(-formData.contextCount) // 只取最新的几条
@@ -1292,6 +1357,11 @@ const scrollToTop = () => {
     })
   }
 }
+
+// 切换移动端输入框显示/隐藏
+const toggleMobileInput = () => {
+  showMobileInput.value = !showMobileInput.value
+}
 const scrollToBottom = () => {
   if (messagesContainer.value && formData.isScrolledToBottom) {
     // 只有在用户已经滚动到底部时才继续滚动
@@ -1300,21 +1370,21 @@ const scrollToBottom = () => {
 }
 
 // 监听滚动事件，判断用户是否滚动到了底部
-// const handleScroll = () => {
-//   if (messagesContainer.value) {
-//     const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-//     // 如果距离底部小于50像素，则认为是在底部
-//     formData.isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 50
+const handleScroll = () => {
+  if (messagesContainer.value) {
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+    // 如果距离底部小于50像素，则认为是在底部
+    formData.isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 50
 
-//     // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
-//     showBackToTop.value = scrollTop > clientHeight
+    // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
+    showBackToTop.value = scrollTop > clientHeight
 
-//     // 如果软键盘弹出，自动保持滚动到底部
-//     if (isKeyboardVisible.value) {
-//       scrollToBottom()
-//     }
-//   }
-// }
+    // 如果软键盘弹出，自动保持滚动到底部
+    if (isKeyboardVisible.value) {
+      scrollToBottom()
+    }
+  }
+}
 
 // 文件相关处理
 const handleFileChange = async (file: any) => {
@@ -1366,25 +1436,6 @@ const clearFile = () => {
   }
 }
 
-// 处理键盘事件：根据用户偏好发送消息
-const handleKeydown = (event: KeyboardEvent) => {
-  if (formData.sendPreference === 'ctrl_enter') {
-    // 如果用户选择Ctrl+Enter发送
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault()
-      sendMessage()
-    }
-    // 普通回车不阻止默认行为，允许换行
-  } else if (formData.sendPreference === 'enter') {
-    // 如果用户选择Enter发送
-    if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      event.preventDefault()
-      sendMessage()
-    }
-    // Shift+Enter 或其他组合键仍然允许换行
-  }
-}
-
 // 实现移动端设备检测逻辑，当屏幕宽度小于768px时将isMobile设为true，并监听窗口大小变化
 const checkIsMobile = () => {
   // 当窗口宽度小于768px时，认为是移动端
@@ -1424,32 +1475,69 @@ onUnmounted(() => {
 
 // 在组件挂载时应用主题
 onMounted(() => {
+  checkIsMobile()
+
   if (formData.isDarkTheme) {
     document.body.classList.add('dark-theme')
   } else {
     document.body.classList.remove('dark-theme')
   }
+
+  // 添加滚动事件监听器
+  const container = messagesContainer.value
+  if (container) {
+    container.addEventListener('scroll', handleScroll)
+  }
+})
+
+// 组件卸载时移除事件监听器
+onUnmounted(() => {
+  window.removeEventListener('resize', checkIsMobile)
+
+  // 移除滚动事件监听器
+  const container = messagesContainer.value
+  if (container) {
+    container.removeEventListener('scroll', handleScroll)
+  }
 })
 
 // 从消息内容中提取文件URL列表（兼容新旧格式）
 const extractFileUrls = (content: string): string[] => {
-  const urls: string[] = []
+  const urls: string[] = [];
 
-  // 新格式: [FILE_URL:xxx]
-  const newPattern = /\[FILE_URL:(https?:\/\/[^\]]+)\]/g
-  let match
-  while ((match = newPattern.exec(content)) !== null) {
-    urls.push(match[1])
-  }
+  // 定义URL提取正则表达式
+  const patterns = [
+    { regex: /\[FILE_URL:(https?:\/\/[^\]]+)\]/g, name: 'new' },         // 新格式: [FILE_URL:xxx]
+    { regex: /文件已上传:\s*(https?:\/\/[^\s]+)/g, name: 'old' }         // 旧格式: 文件已上传: xxx
+  ];
 
-  // 旧格式: 文件已上传: xxx (向后兼容)
-  const oldPattern = /文件已上传:\s*(https?:\/\/[^\s]+)/g
-  while ((match = oldPattern.exec(content)) !== null) {
-    urls.push(match[1])
-  }
+  // 遍历所有模式并提取URL
+  patterns.forEach(({ regex }) => {
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      urls.push(match[1]);
+    }
+  });
 
-  return urls
-}
+  return urls;
+};
+
+// 测试函数（仅供验证，后续可以移除）
+// const testExtractFileUrls = () => {
+//   console.log("Test 1:", extractFileUrls("[FILE_URL:https://example.com/test.pdf]"));
+//   console.log("Test 2:", extractFileUrls("文件已上传: https://example.com/test2.jpg"));
+//   console.log("Test 3:", extractFileUrls("[FILE_URL:https://example.com/test.pdf] and 文件已上传: https://example.com/test2.jpg"));
+// };
+
+// 在组件挂载时运行测试（可选）
+// onMounted(() => {
+//   testExtractFileUrls();
+//   if (formData.isDarkTheme) {
+//     document.body.classList.add('dark-theme')
+//   } else {
+//     document.body.classList.remove('dark-theme')
+//   }
+// })
 
 // 获取纯文本内容（移除文件标记）
 const getTextContent = (content: string): string => {
@@ -1468,5 +1556,18 @@ watch(() => formData.currentDialogId, async (newDialogId) => {
   }
 })
 
+// 监听暗色主题变化
+watch(() => formData.isDarkTheme, (newVal) => {
+  if (newVal) {
+    document.body.classList.add('dark-theme')
+  } else {
+    document.body.classList.remove('dark-theme')
+  }
+}, { immediate: true })
+
 // 监听模型列表变化，自动生成级联选项
 </script>
+
+<style scoped>
+@import './chat-content.css';
+</style>

@@ -4,19 +4,20 @@
     <div v-show="!formData.sidebarCollapsed" class="chat-sidebar" :class="{ 'sidebar-mobile': formData.isMobile }">
       <el-button v-if="formData.isMobile" class="sidebar-close-btn" :icon="Close" circle @click="formData.sidebarCollapsed = true" />
       <div class="model-selector" @click.stop>
-        <h3>{{ t('chat.selectModel') }}</h3>
+        <h3>{{ t('chat.selectProvider') }}</h3>
         <div class="provider-selector">
           <el-select v-model="formData.providerValue" :placeholder="t('chat.selectProvider')" size="small" filterable clearable
             @change="handleProviderChange">
             <el-option v-for="provider in formData.providers" :key="provider" :label="provider" :value="provider" />
           </el-select>
         </div>
+        <h3>{{ t('chat.selectModel') }}</h3>
         <div class="model-selector">
           <el-select v-model="formData.modelValue" :placeholder="t('chat.selectModel')" size="small" filterable clearable
             :disabled="!formData.providerValue" @change="handleModelChange">
             <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
               <span>{{ model.label }}</span>
-              <el-tag v-if="model.recommend" size="small" type="warning" style="margin-left: 8px;">{{ t('chat.recommended') }}</el-tag>
+              <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
             </el-option>
           </el-select>
         </div>
@@ -37,18 +38,18 @@
         <div class="history-section-header">
           <h3>{{ t('chat.history') }}</h3>
           <div class="history-actions">
-            <el-button type="default" size="small" text @click="loadDialogHistory" :loading="formData.loadingHistory" class="refresh-history-btn">
+            <el-button type="default" size="small" text @click="loadDialogHistory" :loading="formData.loadingHistory" class="text-gray-700 dark:text-gray-300 hover:bg-transparent">
               {{ t('chat.refreshHistory') }}
             </el-button>
-            <el-button v-if="!isEditMode" type="default" size="small" text @click="enterEditMode" class="edit-mode-btn">
+            <el-button v-if="!isEditMode" type="default" size="small" text @click="enterEditMode" class="text-blue-500 hover:bg-transparent">
               {{ t('chat.edit') }}
             </el-button>
             <div v-else class="edit-mode-actions">
               <el-button type="danger" text size="small" :disabled="selectedDialogs.length === 0"
-                @click="confirmBatchDelete">
+                @click="confirmBatchDelete" class="text-red-500 hover:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ t('chat.delete') }} ({{ selectedDialogs.length }})
               </el-button>
-              <el-button type="default" size="small" text @click="exitEditMode" class="edit-mode-btn">
+              <el-button type="default" size="small" text @click="exitEditMode" class="text-blue-500 hover:bg-transparent">
                 {{ t('chat.cancel') }}
               </el-button>
             </div>
@@ -222,7 +223,7 @@
   </transition>
 
   <!-- 移动端遮罩 -->
-  <div v-if="formData.isMobile && !formData.sidebarCollapsed" class="mobile-sidebar-mask" @click="formData.sidebarCollapsed = false" />
+  <div v-if="formData.isMobile && !formData.sidebarCollapsed" class="mobile-sidebar-mask" @click="formData.sidebarCollapsed = true" />
 </template>
 
 <script setup lang="ts">
@@ -436,26 +437,7 @@ const updateProviders = () => {
   const uniqueProviders = new Set<string>()
 
   formData.models.forEach(model => {
-    const lowerValue = model.value.toLowerCase()
-
-    // 按优先级匹配厂商前缀
-    if (lowerValue.includes('gpt')) {
-      uniqueProviders.add('gpt')
-    } else if (lowerValue.includes('gemini')) {
-      uniqueProviders.add('gemini')
-    } else if (lowerValue.includes('qwen')) {
-      uniqueProviders.add('qwen')
-    } else if (lowerValue.includes('nano-banana')) {
-      uniqueProviders.add('nano-banana')
-    } else if (lowerValue.includes('deepseek')) {
-      uniqueProviders.add('deepseek')
-    } else {
-      // 如果没有匹配到预定义的厂商，使用第一个单词作为厂商
-      const firstPart = model.value.split('-')[0]
-      if (firstPart && firstPart.length > 1) {
-        uniqueProviders.add(firstPart)
-      }
-    }
+    uniqueProviders.add(model.group)
   })
 
   formData.providers = Array.from(uniqueProviders).sort()
@@ -531,10 +513,16 @@ const loadCustomRoles = () => {
 
 // 处理角色操作
 const handleRoleAction = (command: string, roleId: string) => {
-  if (command === 'rename') {
-    renameRole(roleId)
-  } else if (command === 'delete') {
-    deleteRole(roleId)
+  switch (command) {
+    case 'rename':
+      renameRole(roleId)
+      break
+    case 'delete':
+      deleteRole(roleId)
+      break
+    default:
+      console.warn(`Unknown role command: ${command}`)
+      break
   }
 }
 
@@ -694,55 +682,12 @@ const loadDialogContent = async (dialogId: number) => {
     ElMessage.warning('请先登录')
     return
   }
-
-  try {
-    const response: any = await chatAPI.getDialogContent(dialogId)
-    if (response && response.content) {
-      // 设置当前对话ID和标题
-      formData.currentDialogId = dialogId
-      const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
-      if (dialogItem) {
-        formData.dialogTitle = dialogItem.dialog_name
-
-        // 根据历史记录中的modelname更新模型选择框
-        if (dialogItem.modelname) {
-          formData.selectedModel = dialogItem.modelname
-
-          // 更新提供商和模型选择器
-          const selectedModelInfo = formData.models.find(model => model.value === dialogItem.modelname)
-          if (selectedModelInfo) {
-            const lowerValue = selectedModelInfo.value.toLowerCase()
-            if (lowerValue.includes('gpt')) {
-              formData.providerValue = 'gpt'
-            } else if (lowerValue.includes('gemini')) {
-              formData.providerValue = 'gemini'
-            } else if (lowerValue.includes('qwen')) {
-              formData.providerValue = 'qwen'
-            } else if (lowerValue.includes('nano-banana')) {
-              formData.providerValue = 'nano-banana'
-            } else if (lowerValue.includes('deepseek')) {
-              formData.providerValue = 'deepseek'
-            } else {
-              const firstPart = selectedModelInfo.value.split('-')[0]
-              if (firstPart && firstPart.length > 1) {
-                formData.providerValue = firstPart
-              }
-            }
-            formData.modelValue = dialogItem.modelname
-
-            // 更新当前模型描述
-            formData.currentModelDesc = selectedModelInfo.model_desc || ''
-          }
-        }
-      }
-
-      // 通知父组件或ChatContent组件加载对话内容
-      emit('load-dialog', dialogId)
-    }
-  } catch (error: any) {
-    console.error('加载对话内容错误:', error)
-    ElMessage.error('加载对话内容失败')
+  const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
+  if (dialogItem) {
+    formData.dialogTitle = dialogItem.dialog_name
   }
+  // 通知父组件或ChatContent组件加载对话内容
+  emit('load-dialog', dialogId)
 }
 
 // 检测移动设备
@@ -829,26 +774,38 @@ const toggleSelectDialog = (dialogId: number) => {
   }
 }
 
-// 确认单个删除
-const confirmSingleDelete = async (dialogId: number) => {
+// 通用删除对话功能
+const deleteDialogs = async (dialogIds: number[]) => {
   try {
-    const response: any = await chatAPI.deleteDialogs([dialogId])
+    const response: any = await chatAPI.deleteDialogs(dialogIds)
     if (response && response.success) {
-      ElMessage.success(`对话删除成功，共删除 ${response.deleted_count} 条`)
+      ElMessage.success(`${dialogIds.length === 1 ? '对话' : '批量'}删除成功，共删除 ${response.deleted_count} 条`)
+
+      // 如果是批量删除，退出编辑模式
+      if (dialogIds.length > 1) {
+        exitEditMode()
+      }
+
       // 刷新对话历史
       await loadDialogHistory()
-      // 如果当前会话被删除，清空聊天内容
-      const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
-      if (dialogItem && dialogItem.dialog_name === formData.dialogTitle) {
+
+      // 检查当前会话是否被删除，如果是则清空聊天内容
+      const currentDialog = formData.dialogHistory.find(d => d.dialog_name === formData.dialogTitle)
+      if (currentDialog && dialogIds.includes(currentDialog.id)) {
         clearCurrentSession()
       }
     } else {
-      ElMessage.error('删除对话失败')
+      ElMessage.error(`${dialogIds.length === 1 ? '删除对话' : '批量删除'}失败`)
     }
   } catch (error: any) {
-    console.error('删除对话错误:', error)
-    ElMessage.error('删除对话失败')
+    console.error(`${dialogIds.length === 1 ? '删除对话' : '批量删除'}错误:`, error)
+    ElMessage.error(`${dialogIds.length === 1 ? '删除对话' : '批量删除'}失败`)
   }
+}
+
+// 确认单个删除
+const confirmSingleDelete = async (dialogId: number) => {
+  await deleteDialogs([dialogId])
 }
 
 // 确认批量删除
@@ -858,25 +815,32 @@ const confirmBatchDelete = async () => {
     return
   }
 
-  try {
-    const response: any = await chatAPI.deleteDialogs(selectedDialogs.value)
-    if (response && response.success) {
-      ElMessage.success(`批量删除成功，共删除 ${response.deleted_count} 条`)
-      // 退出编辑模式
-      exitEditMode()
-      // 刷新对话历史
-      await loadDialogHistory()
-      // 如果当前会话被删除，清空聊天内容
-      const currentDialog = formData.dialogHistory.find(d => d.dialog_name === formData.dialogTitle)
-      if (currentDialog && selectedDialogs.value.includes(currentDialog.id)) {
-        clearCurrentSession()
-      }
-    } else {
-      ElMessage.error('批量删除失败')
-    }
-  } catch (error: any) {
-    console.error('批量删除错误:', error)
-    ElMessage.error('批量删除失败')
+  await deleteDialogs(selectedDialogs.value)
+}
+
+// 通用事件监听器管理函数
+const addEventListeners = () => {
+  // 添加移动端检测和事件监听
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+
+  // 添加resize事件监听器以处理软键盘弹出/收起
+  window.addEventListener('resize', handleResize)
+
+  // 添加滚动事件监听器
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', handleScroll)
+    // 初始化滚动位置状态
+    handleScroll()
+  }
+}
+
+const removeEventListeners = () => {
+  window.removeEventListener('resize', checkMobile)
+  window.removeEventListener('resize', handleResize) // 移除软键盘检测监听器
+  // 移除滚动事件监听器
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', handleScroll)
   }
 }
 
@@ -900,6 +864,7 @@ onMounted(async () => {
       for (const [prefix, modelList] of Object.entries(response.grouped_models)) {
         (modelList as Array<any>).forEach((model: any) => {
           formData.models.push({
+            group: prefix,
             label: `${prefix}: ${model.label || model.id}`,
             value: model.id,
             recommend: model.recommend || false,
@@ -921,9 +886,9 @@ onMounted(async () => {
         console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
         // 设置默认模型列表作为备选
         formData.models = [
-          { label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
-          { label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
-          { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
+          { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
+          { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
+          { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
         ]
       }
     }
@@ -931,9 +896,9 @@ onMounted(async () => {
     console.error('加载模型列表时出错:', error)
     // 设置默认模型列表作为备选
     formData.models = [
-      { label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
-      { label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
-      { label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
+      { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
+      { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
+      { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
     ]
   }
 
@@ -945,25 +910,7 @@ onMounted(async () => {
     // 根据选择的模型值找到对应的供应商
     const selectedModelInfo = formData.models.find(model => model.value === formData.selectedModel)
     if (selectedModelInfo) {
-      // 遍历模型值找出供应商
-      const lowerValue = selectedModelInfo.value.toLowerCase()
-      if (lowerValue.includes('gpt')) {
-        formData.providerValue = 'gpt'
-      } else if (lowerValue.includes('gemini')) {
-        formData.providerValue = 'gemini'
-      } else if (lowerValue.includes('qwen')) {
-        formData.providerValue = 'qwen'
-      } else if (lowerValue.includes('nano-banana')) {
-        formData.providerValue = 'nano-banana'
-      } else if (lowerValue.includes('deepseek')) {
-        formData.providerValue = 'deepseek'
-      } else {
-        // 如果没有匹配到预定义的供应商，使用第一个单词
-        const firstPart = selectedModelInfo.value.split('-')[0]
-        if (firstPart && firstPart.length > 1) {
-          formData.providerValue = firstPart
-        }
-      }
+      formData.providerValue = selectedModelInfo.group
       formData.modelValue = formData.selectedModel
 
       // 设置当前模型描述
@@ -1007,32 +954,13 @@ onMounted(async () => {
   // 自动加载历史会话
   await loadDialogHistory()
 
-  // 添加移动端检测和事件监听
-  checkMobile()
-  window.addEventListener('resize', checkMobile)
-
-  // 添加resize事件监听器以处理软键盘弹出/收起
-  window.addEventListener('resize', handleResize)
-
-  // 添加滚动事件监听器
-  if (messagesContainer.value) {
-    messagesContainer.value.addEventListener('scroll', handleScroll)
-    // 初始化滚动位置状态
-    handleScroll()
-  }
-
-  // 初始化测试数学公式渲染（注释掉此行，仅用于开发测试）
-  // testLatexRendering()
+  // 添加事件监听器
+  addEventListeners()
 })
 
 // 组件卸载时移除事件监听
 onUnmounted(() => {
-  window.removeEventListener('resize', checkMobile)
-  window.removeEventListener('resize', handleResize) // 移除软键盘检测监听器
-  // 移除滚动事件监听器
-  if (messagesContainer.value) {
-    messagesContainer.value.removeEventListener('scroll', handleScroll)
-  }
+  removeEventListeners()
 })
 
 /**

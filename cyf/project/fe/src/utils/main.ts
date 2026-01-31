@@ -13,7 +13,7 @@ export interface FormData {
     dialogHistory: any[];
     loadingHistory: boolean;
     isLoading: boolean;
-    models: Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>;
+    models: Array<{ group: string, label: string, value: string, recommend?: boolean, model_desc?: string }>;
     groupedModels: Record<string, any[]>;
     providers: string[];
     providerValue: string;

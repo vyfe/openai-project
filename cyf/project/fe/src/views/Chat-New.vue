@@ -2,84 +2,91 @@
   <div class="chat-container">
     <!-- 顶部导航栏 -->
     <div class="chat-header">
-      <div class="header-left">
-        <el-button
-          class="sidebar-toggle-btn"
-          :icon="formData.sidebarCollapsed ? Expand : Fold"
-          circle size="small"
-          @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
-        />
-        <h2>{{ t('chat.title') }}</h2>
-        <span class="user-info">用户：{{ authStore.user }}</span>
+      <div class="header-left-flex">
+        <div class="header-title-section">
+          <el-button
+            class="sidebar-toggle-btn"
+            :icon="formData.sidebarCollapsed ? Expand : Fold"
+            circle size="small"
+            @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
+          />
+          <h2>{{ t('chat.title') }}</h2>
+        </div>
+        <!-- 在移动端显示在标题下方的按钮组 -->
+        <div class="header-mobile-buttons md:hidden">
+          <el-button size="small" >{{ authStore.user }}</el-button>
 
-        <!-- 用量查询弹窗 -->
-        <el-popover
-          placement="bottom"
-          :width="300"
-          trigger="click"
-          v-model:visible="showUsagePopover"
-        >
-          <template #reference>
-            <el-button
-              class="usage-btn"
-              :icon="Coin"
-              size="small"
-              @click="fetchUsage"
-            >
-              查看用量
-            </el-button>
-          </template>
-          <div class="usage-content">
-            <div v-if="loadingUsage" class="loading">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              正在加载用量数据...
-            </div>
-            <div v-else-if="usageError" class="error">
-              {{ usageError }}
-            </div>
-            <div v-else class="usage-data">
-              <div class="usage-item">
-                <span class="label">总用量：</span>
-                <span class="value">{{ usageData?.total_usage }} 元</span>
+          <!-- 用量查询弹窗 -->
+          <el-popover
+            placement="bottom"
+            :width="300"
+            trigger="click"
+            v-model:visible="showUsagePopover"
+          >
+            <template #reference>
+              <el-button
+                class="usage-btn"
+                :icon="Coin"
+                size="small"
+                @click="fetchUsage"
+              >
+                {{ formData.isMobile ? '' : t('chat.viewUsage') }}
+              </el-button>
+            </template>
+            <div class="usage-content">
+              <div v-if="loadingUsage" class="loading">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                正在加载用量数据...
               </div>
-              <div class="usage-item">
-                <span class="label">总额度：</span>
-                <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} 元</span>
+              <div v-else-if="usageError" class="error">
+                {{ usageError }}
               </div>
-              <div class="usage-item" :class="{ 'low-balance': usageData?.remaining < 10 }">
-                <span class="label">剩余额度：</span>
-                <span class="value">{{ usageData?.remaining }} 元</span>
+              <div v-else class="usage-data">
+                <div class="usage-item">
+                  <span class="label">总用量：</span>
+                  <span class="value">{{ usageData?.total_usage }} 元</span>
+                </div>
+                <div class="usage-item">
+                  <span class="label">总额度：</span>
+                  <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} 元</span>
+                </div>
+                <div class="usage-item" :class="{ 'low-balance': usageData?.remaining < 10 }">
+                  <span class="label">剩余额度：</span>
+                  <span class="value">{{ usageData?.remaining > 10000 ? '-' : usageData?.remaining }} 元</span>
+                </div>
               </div>
             </div>
-          </div>
-        </el-popover>
+          </el-popover>
 
-        <!-- LaTeX 帮助按钮 -->
-        <el-button
-          :icon="Document"
-          size="small"
-          @click="showLatexHelp = true"
-          class="latex-help-btn"
-        >
-          LaTeX 帮助
-        </el-button>
+          <!-- LaTeX 帮助按钮 -->
+          <el-button
+            :icon="Document"
+            size="small"
+            @click="showLatexHelp = true"
+            class="latex-help-btn"
+          >
+            {{ formData.isMobile ? '' : t('chat.latexHelp') }}
+          </el-button>
+          <!-- TODO(human): 优化移动端按钮的布局和样式，考虑添加更多针对移动设备的适配样式 -->
+        </div>
       </div>
       <div class="header-right">
         <!-- 语言切换按钮 -->
         <el-button
           @click="toggleLanguage"
-          class="language-toggle-btn"
+          class="logout-btn"
           :class="{'rounded-full': true}"
-          size="small"
+          size="medium"
+          :icon="SwitchFilled"
         >
-          {{ currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese') }}
+          {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
         </el-button>
 
-        <el-button @click="toggleTheme">
-          {{ formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme') }}
+        <el-button @click="toggleTheme" class="theme-toggle-btn" :icon="formData.isDarkTheme ? Sunny : Moon">
+          {{ formData.isMobile ? '' : (formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')) }}
         </el-button>
-        <el-button @click="logout">
-          {{ t('chat.logout') }}
+        <el-button @click="logout" class="logout-btn" :icon="SwitchButton">
+          {{ formData.isMobile ? '' : t('chat.logout') }}
         </el-button>
       </div>
     </div>
@@ -118,7 +125,7 @@
     <!-- 侧边栏遮罩层（移动端） -->
     <div
       v-if="formData.isMobile && !formData.sidebarCollapsed"
-      class="sidebar-overlay"
+      class="mobile-sidebar-mask"
       @click="updateSidebarCollapsed(true)"
     />
 
@@ -157,7 +164,7 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Loading } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
 import { useAuthStore } from '../stores/auth'
@@ -170,7 +177,7 @@ const authStore = useAuthStore()
 
 // 组件间共享状态
 const formData = reactive({
-  isDarkTheme: false,
+  isDarkTheme: JSON.parse(localStorage.getItem('isDarkTheme') || 'false'),
   currentDialogId: ref<number | null>(null),
   selectedModel: localStorage.getItem('selectedModel') || '',
   // 上下文字数

@@ -1,6 +1,8 @@
 /* 修复暗色主题下文本按钮的样式 */
 .chat-sidebar :deep(.el-button--default.is-text),
-.chat-sidebar :deep(.el-button--default.is-link) {
+.chat-sidebar :deep(.el-button--default.is-link),
+.dark-theme .chat-sidebar :deep(.el-button--default.is-text),
+.dark-theme .chat-sidebar :deep(.el-button--default.is-link) {
   color: var(--el-text-color-primary);
 }
 
@@ -9,35 +11,60 @@
   color: var(--el-color-danger);
 }
 
-.chat-sidebar :deep(.el-button.is-text:hover),
-.chat-sidebar :deep(.el-button.is-link:hover) {
-  background-color: transparent;
-}
-
-/* 确保按钮在暗色模式下有适当的颜色 */
-.dark-theme .chat-sidebar :deep(.el-button--default.is-text),
-.dark-theme .chat-sidebar :deep(.el-button--default.is-link) {
-  color: var(--el-text-color-primary);
-}
-
 .dark-theme .chat-sidebar :deep(.el-button--danger.is-text),
 .dark-theme .chat-sidebar :deep(.el-button--danger.is-link) {
   color: var(--el-color-danger-light-3);
 }
 
-/* 特定按钮的样式 */
-.chat-sidebar :deep(.edit-mode-btn) {
-  color: var(--el-color-primary);
+.chat-sidebar :deep(.el-button.is-text:hover),
+.chat-sidebar :deep(.el-button.is-link:hover) {
+  background-color: transparent;
 }
 
-.chat-sidebar :deep(.refresh-history-btn) {
-  color: var(--el-text-color-primary);
+/* 组件特定的其他样式可以放在这里 */
+.chat-sidebar :deep(.el-tag) {
+  margin-left: 0.5rem; /* 对应 Tailwind 的 ml-2 */
 }
 
-.dark-theme .chat-sidebar :deep(.edit-mode-btn) {
-  color: var(--el-color-primary-light-3);
+/* 移动端侧边栏样式 */
+.chat-sidebar.sidebar-mobile {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  height: -webkit-fill-available; /* 支持老版本浏览器 */
+  height: 100dvh; /* 使用动态视口高度 */
+  width: 100%;
+  max-width: 100%;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
+  padding: 20px;
 }
 
-.dark-theme .chat-sidebar :deep(.refresh-history-btn) {
-  color: var(--el-text-color-primary);
+/* 暗色主题下的移动端侧边栏 */
+.dark-theme .chat-sidebar.sidebar-mobile {
+  background: rgba(34, 34, 34, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+/* 在侧边栏展开时的过渡效果 */
+.chat-sidebar {
+  transition: transform 0.3s ease;
+}
+
+.sidebar-slide-enter-active,
+.sidebar-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.sidebar-slide-enter-from {
+  transform: translateX(-100%);
+}
+
+.sidebar-slide-leave-to {
+  transform: translateX(-100%);
 }
