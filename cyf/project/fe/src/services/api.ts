@@ -4,7 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 // 根据环境决定API端口，开发环境使用localhost:39997，生产环境使用线上地址
 const API_BASE_URL = import.meta.env.DEV
   ? 'http://localhost:39997'
-  : 'http://aichat.609088523.xyz:39996'
+  : 'http://chat-h.cc:39996'
 
 // 创建axios实例
 const api = axios.create({

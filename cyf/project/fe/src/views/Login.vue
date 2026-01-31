@@ -24,6 +24,7 @@
               :prefix-icon="User"
               size="large"
               class="rounded-lg"
+              autocomplete="new-password"
             />
           </el-form-item>
 
@@ -36,6 +37,7 @@
               size="large"
               show-password
               class="rounded-lg"
+              autocomplete="new-password"
             />
           </el-form-item>
 
@@ -51,10 +53,20 @@
             </el-button>
           </el-form-item>
         </el-form>
-      </div>
 
-      <!-- 通知信息组件 -->
-      <NotificationPanel />
+        <!-- 通知按钮 -->
+        <div class="mt-4 flex justify-end">
+          <el-button
+            type="info"
+            plain
+            size="small"
+            @click="showNotificationModal = true"
+            :icon="Bell"
+          >
+            查看通知
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <div class="mt-8 text-center">
@@ -66,6 +78,18 @@
         <span class="ml-3.5 text-blue-400 font-medium inline-flex items-center"> vx:pata_data_studio </span>
       </p>
     </div>
+
+    <!-- 通知模态框 -->
+    <Teleport to="body">
+      <div v-if="showNotificationModal" class="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
+        <div class="relative">
+          <NotificationPanel
+            isModal
+            @close="showNotificationModal = false"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -73,7 +97,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Link } from '@element-plus/icons-vue'
+import { User, Lock, Link, Bell } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 import NotificationPanel from '@/components/NotificationPanel.vue'
@@ -82,6 +106,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const loginFormRef = ref()
 const loading = ref(false)
+const showNotificationModal = ref(false)
 
 const loginForm = reactive({
   username: '',

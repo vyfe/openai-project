@@ -836,11 +836,9 @@ def dialog_content(user, password):
 def get_usage(user, password):
     """获取用户用量信息"""
     # 验证用户凭据在装饰器中已经完成
-    # 检查用户是否有专属API Key
-    if user not in user_api_keys or not user_api_keys[user]:
-        return {"success": False, "msg": "用户没有配置API密钥"}, 200
 
-    api_key = user_api_keys[user]
+    api_key = sqlitelog.get_user_api_key(user)
+    app.logger.info(api_key)
     api_host = url_list[random.randint(0, len(url_list) - 1)]
 
     # 获取汇率转换率，默认为2.5

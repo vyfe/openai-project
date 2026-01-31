@@ -3204,3 +3204,92 @@ body.dark-theme .custom-dark-tooltip {
   z-index: 999;
   display: block;
 }
+
+/* 通知弹窗样式 */
+.notification-clean-dialog .el-dialog {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  left: auto !important;
+  top: auto !important;
+  transform: none !important;
+  position: relative !important;
+}
+
+.notification-clean-dialog .el-dialog__header {
+  display: none !important;
+}
+
+.notification-clean-dialog .el-dialog__body {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  overflow: visible !important;
+  margin: 0 !important;
+}
+
+.notification-clean-dialog .el-overlay {
+  background: transparent !important;
+}
+
+.notification-clean-dialog .el-overlay-dialog {
+  background: transparent !important;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 通知弹窗样式 */
+.notification-dialog .el-dialog {
+  margin-top: 2rem !important;
+  width: 400px !important;
+}
+
+.notification-dialog .el-dialog__header {
+  padding: 1rem 1.5rem 0.5rem;
+}
+
+.notification-dialog .el-dialog__body {
+  padding: 0 !important;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .notification-dialog .el-dialog {
+    margin: 1rem !important;
+    width: calc(100vw - 2rem) !important;
+  }
+
+  .notification-dialog .el-dialog__body {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+:deep(.clean-dialog) {
+  background: transparent;           /* 去背景 */
+  box-shadow: none;                  /* 去阴影 */
+  --el-dialog-bg-color: transparent; /* 覆盖 Element Plus 变量 */
+}
+
+/* 去除默认的 Header 和 Body 内边距 */
+:deep(.clean-dialog .el-dialog__header),
+:deep(.clean-dialog .el-dialog__body) {
+  padding: 0;
+  display: none; /* 如果不需要标题栏，直接隐藏 header 更彻底 */
+}
+:deep(.clean-dialog .el-dialog__body) {
+  display: block; /* 恢复 body 显示 */
+}

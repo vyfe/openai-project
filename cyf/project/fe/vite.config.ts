@@ -33,7 +33,7 @@ export default defineConfig({
       '/never_guess_my_usage': {
         target: process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
           ? 'http://localhost:39997'
-          : 'http://aichat.609088523.xyz:39996',
+          : 'http://chat-h.cc/:39996',
         changeOrigin: true,
       }
     }

@@ -214,7 +214,7 @@
       </div>
 
       <div class="copyright-watermark-inline">
-        <span>© 2026 vyfe | aichat.609088523.xyz | vx:pata_data_studio</span>
+        <span>© 2026 vyfe | chat-h.cc | vx:pata_data_studio</span>
       </div>
 
       <!-- 开源项目链接 -->

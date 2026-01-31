@@ -67,6 +67,16 @@
           >
             {{ formData.isMobile ? '' : t('chat.latexHelp') }}
           </el-button>
+
+          <!-- 通知按钮 -->
+          <el-button
+            :icon="Bell"
+            size="small"
+            @click="showNotificationPanel = true"
+            class="notification-btn"
+          >
+            {{ formData.isMobile ? '' : '通知' }}
+          </el-button>
           <!-- TODO(human): 优化移动端按钮的布局和样式，考虑添加更多针对移动设备的适配样式 -->
         </div>
       </div>
@@ -156,6 +166,18 @@
       <p>公式将在消息中自动渲染为美观的数学符号。</p>
     </div>
     </el-dialog>
+
+    <!-- 通知模态框 -->
+    <Teleport to="body">
+      <div v-if="showNotificationPanel" class="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
+        <div class="relative">
+          <NotificationPanel
+            isModal
+            @close="showNotificationPanel = false"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -164,11 +186,12 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
+import NotificationPanel from '../components/NotificationPanel.vue'
 
 // 国际化和认证
 const { t, locale } = useI18n()
@@ -226,6 +249,7 @@ const formData = reactive({
 const currentLang = ref(locale.value)
 const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
+const showNotificationPanel = ref(false)
 
 // 用量查询相关
 const loadingUsage = ref(false)
