@@ -290,9 +290,12 @@ def get_system_prompts_by_group():
 def message_query(sql: str, params=None):
     return json.dumps(db.execute_sql(sql, params).fetchall())
 
-def get_user_by_username(username: str, role: str):
+def get_user_by_username(username: str, role: str = None):
     try:
-        return User.get(User.username == username, User.is_active == True, User.role == role)
+        if not role :
+            return User.get(User.username == username, User.is_active == True)
+        else:
+            return User.get(User.username == username, User.is_active == True, User.role == role)
     except DoesNotExist:
         return None
 
@@ -329,20 +332,34 @@ def get_notification_list(status: str = None, limit: int = None, offset: int = N
     :return: 通知列表
     """
     query = Notification.select().order_by(Notification.priority.desc(), Notification.publish_time.desc())
-    
+
     if status is not None:
         query = query.where(Notification.status == status)
-    
+
     if limit is not None:
         query = query.limit(limit)
-    
+
     if offset is not None:
         query = query.offset(offset)
-    
+
     if query.exists():
         return [notification.to_dict() for notification in query.iterator()]
     else:
         return []
+
+
+def get_notification_count(status: str = None):
+    """
+    获取通知公告总数
+    :param status: 状态过滤（可选）
+    :return: 通知总数
+    """
+    query = Notification.select()
+
+    if status is not None:
+        query = query.where(Notification.status == status)
+
+    return query.count()
 
 
 def get_active_notifications(limit: int = 10):

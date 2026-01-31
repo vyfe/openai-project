@@ -3,53 +3,58 @@
     <!-- Background floating animation -->
     <div class="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] bg-radial-gradient animate-float"></div>
 
-    <div class="relative z-10 bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-blue-200/30 w-96 max-w-[90%]">
-      <div class="text-center mb-8">
-        <h1 class="text-2xl font-bold text-indigo-600 mb-2">智能对话系统</h1>
-        <p class="text-blue-400">登录您的账户</p>
+    <div class="relative z-10 flex items-start gap-6">
+      <div class="bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-blue-200/30 w-96 max-w-[90%]">
+        <div class="text-center mb-8">
+          <h1 class="text-2xl font-bold text-indigo-600 mb-2">智能对话系统</h1>
+          <p class="text-blue-400">登录您的账户</p>
+        </div>
+
+        <el-form
+          ref="loginFormRef"
+          :model="loginForm"
+          :rules="loginRules"
+          class="mt-5"
+          @submit.prevent="handleLogin"
+        >
+          <el-form-item prop="username" class="mb-5">
+            <el-input
+              v-model="loginForm.username"
+              placeholder="请输入用户名"
+              :prefix-icon="User"
+              size="large"
+              class="rounded-lg"
+            />
+          </el-form-item>
+
+          <el-form-item prop="password" class="mb-5">
+            <el-input
+              v-model="loginForm.password"
+              type="password"
+              placeholder="请输入密码"
+              :prefix-icon="Lock"
+              size="large"
+              show-password
+              class="rounded-lg"
+            />
+          </el-form-item>
+
+          <el-form-item>
+            <el-button
+              type="primary"
+              size="large"
+              :loading="loading"
+              class="w-full bg-gradient-to-r from-blue-500 to-cyan-400 border-none text-base font-medium h-12 transition-all duration-300 hover:from-blue-600 hover:to-cyan-500 hover:translate-y-[-2px] hover:shadow-lg"
+              @click="handleLogin"
+            >
+              登录
+            </el-button>
+          </el-form-item>
+        </el-form>
       </div>
 
-      <el-form
-        ref="loginFormRef"
-        :model="loginForm"
-        :rules="loginRules"
-        class="mt-5"
-        @submit.prevent="handleLogin"
-      >
-        <el-form-item prop="username" class="mb-5">
-          <el-input
-            v-model="loginForm.username"
-            placeholder="请输入用户名"
-            :prefix-icon="User"
-            size="large"
-            class="rounded-lg"
-          />
-        </el-form-item>
-
-        <el-form-item prop="password" class="mb-5">
-          <el-input
-            v-model="loginForm.password"
-            type="password"
-            placeholder="请输入密码"
-            :prefix-icon="Lock"
-            size="large"
-            show-password
-            class="rounded-lg"
-          />
-        </el-form-item>
-
-        <el-form-item>
-          <el-button
-            type="primary"
-            size="large"
-            :loading="loading"
-            class="w-full bg-gradient-to-r from-blue-500 to-cyan-400 border-none text-base font-medium h-12 transition-all duration-300 hover:from-blue-600 hover:to-cyan-500 hover:translate-y-[-2px] hover:shadow-lg"
-            @click="handleLogin"
-          >
-            登录
-          </el-button>
-        </el-form-item>
-      </el-form>
+      <!-- 通知信息组件 -->
+      <NotificationPanel />
     </div>
 
     <div class="mt-8 text-center">
@@ -71,13 +76,7 @@ import { ElMessage } from 'element-plus'
 import { User, Lock, Link } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
-
-// 定义登录响应类型的接口
-interface LoginResponse {
-  success: boolean;
-  msg: string;
-  [key: string]: any; // 允许其他属性
-}
+import NotificationPanel from '@/components/NotificationPanel.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -189,9 +188,31 @@ const handleLogin = async () => {
   }
 
   .el-input__wrapper {
-    background: transparent !important;
+    background: rgba(50, 50, 50, 0.9) !important;
     border: 1px solid #555 !important;
     color: white !important;
+  }
+
+  .el-input__inner {
+    background: rgba(50, 50, 50, 0.9) !important;
+    color: white !important;
+  }
+
+  .el-input__inner::placeholder {
+    color: #aaa !important;
+  }
+
+  .el-input__suffix {
+    color: #aaa !important;
+  }
+
+  .el-button {
+    --el-button-bg-color: #409eff !important;
+    --el-button-border-color: #409eff !important;
+    --el-button-text-color: #ffffff !important;
+    --el-button-hover-text-color: #ffffff !important;
+    --el-button-hover-bg-color: #66b1ff !important;
+    --el-button-hover-border-color: #66b1ff !important;
   }
 
   .border {
@@ -208,5 +229,11 @@ const handleLogin = async () => {
     box-shadow: 0 10px 20px rgba(122, 168, 122, 0.3) !important;
     transform: translateY(-2px) !important;
   }
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  background-color: #e4e4e4;
+  color: #4b4b4b;
 }
 </style>

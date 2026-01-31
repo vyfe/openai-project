@@ -55,21 +55,6 @@ body.dark-theme {
   --el-disabled-text-color: #9a9a9a;
 }
 
-/* Element Plus 禁用状态样式 - 夜间模式 */
-body.dark-theme .el-textarea.is-disabled .el-textarea__inner {
-  background-color: #2a2a2a !important;
-  box-shadow: 0 0 0 1px #555555 inset !important;
-  color: #9a9a9a !important;
-  cursor: not-allowed !important;
-}
-
-/* Element Plus input 禁用状态 - 夜间模式 */
-body.dark-theme .el-input.is-disabled .el-input__wrapper {
-  background-color: #2a2a2a !important;
-  box-shadow: 0 0 0 1px #555555 inset !important;
-  cursor: not-allowed !important;
-}
-
 body.dark-theme .el-input.is-disabled .el-input__inner {
   color: #9a9a9a !important;
   -webkit-text-fill-color: #9a9a9a !important;
@@ -97,31 +82,6 @@ body.dark-theme .el-button--danger {
   background-color: #5a3232;
   border-color: #7a4242;
   color: white;
-}
-
-body.dark-theme .el-input__wrapper,
-body.dark-theme .el-textarea__wrapper {
-  background-color: #333333;
-  border: 1px solid #555555;
-  color: #e0e0e0;
-  box-shadow: none;
-}
-
-body.dark-theme .el-input__wrapper:hover,
-body.dark-theme .el-textarea__wrapper:hover {
-  border-color: #7a9ccc;
-}
-
-body.dark-theme .el-input__inner,
-body.dark-theme .el-textarea__inner {
-  background-color: #333333;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-select .el-input__wrapper {
-  background-color: #333333;
-  border: 1px solid #555555;
-  color: #e0e0e0;
 }
 
 /* Element Plus 2.x 新版 el-select 收起状态样式 */

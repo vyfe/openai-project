@@ -75,6 +75,13 @@ interface Props {
   fontSize?: string
 }
 
+// 定义文件上传响应的类型
+interface FileUploadResponse {
+  content?: string;
+  msg?: string;
+  [key: string]: any; // 允许其他属性
+}
+
 const props = withDefaults(defineProps<Props>(), {
   sendPreference: 'enter',
   isLoading: false,
@@ -203,18 +210,19 @@ const handleFileChange = async (file: any) => {
     }
 
     // 上传文件到服务器
-    const response = await fileAPI.upload(fileToUpload)
-    if (response && response.data.content) {
+    const response: FileUploadResponse = await fileAPI.upload(fileToUpload)
+    // 类型检查以处理可能未定义的content字段
+    if (response && typeof response === 'object' && 'content' in response && response.content) {
       // 文件上传成功，将URL添加到当前消息中
       uploadedFile.value = fileToUpload
       // 如果后端返回的content是相对路径或缺少host，则补充完整URL
-      let fullUrl = response.data.content
-      if (response.data.content.startsWith(':')) {
+      let fullUrl = response.content
+      if (response.content.startsWith(':')) {
         // 如果返回以冒号开头（如 :4567/download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.data.content
-      } else if (response.data.content.startsWith('/')) {
+        fullUrl = window.location.protocol + '//' + window.location.host + response.content
+      } else if (response.content.startsWith('/')) {
         // 如果返回以斜杠开头（如 /download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.data.content
+        fullUrl = window.location.protocol + '//' + window.location.host + response.content
       }
       // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
       inputMessage.value += `\n[FILE_URL:${fullUrl}]`
@@ -222,13 +230,23 @@ const handleFileChange = async (file: any) => {
 
       emit('file-change', fileToUpload)
     } else {
-      throw new Error(response.data.msg || '文件上传失败')
+      // 如果response没有content字段或content为空，抛出错误
+      const errorMsg = response && typeof response === 'object' && 'msg' in response && response.msg
+        ? response.msg
+        : '文件上传失败或服务器响应格式错误';
+      throw new Error(errorMsg)
     }
   } catch (error: any) {
     console.error('文件上传错误:', error)
     let errorMessage = '文件上传失败'
     if (error.response?.data?.msg) {
       errorMessage = error.response.data.msg
+    } else if (error?.response?.data?.content) {
+      errorMessage = error.response.data.content
+    } else if (typeof error === 'object' && error.msg) {
+      errorMessage = error.msg
+    } else if (typeof error === 'string') {
+      errorMessage = error
     }
     ElMessage.error(errorMessage)
   }

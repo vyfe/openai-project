@@ -272,6 +272,11 @@ export const chatAPI = {
       dialog_id: dialogId,
       new_title: newTitle
     })
+  },
+
+  // 获取通知列表
+  getNotifications: () => {
+    return api.get('/never_guess_my_usage/notifications')
   }
 }
 

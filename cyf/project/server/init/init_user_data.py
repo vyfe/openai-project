@@ -6,7 +6,11 @@
 """
 
 import configparser
-from .. import sqlitelog
+import sys
+import os
+# 添加上级目录到Python路径，以便导入sqlitelog
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sqlitelog
 from typing import Dict, List, Tuple
 
 def parse_users_from_config() -> Dict[str, Tuple[str, str]]:

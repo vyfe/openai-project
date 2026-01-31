@@ -1031,6 +1031,51 @@ def get_system_prompts_by_group():
     except Exception as e:
         app.logger.error(f"获取按组分类的系统提示词失败: {str(e)}")
         return {"success": False, "msg": f"获取系统提示词失败: {str(e)}"}, 200
+
+
+@app.route('/never_guess_my_usage/notifications', methods=['GET'])
+def get_notifications():
+    """获取通知公告列表，支持分页，按更新时间倒序排列"""
+    try:
+        # 获取分页参数
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', 10, type=int)
+        status = request.args.get('status', 'active', type=str)  # 可选的状态过滤参数
+
+        # 验证参数
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 100:  # 限制每页最多100条
+            page_size = 10
+
+        # 计算偏移量
+        offset = (page - 1) * page_size
+
+        # 调用数据库函数获取通知列表
+        notifications = sqlitelog.get_notification_list(
+            status=status,
+            limit=page_size,
+            offset=offset
+        )
+
+        # 获取总数用于分页信息
+        total_count = sqlitelog.get_notification_count(status=status)
+
+        return {
+            "success": True,
+            "data": {
+                "list": notifications,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total_count,
+                    "pages": (total_count + page_size - 1) // page_size if total_count > 0 else 1
+                }
+            }
+        }, 200
+    except Exception as e:
+        app.logger.error(f"获取通知公告列表失败: {str(e)}")
+        return {"success": False, "msg": f"获取通知公告列表失败: {str(e)}"}, 200
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
 sqlitelog.init_db()
