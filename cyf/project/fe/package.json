@@ -27,6 +27,7 @@
     "@vitejs/plugin-vue": "^6.0.3",
     "autoprefixer": "^10.4.23",
     "dompurify": "^3.3.1",
+    "terser": "^5.46.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vue-tsc": "^3.2.4"

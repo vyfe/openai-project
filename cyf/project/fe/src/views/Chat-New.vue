@@ -132,6 +132,7 @@
       <!-- 聊天内容区域 -->
       <ChatContent
         :selected-model="formData.selectedModel"
+        :selected-model-type="formData.selectedModelType"
         :context-count="formData.contextCount"
         :max-response-chars="formData.maxResponseChars"
         :stream-enabled="formData.streamEnabled"

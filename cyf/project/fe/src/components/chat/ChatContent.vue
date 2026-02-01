@@ -1152,6 +1152,35 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
       // 移除尺寸标记，只保留原始消息
       processedMessage = message.replace(/\[IMAGE_SIZE:(.+?)\]/, '').trim();
     }
+
+    // 优化：如果上一条AI消息中有url字段（AI返回的图片），将其转化为[FILE_URL]格式追加到本次的入参后面
+    // 获取上一条AI消息（排除系统消息和用户消息）
+    const lastAiMessageIndex = messages.reduceRight((lastIndex, msg, index) => {
+      if (msg.type === 'ai' && msg.content && msg.content !== t('chat.aiWelcomeMessage')) {
+        return index;
+      }
+      return lastIndex;
+    }, -1);
+
+    if (lastAiMessageIndex !== -1) {
+      const lastAiMessage = messages[lastAiMessageIndex];
+      // 检查上一条AI消息是否有url字段（AI返回的图片保存在message.url中）
+      if (lastAiMessage.url) {
+        // 将url字段转化为[FILE_URL]格式并追加到本次入参后面
+        processedMessage = processedMessage + '\n[FILE_URL:' + lastAiMessage.url + ']';
+      } else {
+        // 兼容旧逻辑：检查上一条AI消息的内容中是否包含[FILE_URL]
+        const fileUrls = extractFileUrls(lastAiMessage.content);
+        if (fileUrls.length > 0) {
+          // 提取原始的[FILE_URL:xxx]格式文本
+          const fileUrlMatches = lastAiMessage.content.match(/\[FILE_URL:[^\]]+\]/g);
+          if (fileUrlMatches) {
+            // 将上一条消息中的[FILE_URL]文本追加到本次入参后面
+            processedMessage = processedMessage + '\n' + fileUrlMatches.join('\n');
+          }
+        }
+      }
+    }
   }
 
   // 清除异常类的消息（包含重试或继续输出按钮的消息）

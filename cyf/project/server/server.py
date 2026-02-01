@@ -135,14 +135,15 @@ def process_pic_dialog_with_urls(dialogs: str, dialog_mode: str) -> dict:
     result = {
         'processed_dialogs': dialogs,
         'files': [],
-        'text_content': dialogs
+        'text_content': dialogs,
+        'original_content': dialogs  # 保留原始内容用于历史记录
     }
     
     if dialog_mode == 'single':
         # 检查是否包含文件URL
         file_urls = FILE_URL_PATTERN.findall(dialogs)
         if file_urls:
-            # 提取纯文本内容
+            # 提取纯文本内容（用于API调用）
             text_content = FILE_URL_PATTERN.sub('', dialogs).strip()
             result['text_content'] = text_content
             
@@ -865,8 +866,8 @@ def dialog_pic(user, password):
         processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
         
         if dialog_mode == 'single':
-            dialogvo = {"role": "user", "desc": processed_data['text_content']}
-            title = dialog_title or processed_data['text_content']
+            dialogvo = {"role": "user", "desc": processed_data['original_content']}  # 使用原始内容保存历史记录
+            title = dialog_title or processed_data['original_content']
 
             try:
                 # 如果有文件，使用图片编辑API；否则使用图片生成API
@@ -899,8 +900,11 @@ def dialog_pic(user, password):
             dialogvo = json.loads(dialogs)
             title = dialog_title or extract_title_from_dialog(dialogvo)  # 修复：改为使用新的提取函数
             
-            # 处理multi模式中的URL
+            # 处理multi模式中的URL，保留原始内容
             processed_multi_data = process_pic_dialog_with_urls(json.dumps(dialogvo), 'single')
+            # 更新最后一个对话项，保留原始内容
+            if processed_multi_data['original_content']:
+                dialogvo[-1]['desc'] = processed_multi_data['original_content']
             
             # 将连接图片转为本地的file对象（原有的本地文件处理逻辑）
             local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
@@ -913,7 +917,7 @@ def dialog_pic(user, password):
                     result = get_client_for_user(user).images.edit(
                         model=model,
                         image=file_info['data'],
-                        prompt=dialogvo[-1]["desc"],
+                        prompt=processed_multi_data['text_content'] if processed_multi_data['text_content'] else dialogvo[-1]["desc"],
                         n=1,
                         response_format="url",
                         size=size
@@ -924,7 +928,7 @@ def dialog_pic(user, password):
                         result = get_client_for_user(user).images.edit(
                             model=model,
                             image=image_file,
-                            prompt=dialogvo[-1]["desc"],
+                            prompt=processed_multi_data['text_content'] if processed_multi_data['text_content'] else dialogvo[-1]["desc"],
                             n=1,
                             response_format="url",
                             size=size
@@ -940,18 +944,20 @@ def dialog_pic(user, password):
         desc = result.data[0].revised_prompt or '图片已生成'
         # 保存到本地后使用本地的下载url
         # TODO 异常提示词是没有url的，需要区分code
-        response = requests.get(result.data[0].url)
-        if response.status_code == 200:
-            filename = (model + "-" + str(time.time()) + "-")
-            filename += [seg for seg in urlparse(result.data[0].url).path.split('/') if seg][-1]
-            save_path = os.path.join(conf["common"]["upload_dir"], "images/" + filename)
-            with open(save_path, "wb") as pic:
-                pic.write(response.content)
-            os.chmod(save_path, 0o755)
-            logging.info(f"pic saving:{save_path}")
-        else:
-            return {"msg": "error requesting pic server"}, 501
-        result_save = {"role": "assistant", "desc": desc, "url": f'{web_host}:4567/download/images/{filename}'}
+        # response = requests.get(result.data[0].url)
+        # if response.status_code == 200:
+        #     filename = (model + "-" + str(time.time()) + "-")
+        #     filename += [seg for seg in urlparse(result.data[0].url).path.split('/') if seg][-1]
+        #     save_path = os.path.join(conf["common"]["upload_dir"], "images/" + filename)
+        #     with open(save_path, "wb") as pic:
+        #         pic.write(response.content)
+        #     os.chmod(save_path, 0o755)
+        #     logging.info(f"pic saving:{save_path}")
+        # else:
+        #     return {"msg": "error requesting pic server"}, 501
+        # result_save = {"role": "assistant", "desc": desc, "url": f'{web_host}:4567/download/images/{filename}'}
+        # TODO 直接保存oss url，后面有余力再考虑转存
+        result_save = {"role": "assistant", "desc": desc, "url": f'{result.data[0].url}'}
         # 日志和对话单独记录，dialog中新增model-name字段？
         # 图片按条数统计
         sqlitelog.set_log(user, 1, model, json.dumps(result.to_dict()))

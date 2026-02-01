@@ -911,7 +911,7 @@ onMounted(async () => {
           value: model.id,
           recommend: model.recommend || false,
           model_desc: model.model_desc || '',
-          model_type: model.model_desc || 1,
+          model_type: model.model_type || 1,
         }));
       } else {
         console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
