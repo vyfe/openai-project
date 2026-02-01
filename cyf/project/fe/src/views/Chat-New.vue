@@ -14,7 +14,6 @@
         </div>
         <!-- 在移动端显示在标题下方的按钮组 -->
         <div class="header-mobile-buttons md:hidden">
-          <el-button size="small" >{{ authStore.user }}</el-button>
 
           <!-- 用量查询弹窗 -->
           <el-popover
@@ -36,23 +35,23 @@
             <div class="usage-content">
               <div v-if="loadingUsage" class="loading">
                 <el-icon class="is-loading"><Loading /></el-icon>
-                正在加载用量数据...
+                {{ t('chat.loadingUsageData') }}
               </div>
               <div v-else-if="usageError" class="error">
                 {{ usageError }}
               </div>
               <div v-else class="usage-data">
                 <div class="usage-item">
-                  <span class="label">总用量：</span>
-                  <span class="value">{{ usageData?.total_usage }} 元</span>
+                  <span class="label">{{ t('chat.totalUsage') }}：</span>
+                  <span class="value">{{ usageData?.total_usage }} {{ t('chat.yuan') }}</span>
                 </div>
                 <div class="usage-item">
-                  <span class="label">总额度：</span>
-                  <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} 元</span>
+                  <span class="label">{{ t('chat.quota') }}：</span>
+                  <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} {{ t('chat.yuan') }}</span>
                 </div>
                 <div class="usage-item" :class="{ 'low-balance': usageData?.remaining < 10 }">
-                  <span class="label">剩余额度：</span>
-                  <span class="value">{{ usageData?.remaining > 10000 ? '-' : usageData?.remaining }} 元</span>
+                  <span class="label">{{ t('chat.remainingQuota') }}：</span>
+                  <span class="value">{{ usageData?.remaining > 10000 ? '-' : usageData?.remaining }} {{ t('chat.yuan') }}</span>
                 </div>
               </div>
             </div>
@@ -75,7 +74,7 @@
             @click="showNotificationPanel = true"
             class="notification-btn"
           >
-            {{ formData.isMobile ? '' : '通知' }}
+            {{ formData.isMobile ? '' : t('chat.notifications') }}
           </el-button>
           <!-- TODO(human): 优化移动端按钮的布局和样式，考虑添加更多针对移动设备的适配样式 -->
         </div>
@@ -86,7 +85,7 @@
           @click="toggleLanguage"
           class="logout-btn"
           :class="{'rounded-full': true}"
-          size="medium"
+          size="small"
           :icon="SwitchFilled"
         >
           {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
@@ -95,9 +94,24 @@
         <el-button @click="toggleTheme" class="theme-toggle-btn" :icon="formData.isDarkTheme ? Sunny : Moon">
           {{ formData.isMobile ? '' : (formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')) }}
         </el-button>
-        <el-button @click="logout" class="logout-btn" :icon="SwitchButton">
-          {{ formData.isMobile ? '' : t('chat.logout') }}
-        </el-button>
+
+        <!-- 用户菜单 -->
+        <el-dropdown class="user-menu">
+          <el-button class="user-btn" type="default">
+            <span class="user-name">{{ authStore.user }}</span>
+            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="showUserSettings = true" :icon="Setting">
+                {{ t('chat.userSettings') }}
+              </el-dropdown-item>
+              <el-dropdown-item @click="logout" :icon="SwitchButton">
+                {{ t('chat.logout') }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -146,31 +160,38 @@
       width="60%"
     >
     <div class="latex-help-content">
-      <h2>专业输出帮助</h2>
-      <h3>如何在对话中使用 LaTeX 数学公式</h3>
-      <p>您可以使用以下语法在对话中插入数学公式：</p>
+      <h2>{{ t('chat.professionalOutputHelp') }}</h2>
+      <h3>{{ t('chat.howToUseLatex') }}</h3>
+      <p>{{ t('chat.useSyntaxBelow') }}</p>
 
-      <h4>内联公式（行内）</h4>
-      <p>使用 <code>$...$</code> 包围公式，例如：<code>$E=mc^2$</code></p>
+      <h4>{{ t('chat.inlineFormula') }}</h4>
+      <p>{{ t('chat.useDollarSign') }} <code>$...$</code> {{ t('chat.surroundFormula') }} <code>$E=mc^2$</code></p>
 
-      <h4>独立公式（居中显示）</h4>
-      <p>使用 <code>$$...$$</code> 包围公式，例如：<code>$$y = X\\beta + \\epsilon$$</code></p>
+      <h4>{{ t('chat.standaloneFormula') }}</h4>
+      <p>{{ t('chat.useDollarSign') }} <code>$$...$$</code> {{ t('chat.surroundFormula') }} <code>$$y = X\\beta + \\epsilon$$</code></p>
 
-      <h4>示例</h4>
+      <h4>{{ t('chat.examples') }}</h4>
       <div class="example-formulas">
-        <p><strong>二次公式：</strong> $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$</p>
-        <p><strong>欧拉恒等式：</strong> $$e^{i\\pi} + 1 = 0$$</p>
-        <p><strong>矩阵：</strong> $A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$</p>
+        <p><strong>{{ t('chat.quadraticFormula') }}：</strong> $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$</p>
+        <p><strong>{{ t('chat.eulerIdentity') }} ：</strong> $$e^{i\\pi} + 1 = 0$$</p>
+        <p><strong>{{ t('chat.matrix') }}：</strong> $A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$</p>
       </div>
 
-      <p>公式将在消息中自动渲染为美观的数学符号。</p>
+      <p>{{ t('chat.formulaWillRender') }}</p>
     </div>
     </el-dialog>
 
     <!-- 通知模态框 -->
     <Teleport to="body">
-      <div v-if="showNotificationPanel" class="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
-        <div class="relative">
+      <div
+        v-if="showNotificationPanel"
+        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        @click="handleNotificationBackdropClick"
+      >
+        <div
+          class="relative"
+          @click.stop
+        >
           <NotificationPanel
             isModal
             @close="showNotificationPanel = false"
@@ -178,6 +199,12 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- 用户设置弹窗 -->
+    <UserSettings
+      v-model="showUserSettings"
+      @password-updated="handlePasswordUpdated"
+    />
   </div>
 </template>
 
@@ -186,9 +213,10 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell, ArrowDown, Setting } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
+import UserSettings from '../components/chat/UserSettings.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
 import NotificationPanel from '../components/NotificationPanel.vue'
@@ -203,6 +231,7 @@ const formData = reactive({
   isDarkTheme: JSON.parse(localStorage.getItem('isDarkTheme') || 'false'),
   currentDialogId: ref<number | null>(null),
   selectedModel: localStorage.getItem('selectedModel') || '',
+  selectedModelType: parseInt(localStorage.getItem('selectedModelType') || '1'),
   // 上下文字数
   contextCount: parseInt(localStorage.getItem('contextCount') || '10'),
   // 侧边栏折叠状态
@@ -225,7 +254,7 @@ const formData = reactive({
   isScrolledToBottom: true,
 
   // 模型相关
-  models: [] as Array<{ label: string, value: string, recommend?: boolean, model_desc?: string }>,
+  models: [] as Array<{ group: string, label: string, value: string, recommend?: boolean, model_desc?: string }>,
   groupedModels: {} as Record<string, any[]>,
   providers: [] as string[],
   providerValue: '',
@@ -237,11 +266,7 @@ const formData = reactive({
   enhancedRoleGroups: {} as Record<string, any[]>,
   activeEnhancedGroup: localStorage.getItem('activeEnhancedGroup') || '',
   selectedEnhancedRole: localStorage.getItem('selectedEnhancedRole') || '',
-  rolePresets: [
-    { id: 'default', name: '默认', prompt: '' },
-    { id: 'translator', name: '翻译', prompt: '你是一个专业的翻译助手，擅长中英文互译，注重语义准确和表达流畅。' },
-    { id: 'writer', name: '写作', prompt: '你是一个专业的写作助手，擅长文章润色、创意写作和文案编辑。' }
-  ] as Array<{ id: string, name: string, prompt: string }>,
+  rolePresets: [] as Array<{ id: string, name: string, prompt: string }>,
   activeRoleId: localStorage.getItem('activeRoleId') || 'default',
 })
 
@@ -250,6 +275,7 @@ const currentLang = ref(locale.value)
 const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
 const showNotificationPanel = ref(false)
+const showUserSettings = ref(false)
 
 // 用量查询相关
 const loadingUsage = ref(false)
@@ -261,6 +287,7 @@ watch(() => formData.contextCount, (val) => localStorage.setItem('contextCount',
 watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxResponseChars', val.toString()))
 watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
+watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
 watch(() => formData.systemPrompt, (val) => localStorage.setItem('systemPrompt', val))
 watch(() => formData.sendPreference, (val) => localStorage.setItem('sendPreference', val))
@@ -319,7 +346,7 @@ const refreshHistory = async () => {
 // 加载对话历史
 const loadDialogHistory = async () => {
   if (!authStore.user) {
-    ElMessage.warning('请先登录')
+    ElMessage.warning(t('chat.pleaseLoginFirst'))
     return
   }
 
@@ -334,8 +361,8 @@ const loadDialogHistory = async () => {
       ElMessage.info('暂无历史对话')
     }
   } catch (error: any) {
-    console.error('加载对话历史错误:', error)
-    ElMessage.error('加载对话历史失败')
+    console.error(t('chat.loadHistoryError'), error)
+    ElMessage.error(t('chat.loadHistoryFailed'))
   } finally {
     formData.loadingHistory = false
   }
@@ -359,6 +386,19 @@ const logout = () => {
   ElMessage.success(t('chat.logoutSuccess'))
 }
 
+// 处理密码更新后的行为
+const handlePasswordUpdated = () => {
+  // 密码更新成功后，让用户退出登录
+  setTimeout(() => {
+    logout()
+  }, 1000) // 给用户一点时间看到成功的消息
+}
+
+// 处理点击通知面板外部区域关闭面板
+const handleNotificationBackdropClick = () => {
+  showNotificationPanel.value = false
+}
+
 // 切换语言
 const toggleLanguage = () => {
   const newLocale = currentLang.value === 'zh' ? 'en' : 'zh'
@@ -378,7 +418,7 @@ const fetchUsage = async () => {
   } catch (error: any) {
     console.error('获取用量信息失败:', error)
     usageError.value = error.message || '获取用量信息失败'
-    ElMessage.error('获取用量信息失败')
+    ElMessage.error(t('chat.fetchUsageFailed'))
   } finally {
     loadingUsage.value = false
   }
@@ -405,6 +445,41 @@ onMounted(() => {
 
   // 初始化当前语言
   currentLang.value = locale.value
+
+  // 设置角色预设
+  formData.rolePresets = [
+    { id: 'default', name: t('chat.defaultRole'), prompt: '' },
+    { id: 'translator', name: t('chat.translatorRole'), prompt: t('chat.translatorPrompt') },
+    { id: 'writer', name: t('chat.writerRole'), prompt: t('chat.writerPrompt') },
+  ]
+
+  // 加载本地存储的自定义角色并合并
+  const savedCustomRoles = localStorage.getItem('customRoles')
+  if (savedCustomRoles) {
+    try {
+      const customRoles = JSON.parse(savedCustomRoles)
+      if (Array.isArray(customRoles)) {
+        // 确保自定义角色不与预设角色冲突
+        const existingIds = new Set(formData.rolePresets.map(role => role.id))
+        const uniqueCustomRoles = customRoles.filter(role => !existingIds.has(role.id))
+        formData.rolePresets.push(...uniqueCustomRoles)
+      }
+    } catch (e) {
+      console.error('加载本地自定义角色失败:', e)
+    }
+  }
+
+  // 设置活动角色
+  const savedActiveRoleId = localStorage.getItem('activeRoleId') || 'default'
+  if (savedActiveRoleId) {
+    formData.activeRoleId = savedActiveRoleId
+
+    // 如果活动角色是预设的，恢复相应的提示词
+    const activeRole = formData.rolePresets.find(role => role.id === savedActiveRoleId)
+    if (activeRole) {
+      formData.systemPrompt = activeRole.prompt
+    }
+  }
 })
 
 // 组件卸载
@@ -414,7 +489,7 @@ onUnmounted(() => {
 </script>
 
 <style>
-@import '@/views/styles/chat.css';
+@import '@/styles/chat.css';
 
 /* 语言切换按钮样式 */
 .language-toggle-btn {
@@ -428,5 +503,34 @@ onUnmounted(() => {
   margin-right: 10px;
   border-radius: 50% !important;
   padding: 0;
+}
+
+/* 用户菜单样式 */
+.user-menu {
+  margin-left: 10px;
+}
+
+.user-btn {
+  padding: 8px 12px;
+  border-radius: 20px;
+  background-color: var(--el-button-bg-color, #f0f0f0);
+  border: 1px solid var(--el-border-color, #dcdfe6);
+}
+
+.user-name {
+  margin-right: 6px;
+  font-weight: 500;
+}
+
+/* 为移动端调整样式 */
+@media (max-width: 768px) {
+  .user-menu {
+    margin-left: 5px;
+  }
+
+  .user-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 </style>

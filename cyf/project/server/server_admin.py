@@ -46,12 +46,32 @@ def user_to_dict(user):
         'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
     }
 
+def get_request_data():
+    """
+    通用请求数据获取函数，兼容JSON和form格式
+    返回一个类似dict的对象，可以使用.get()方法获取数据
+    """
+    content_type = request.content_type
+
+    if content_type and 'application/json' in content_type:
+        # 如果是JSON请求，从JSON数据中获取参数
+        json_data = request.get_json(silent=True)
+        if json_data:
+            return json_data
+        else:
+            # 如果JSON数据无效，回退到request.values
+            return request.values
+    else:
+        # 否则是表单数据或URL参数
+        return request.values
+
 def require_admin_auth(f):
     """管理员认证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
+        data = get_request_data()
+        user = data.get('user', '').strip()
+        password = data.get('password', '').strip()
         # 只允许管理员角色登录
         success, error_msg, _ = sqlitelog.verify_user_password(user, password, "admin")
         if not success:
@@ -98,18 +118,21 @@ def model_meta_get(model_id):
 def model_meta_create():
     """创建模型元数据"""
     try:
-        data = request.form
+        data = get_request_data()
         model_name = data.get('model_name', '').strip()
+        # 1-文本 2-图像
+        model_type = int(data.get('model_type', '').strip())
         if not model_name:
             return error_response("模型名称不能为空")
-        
+
         # 转换布尔值
         recommend = data.get('recommend', 'false').lower() in ('true', '1', 'yes')
         status_valid = data.get('status_valid', 'true').lower() in ('true', '1', 'yes')
-        
+
         model = ModelMeta.create(
             model_name=model_name,
             model_desc=data.get('model_desc', ''),
+            model_type=model_type,
             recommend=recommend,
             status_valid=status_valid
         )
@@ -124,13 +147,13 @@ def model_meta_create():
 def model_meta_update():
     """更新模型元数据"""
     try:
-        data = request.form
+        data = get_request_data()
         model_id = data.get('id')
         if not model_id:
             return error_response("模型ID不能为空")
-        
+
         model = ModelMeta.get_by_id(int(model_id))
-        
+
         # 更新字段
         if 'model_name' in data:
             model.model_name = data['model_name'].strip()
@@ -140,7 +163,7 @@ def model_meta_update():
             model.recommend = data['recommend'].lower() in ('true', '1', 'yes')
         if 'status_valid' in data:
             model.status_valid = data['status_valid'].lower() in ('true', '1', 'yes')
-        
+
         model.save()
         return success_response(data=model.to_dict(), msg="模型更新成功")
     except DoesNotExist:
@@ -155,11 +178,11 @@ def model_meta_update():
 def model_meta_delete():
     """删除模型元数据"""
     try:
-        data = request.form
+        data = get_request_data()
         model_id = data.get('id')
         if not model_id:
             return error_response("模型ID不能为空")
-        
+
         model = ModelMeta.get_by_id(int(model_id))
         model.delete_instance()
         return success_response(msg="模型删除成功")
@@ -240,13 +263,13 @@ def system_prompt_create():
 def system_prompt_update():
     """更新系统提示词"""
     try:
-        data = request.form
+        data = get_request_data()
         prompt_id = data.get('id')
         if not prompt_id:
             return error_response("系统提示词ID不能为空")
-        
+
         prompt = SystemPrompt.get_by_id(int(prompt_id))
-        
+
         # 更新字段
         if 'role_name' in data:
             prompt.role_name = data['role_name'].strip()
@@ -258,7 +281,7 @@ def system_prompt_update():
             prompt.role_content = data['role_content']
         if 'status_valid' in data:
             prompt.status_valid = data['status_valid'].lower() in ('true', '1', 'yes')
-        
+
         prompt.save()
         return success_response(data=prompt.to_dict(), msg="系统提示词更新成功")
     except DoesNotExist:
@@ -273,11 +296,11 @@ def system_prompt_update():
 def system_prompt_delete():
     """删除系统提示词"""
     try:
-        data = request.form
+        data = get_request_data()
         prompt_id = data.get('id')
         if not prompt_id:
             return error_response("系统提示词ID不能为空")
-        
+
         prompt = SystemPrompt.get_by_id(int(prompt_id))
         prompt.delete_instance()
         return success_response(msg="系统提示词删除成功")
@@ -315,7 +338,7 @@ def test_limit_get(limit_id):
 def test_limit_create():
     """创建测试限制"""
     try:
-        data = request.form
+        data = get_request_data()
         user_ip = data.get('user_ip', '').strip()
         if not user_ip:
             return error_response("用户IP不能为空")
@@ -342,7 +365,7 @@ def test_limit_create():
 def test_limit_update():
     """更新测试限制"""
     try:
-        data = request.form
+        data = get_request_data()
         limit_id = data.get('id')
         if not limit_id:
             return error_response("限制ID不能为空")
@@ -377,7 +400,7 @@ def test_limit_update():
 def test_limit_delete():
     """删除测试限制"""
     try:
-        data = request.form
+        data = get_request_data()
         limit_id = data.get('id')
         if not limit_id:
             return error_response("限制ID不能为空")
@@ -395,7 +418,7 @@ def test_limit_delete():
 def test_limit_reset():
     """重置测试限制"""
     try:
-        data = request.form
+        data = get_request_data()
         limit_id = data.get('id')
         user_ip = data.get('user_ip')
         reset_all = data.get('reset_all', 'false').lower() in ('true', '1', 'yes')
@@ -453,7 +476,7 @@ def user_get(user_id):
 def user_create():
     """创建用户"""
     try:
-        data = request.form
+        data = get_request_data()
         username = data.get('username', '').strip()
         new_password = data.get('new_password', '').strip()
         
@@ -486,7 +509,7 @@ def user_create():
 def user_update():
     """更新用户信息"""
     try:
-        data = request.form
+        data = get_request_data()
         user_id = data.get('id')
         if not user_id:
             return error_response("用户ID不能为空")
@@ -530,7 +553,7 @@ def user_update():
 def user_delete():
     """删除用户（默认软删除）"""
     try:
-        data = request.form
+        data = get_request_data()
         user_id = data.get('id')
         if not user_id:
             return error_response("用户ID不能为空")
@@ -554,39 +577,6 @@ def user_delete():
     except Exception as e:
         return error_response(f"删除用户失败: {str(e)}")
 
-@app.route('/user/reset_password', methods=['POST'])
-@require_admin_auth
-def user_reset_password():
-    """重置用户密码"""
-    try:
-        data = request.form
-        new_password = data.get('new_password', '').strip()
-        if not new_password:
-            return error_response("新密码不能为空")
-        
-        # 通过ID或用户名查找用户
-        user_id = data.get('id')
-        username = data.get('username')
-        
-        if user_id:
-            user = User.get_by_id(int(user_id))
-        elif username:
-            user = User.get(User.username == username)
-        else:
-            return error_response("请提供用户ID或用户名")
-        
-        # 重新哈希密码
-        password_hash, salt = User.hash_password(new_password)
-        user.password_hash = password_hash
-        user.salt = salt
-        user.updated_at = datetime.now()
-        user.save()
-        
-        return success_response(msg="密码重置成功")
-    except DoesNotExist:
-        return error_response("用户不存在")
-    except Exception as e:
-        return error_response(f"重置密码失败: {str(e)}")
 
 # ==================== Notification 接口 ====================
 def notification_to_dict(notification):
@@ -645,7 +635,7 @@ def notification_get(notification_id):
 def notification_create():
     """创建通知公告"""
     try:
-        data = request.form
+        data = get_request_data()
         title = data.get('title', '').strip()
         content = data.get('content', '').strip()
         
@@ -678,7 +668,7 @@ def notification_create():
 def notification_update():
     """更新通知公告"""
     try:
-        data = request.form
+        data = get_request_data()
         notification_id = data.get('id')
         if not notification_id:
             return error_response("通知ID不能为空")
@@ -719,7 +709,7 @@ def notification_update():
 def notification_delete():
     """删除通知公告"""
     try:
-        data = request.form
+        data = get_request_data()
         notification_id = data.get('id')
         if not notification_id:
             return error_response("通知ID不能为空")

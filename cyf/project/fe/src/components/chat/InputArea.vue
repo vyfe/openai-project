@@ -5,39 +5,58 @@
         v-model="inputMessage"
         type="textarea"
         :rows="3"
-        :placeholder="`请输入您的问题... (${sendPreference === 'enter' ? '回车发送，Shift+回车换行' : '回车换行，Ctrl+回车发送'})`"
+        :placeholder="`${t('chat.inputPlaceholder')} (${sendPreference === 'enter' ? t('chat.enterToSendHint') : t('chat.enterToNewlineHint')})`"
         class="message-input"
         @keydown="handleKeydown"
       />
-      <div class="input-actions">
-        <!-- 将按钮放入编组容器中 -->
-        <div class="button-group">
-          <!-- 文件上传按钮移到输入框上方，右侧 -->
-          <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
-            <template #reference>
-              <el-button class="upload-trigger-btn" :icon="Plus" size="large" />
-            </template>
-            <div class="upload-popover-content">
-              <div class="upload-popover-header">
-                <span>上传文件</span>
-                <el-button v-if="uploadedFile" type="danger" size="small" text @click="clearFile">清除</el-button>
-              </div>
-              <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
-                accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.md,.markdown">
-                <el-icon><upload-filled /></el-icon>
-                <div class="el-upload__text">拖拽或点击上传</div>
-              </el-upload>
-            </div>
-          </el-popover>
-
-          <el-button
-            type="primary"
-            :icon="Position"
-            :disabled="!inputMessage.trim() || isLoading"
-            @click="sendMessage"
+      <div class="input-addons">
+        <!-- 图片模型尺寸选择下拉框 -->
+        <div v-if="isImageModel" class="image-size-control">
+          <el-select
+            v-model="selectedImageSize"
+            placeholder="选择图片尺寸"
+            class="image-size-select"
+            size="default"
           >
-            发送
-          </el-button>
+            <el-option
+              v-for="size in imageSizeOptions"
+              :key="size.value"
+              :label="size.label"
+              :value="size.value"
+            />
+          </el-select>
+        </div>
+
+        <div class="input-actions">
+          <!-- 将按钮放入编组容器中 -->
+          <div class="button-group">
+            <!-- 文件上传按钮移到输入框上方，右侧 -->
+            <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
+              <template #reference>
+                <el-button class="upload-trigger-btn" :icon="Plus" size="large" />
+              </template>
+              <div class="upload-popover-content">
+                <div class="upload-popover-header">
+                  <span>{{ t('chat.uploadFile') }}</span>
+                  <el-button v-if="uploadedFile" type="danger" size="small" text @click="clearFile">{{ t('chat.clear') }}</el-button>
+                </div>
+                <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
+                  accept=".txt,.pdf,.png,.jpg,.jpeg,.gif,.ppt,.pptx,.md,.markdown">
+                  <el-icon><upload-filled /></el-icon>
+                  <div class="el-upload__text">{{ t('chat.dragDropOrClickUpload') }}</div>
+                </el-upload>
+              </div>
+            </el-popover>
+
+            <el-button
+              type="primary"
+              :icon="Position"
+              :disabled="!inputMessage.trim() || isLoading"
+              @click="sendMessage"
+            >
+              {{ t('chat.send') }}
+            </el-button>
+          </div>
         </div>
       </div>
     </div>
@@ -46,6 +65,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
   UploadFilled,
@@ -53,27 +73,7 @@ import {
   Plus,
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
-
-// 定义 props
-interface Props {
-  modelValue: string
-  sendPreference?: 'enter' | 'ctrl_enter'
-  isLoading?: boolean
-  contextCount?: number
-  enhancedRoleEnabled?: boolean
-  systemPrompt?: string
-  activeEnhancedGroup?: string
-  selectedEnhancedRole?: string
-  enhancedRoleGroups?: Record<string, any[]>
-  selectedModel?: string
-  streamEnabled?: boolean
-  maxResponseChars?: number
-  dialogTitle?: string
-  currentDialogId?: number | null
-  isScrolledToBottom?: boolean
-  isMobile?: boolean
-  fontSize?: string
-}
+import { Props } from '@/components/chat/types'
 
 // 定义文件上传响应的类型
 interface FileUploadResponse {
@@ -91,6 +91,7 @@ const props = withDefaults(defineProps<Props>(), {
   activeEnhancedGroup: '',
   selectedEnhancedRole: '',
   selectedModel: '',
+  selectedModelType: 1,  // 默认为1（非图片模型）
   streamEnabled: true,
   maxResponseChars: 1000,
   dialogTitle: '',
@@ -103,12 +104,28 @@ const props = withDefaults(defineProps<Props>(), {
 // 定义 emits
 interface Emits {
   'update:modelValue': [value: string]
-  'send-message': [message: string, file?: File]
+  'send-message': [message: string, file?: File, imageSize?: string]  // 添加图片尺寸参数
   'file-change': [file: any]
   'clear-file': []
 }
 
 const emit = defineEmits<Emits>()
+
+// 国际化
+const { t } = useI18n()
+
+// 图片尺寸选项
+const imageSizeOptions = [
+  { value: '1024x1024', label: '1024x1024 (标准)' },
+  { value: '1024x1792', label: '1024x1792 (纵向)' },
+  { value: '1792x1024', label: '1792x1024 (横向)' },
+  { value: '512x512', label: '512x512 (小)' },
+  { value: '256x256', label: '256x256 (最小)' },
+  { value: '768x768', label: '768x768 (中)' },
+  { value: '1280x1280', label: '1280x1280 (较大)' },
+  { value: '1536x1536', label: '1536x1536 (大)' },
+  { value: '2048x2048', label: '2048x2048 (超大)' },
+]
 
 // 响应式数据
 const inputMessage = computed({
@@ -119,6 +136,12 @@ const inputMessage = computed({
 const uploadedFile = ref<File | null>(null)
 const showUploadPopover = ref(false)
 const uploadRef = ref()
+const selectedImageSize = ref('1024x1024') // 默认尺寸
+
+// 计算属性：判断是否为图片模型
+const isImageModel = computed(() => {
+  return props.selectedModelType === 2
+})
 
 // 添加键盘可见性检测
 const isKeyboardVisible = ref(false)
@@ -166,7 +189,14 @@ const sendMessage = () => {
     return
   }
 
-  emit('send-message', inputMessage.value, uploadedFile.value || undefined)
+  // 如果是图片模型，添加尺寸信息到消息中
+  let messageToSend = inputMessage.value
+  if (isImageModel.value) {
+    // 在消息末尾添加图片尺寸信息
+    messageToSend = `${inputMessage.value}\n[IMAGE_SIZE:${selectedImageSize.value}]`
+  }
+
+  emit('send-message', messageToSend, uploadedFile.value || undefined)
 
   // 清空输入框和文件
   inputMessage.value = ''
@@ -199,12 +229,32 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 const handleFileChange = async (file: any) => {
   try {
+    // 检查文件对象是否有效
+    if (!file) {
+      throw new Error('未选择文件')
+    }
+    
     // 检查是否为MD文件，如果是则重命名为TXT文件
-    let fileToUpload = file.raw;
-    if (file.raw.type === 'text/markdown' || file.name.toLowerCase().endsWith('.md')) {
+    let fileToUpload = file.raw || file; // 兼容不同的文件对象格式
+    
+    // 确保文件对象有必要的属性
+    if (!fileToUpload) {
+      throw new Error('文件对象无效')
+    }
+    
+    // 检查文件类型和扩展名
+    const fileType = fileToUpload.type || '';
+    const fileName = file.name || fileToUpload.name || '';
+    
+    if (fileType === 'text/markdown' || fileName.toLowerCase().endsWith('.md')) {
+      // 确保文件有text方法
+      if (typeof fileToUpload.text !== 'function') {
+        throw new Error('无法读取文件内容')
+      }
+      
       // 读取MD文件内容并创建新的TXT文件
-      const textContent = await file.raw.text();
-      const txtFileName = file.name.replace(/\.md$/, '.txt');
+      const textContent = await fileToUpload.text();
+      const txtFileName = fileName.replace(/\.md$/, '.txt');
       fileToUpload = new File([textContent], txtFileName, { type: 'text/plain' });
       ElMessage.info(`MD文件已转换为TXT格式: ${txtFileName}`)
     }
@@ -226,7 +276,7 @@ const handleFileChange = async (file: any) => {
       }
       // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
       inputMessage.value += `\n[FILE_URL:${fullUrl}]`
-      ElMessage.success(`文件 "${fileToUpload.name}" 已上传`)
+      ElMessage.success(`文件 "${fileToUpload.name || fileName}" 已上传`)
 
       emit('file-change', fileToUpload)
     } else {
@@ -247,6 +297,8 @@ const handleFileChange = async (file: any) => {
       errorMessage = error.msg
     } else if (typeof error === 'string') {
       errorMessage = error
+    } else if (error.message) {
+      errorMessage = error.message
     }
     ElMessage.error(errorMessage)
   }
@@ -262,5 +314,5 @@ const clearFile = () => {
 </script>
 
 <style scoped>
-@import './input-area.css';
+@import '@/styles/input-area.css';
 </style>

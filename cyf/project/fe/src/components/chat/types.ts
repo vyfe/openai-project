@@ -65,3 +65,24 @@ export interface ChatContentEmits {
   (e: 'refresh-history'): void
   (e: 'update:currentDialogId', id: number | null): void
 }
+// 定义 props
+export interface Props {
+  modelValue: string
+  sendPreference?: 'enter' | 'ctrl_enter'
+  isLoading?: boolean
+  contextCount?: number
+  enhancedRoleEnabled?: boolean
+  systemPrompt?: string
+  activeEnhancedGroup?: string
+  selectedEnhancedRole?: string
+  enhancedRoleGroups?: Record<string, any[]>
+  selectedModel?: string
+  selectedModelType?: number  // 添加模型类型参数
+  streamEnabled?: boolean
+  maxResponseChars?: number
+  dialogTitle?: string
+  currentDialogId?: number | null
+  isScrolledToBottom?: boolean
+  isMobile?: boolean
+  fontSize?: string
+}

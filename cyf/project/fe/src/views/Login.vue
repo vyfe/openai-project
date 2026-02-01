@@ -6,8 +6,8 @@
     <div class="relative z-10 flex items-start gap-6">
       <div class="bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-blue-200/30 w-96 max-w-[90%]">
         <div class="text-center mb-8">
-          <h1 class="text-2xl font-bold text-indigo-600 mb-2">智能对话系统</h1>
-          <p class="text-blue-400">登录您的账户</p>
+          <h1 class="text-2xl font-bold text-indigo-600 mb-2">{{ t('login.title') }}</h1>
+          <p class="text-blue-400">{{ t('login.subtitle') }}</p>
         </div>
 
         <el-form
@@ -20,7 +20,7 @@
           <el-form-item prop="username" class="mb-5">
             <el-input
               v-model="loginForm.username"
-              placeholder="请输入用户名"
+              :placeholder="t('login.usernamePlaceholder')"
               :prefix-icon="User"
               size="large"
               class="rounded-lg"
@@ -32,7 +32,7 @@
             <el-input
               v-model="loginForm.password"
               type="password"
-              placeholder="请输入密码"
+              :placeholder="t('login.passwordPlaceholder')"
               :prefix-icon="Lock"
               size="large"
               show-password
@@ -49,7 +49,7 @@
               class="w-full bg-gradient-to-r from-blue-500 to-cyan-400 border-none text-base font-medium h-12 transition-all duration-300 hover:from-blue-600 hover:to-cyan-500 hover:translate-y-[-2px] hover:shadow-lg"
               @click="handleLogin"
             >
-              登录
+              {{ t('login.submitButton') }}
             </el-button>
           </el-form-item>
         </el-form>
@@ -63,25 +63,25 @@
             @click="showNotificationModal = true"
             :icon="Bell"
           >
-            查看通知
+            {{ t('login.viewNotifications') }}
           </el-button>
         </div>
       </div>
     </div>
 
     <div class="mt-8 text-center">
-      <p class="text-blue-400">体验智能对话，让AI为您服务</p>
+      <p class="text-blue-400">{{ t('login.description') }}</p>
       <p class="mt-2.5 flex items-center justify-center gap-1">
         <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer" class="text-blue-400 text-sm font-medium flex items-center gap-1 hover:text-indigo-600 hover:underline">
-          <el-icon><Link /></el-icon> 开源项目 GitHub
+          <el-icon><Link /></el-icon> {{ t('login.githubLink') }}
         </a>
-        <span class="ml-3.5 text-blue-400 font-medium inline-flex items-center"> vx:pata_data_studio </span>
+        <span class="ml-3.5 text-blue-400 font-medium inline-flex items-center"> {{ t('login.contactInfo') }} </span>
       </p>
     </div>
 
     <!-- 通知模态框 -->
     <Teleport to="body">
-      <div v-if="showNotificationModal" class="fixed inset-0 bg-transparent flex items-center justify-center z-50 p-4">
+      <div v-if="showNotificationModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div class="relative">
           <NotificationPanel
             isModal
@@ -96,12 +96,14 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Link, Bell } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 import NotificationPanel from '@/components/NotificationPanel.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const loginFormRef = ref()
@@ -115,12 +117,12 @@ const loginForm = reactive({
 
 const loginRules = {
   username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 1, message: '用户名不能为空', trigger: 'blur' }
+    { required: true, message: t('validation.usernameRequired'), trigger: 'blur' },
+    { min: 1, message: t('validation.usernameNotEmpty'), trigger: 'blur' }
   ],
   password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 1, message: '密码不能为空', trigger: 'blur' }
+    { required: true, message: t('validation.passwordRequired'), trigger: 'blur' },
+    { min: 1, message: t('validation.passwordNotEmpty'), trigger: 'blur' }
   ]
 }
 
@@ -143,14 +145,14 @@ const handleLogin = async () => {
             password: loginForm.password
           })
 
-          ElMessage.success(response.msg || '登录成功！')
+          ElMessage.success(response.msg || t('login.successMessage'))
           router.push('/chat')
         } else {
-          throw new Error(response.msg || '登录失败')
+          throw new Error(response.msg || t('login.failedMessage'))
         }
       } catch (error: any) {
         console.error('Login error:', error)
-        let errorMessage = '登录失败，请检查用户名和密码'
+        let errorMessage = t('login.failedMessage')
         if (error.message) {
           errorMessage = error.message
         } else if (error?.response?.data?.msg) {

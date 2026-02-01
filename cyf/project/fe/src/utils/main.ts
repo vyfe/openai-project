@@ -2,6 +2,7 @@ export interface FormData {
     isDarkTheme: boolean;
     currentDialogId: number | null;
     selectedModel: string;
+    selectedModelType: number;
     contextCount: number;
     sidebarCollapsed: boolean;
     maxResponseChars: number;
@@ -13,7 +14,7 @@ export interface FormData {
     dialogHistory: any[];
     loadingHistory: boolean;
     isLoading: boolean;
-    models: Array<{ group: string, label: string, value: string, recommend?: boolean, model_desc?: string }>;
+    models: Array<{ group: string, label: string, value: string, recommend?: boolean, model_desc?: string, model_type?: number }>;
     groupedModels: Record<string, any[]>;
     providers: string[];
     providerValue: string;

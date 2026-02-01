@@ -53,6 +53,24 @@
   box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
 }
 
+/* 输入区域附件容器样式 */
+.input-addons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+/* 图片尺寸控制区域 */
+.image-size-control {
+  width: 100%;
+}
+
+/* 图片尺寸选择器样式 */
+.image-size-select {
+  width: 100%; /* 在桌面端也使用全宽度，保持一致性 */
+}
+
 /* 按钮编组容器 */
 .button-group {
   display: inline-flex;
@@ -131,11 +149,17 @@
     flex-wrap: wrap; /* 允许换行以适应小屏幕 */
   }
 
+  /* 移动端图片尺寸选择器样式调整 */
+  .image-size-select {
+    width: 100%; /* 在移动端使用全宽度 */
+  }
+
   /* 移动端按钮组样式调整 */
   .button-group {
     box-shadow: 0 0 0 1px rgba(144, 180, 248, 0.3); /* 轻微边框 */
     border-radius: 6px; /* 适当减小圆角 */
     height: auto; /* 允许自适应高度 */
+    width: 100%; /* 在移动端按钮组也使用全宽度 */
   }
 
   .button-group .el-button {

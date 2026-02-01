@@ -231,7 +231,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
-  Refresh,
+
   Delete,
   Plus,
   Close,
@@ -429,6 +429,7 @@ const handleModelChange = (value: string) => {
   // 更新当前模型描述
   const selectedModelObj = formData.models.find(model => model.value === value)
   formData.currentModelDesc = selectedModelObj?.model_desc || ''
+  formData.selectedModelType = selectedModelObj?.model_type || 1
 }
 
 // 更新厂商列表
@@ -501,10 +502,17 @@ const deleteRole = (roleId: string) => {
 // 从localStorage加载自定义角色
 const loadCustomRoles = () => {
   const saved = localStorage.getItem('customRoles')
-  if (saved) {
+  if (saved && formData.rolePresets) {
     try {
       // 追加到预设角色后面
-      formData.rolePresets.push(...JSON.parse(saved))
+      const customRoles = JSON.parse(saved)
+      if (Array.isArray(customRoles) && customRoles.length > 0) {
+        // 避免重复添加相同ID的角色
+        const existingIds = new Set(formData.rolePresets.map(role => role.id))
+        const uniqueCustomRoles = customRoles.filter(role => !existingIds.has(role.id))
+
+        formData.rolePresets.push(...uniqueCustomRoles)
+      }
     } catch (e) {
       console.error('加载自定义角色失败:', e)
     }
@@ -685,6 +693,27 @@ const loadDialogContent = async (dialogId: number) => {
   const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
   if (dialogItem) {
     formData.dialogTitle = dialogItem.dialog_name
+    
+    // 根据历史对话的模型信息更新当前模型选择
+    if (dialogItem.modelname) {
+      const targetModel = formData.models.find(model =>
+        model.value === dialogItem.modelname ||
+        model.label === dialogItem.modelname
+      )
+      
+      if (targetModel) {
+        // 更新供应商选择
+        formData.providerValue = targetModel.group
+        // 更新模型选择
+        formData.modelValue = targetModel.value
+        formData.selectedModel = targetModel.value
+        // 更新模型描述
+        formData.currentModelDesc = targetModel.model_desc || ''
+        formData.selectedModelType = targetModel.model_type || 1
+      } else {
+        console.warn(`未找到匹配的模型: ${dialogItem.modelname}`)
+      }
+    }
   }
   // 通知父组件或ChatContent组件加载对话内容
   emit('load-dialog', dialogId)
@@ -868,7 +897,8 @@ onMounted(async () => {
             label: `${prefix}: ${model.label || model.id}`,
             value: model.id,
             recommend: model.recommend || false,
-            model_desc: model.model_desc || ''
+            model_desc: model.model_desc || '',
+            model_type: model.model_type || 1,
           });
         });
       }
@@ -880,15 +910,16 @@ onMounted(async () => {
           label: model.label,
           value: model.id,
           recommend: model.recommend || false,
-          model_desc: model.model_desc || ''
+          model_desc: model.model_desc || '',
+          model_type: model.model_desc || 1,
         }));
       } else {
         console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
         // 设置默认模型列表作为备选
         formData.models = [
-          { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
-          { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
-          { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
+          { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '', model_type: 1 },
+          { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '', model_type: 1 },
+          { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '', model_type: 1 }
         ]
       }
     }
@@ -984,5 +1015,5 @@ const shouldShowTooltip = (text: string, type: 'title' | 'model') => {
 </script>
 
 <style scoped>
-@import './chat-sidebar.css';
+@import '@/styles/chat-sidebar.css';
 </style>

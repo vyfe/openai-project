@@ -44,7 +44,7 @@
   </div>
 
   <!-- 弹窗模式 -->
-  <div v-else class="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full">
+  <div v-else class="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-w-md w-full z-20">
     <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
       <h2 class="text-lg font-bold text-indigo-600 dark:text-indigo-400 flex items-center">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">

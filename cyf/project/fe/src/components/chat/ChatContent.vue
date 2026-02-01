@@ -19,9 +19,9 @@
           <span class="font-size-label">{{ t('chat.fontSizeLabel') }}:</span>
           <el-tooltip :content="t('chat.fontSizeLabel')" placement="bottom">
             <el-radio-group v-model="fontSize" size="small" @change="handleFontSizeChange">
-              <el-radio-button label="small">{{ t('chat.small') }}</el-radio-button>
-              <el-radio-button label="medium">{{ t('chat.medium') }}</el-radio-button>
-              <el-radio-button label="large">{{ t('chat.large') }}</el-radio-button>
+              <el-radio-button value="small">{{ t('chat.small') }}</el-radio-button>
+              <el-radio-button value="medium">{{ t('chat.medium') }}</el-radio-button>
+              <el-radio-button value="large">{{ t('chat.large') }}</el-radio-button>
             </el-radio-group>
           </el-tooltip>
         </div>
@@ -80,9 +80,9 @@
           <div class="font-size-controls">
             <span class="mobile-form-label">{{ t('chat.fontSizeLabel') }}</span>
             <el-radio-group v-model="fontSize" size="default" @change="handleFontSizeChange">
-              <el-radio-button label="small">{{ t('chat.small') }}</el-radio-button>
-              <el-radio-button label="medium">{{ t('chat.medium') }}</el-radio-button>
-              <el-radio-button label="large">{{ t('chat.large') }}</el-radio-button>
+              <el-radio-button value="small">{{ t('chat.small') }}</el-radio-button>
+              <el-radio-button value="medium">{{ t('chat.medium') }}</el-radio-button>
+              <el-radio-button value="large">{{ t('chat.large') }}</el-radio-button>
             </el-radio-group>
           </div>
 
@@ -122,11 +122,11 @@
         </div>
         <div class="message-content">
           <div class="message-header">
-            <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') }}</span>
+            <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') + formData.modelValue}}</span>
             <span class="message-time">{{ message.time }}</span>
             <div class="message-actions">
               <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(message.content)" />
-              <el-popconfirm title="确定要删除这条消息吗？" confirm-button-text="确定" cancel-button-text="取消"
+              <el-popconfirm :title="t('chat.deleteMessageConfirmation')" :confirm-button-text="t('chat.confirm')" :cancel-button-text="t('chat.cancel')"
                 @confirm="deleteMessage(index)">
                 <template #reference>
                   <el-button :icon="Delete" circle size="small" text />
@@ -137,9 +137,20 @@
           <div class="message-text" v-html="renderMarkdown(getTextContent(message.content))"></div>
           <!-- TODO(human): 添加响应式表格和代码块的移动端优化，确保在小屏幕上能够良好显示 -->
           <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
-          <!-- 图片预览 -->
-          <div v-if="extractFileUrls(message.content).length > 0" class="message-attachments">
-            <template v-for="url in extractFileUrls(message.content)" :key="url">
+          <!-- 图片预览 - 支持从消息url字段和内容中提取，避免重复显示 -->
+          <div v-if="message.url || extractFileUrls(message.content).length > 0" class="message-attachments">
+            <!-- 如果消息对象有url字段，优先显示且不再从内容中提取 -->
+            <template v-if="message.url">
+              <img v-if="isImageUrl(message.url)" :src="message.url" class="attachment-preview" @click="openImagePreview(message.url)" />
+              <a v-else :href="message.url" target="_blank" class="attachment-link">
+                <el-icon>
+                  <Document />
+                </el-icon>
+                {{ message.url.split('/').pop() }}
+              </a>
+            </template>
+            <!-- 只有当消息对象没有url字段时，才从内容中提取 -->
+            <template v-else v-for="url in extractFileUrls(message.content)" :key="url">
               <img v-if="isImageUrl(url)" :src="url" class="attachment-preview" @click="openImagePreview(url)" />
               <a v-else :href="url" target="_blank" class="attachment-link">
                 <el-icon>
@@ -154,7 +165,7 @@
             <hr class="divider" />
             <div v-if="message.content === ''" class="typing-initial">
               <div class="typing-placeholder">
-                答案马上就到，不要担心！
+                {{ t('chat.modelLoading') }}
               </div>
               <div class="typing">
                 <span class="typing-dot"></span>
@@ -176,18 +187,18 @@
               <el-icon>
                 <RefreshLeft />
               </el-icon>
-              重试
+              {{ t('chat.retry') }}
             </el-button>
           </div>
           <!-- 当回复为空时，提示用户重新发送 -->
           <div v-if="message.type === 'ai' && message.content === '' && !message.isError && !isStreaming(index)"
             class="empty-response-actions">
-            <el-alert :closable="false" title="AI助手暂时没有回复，请稍后再试或重新提问" type="info" show-icon />
+            <el-alert :closable="false" :title="t('chat.aiTemporarilyNoReply')" type="info" show-icon />
             <el-button type="primary" size="small" @click="retryMessage(index)">
               <el-icon>
                 <RefreshLeft />
               </el-icon>
-              重新提问
+              {{ t('chat.resend') }}
             </el-button>
           </div>
           <!-- 截断消息继续生成按钮 -->
@@ -195,13 +206,13 @@
             class="truncated-actions">
             <div class="truncated-indicator">
               <span class="ellipsis">...</span>
-              <span class="truncated-hint">内容被截断</span>
+              <span class="truncated-hint">{{ t('chat.contentTruncated') }}</span>
             </div>
             <el-button type="primary" size="small" @click="continueGeneration(index)" :disabled="formData.isLoading">
               <el-icon>
                 <CaretRight />
               </el-icon>
-              继续生成
+              {{ t('chat.continueGenerate') }}
             </el-button>
           </div>
           <div v-if="message.file" class="message-file">
@@ -214,7 +225,7 @@
       </div>
 
       <div class="copyright-watermark-inline">
-        <span>© 2026 vyfe | chat-h.cc | vx:pata_data_studio</span>
+        <span>© 2026 vyfe | chat-h.cc</span>
       </div>
 
       <!-- 开源项目链接 -->
@@ -222,7 +233,7 @@
         <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer">
           <el-icon>
             <Link />
-          </el-icon> 开源项目 GitHub
+          </el-icon> {{ t('login.githubLink') }}
         </a>
         <span class="wechat-info"> vx:pata_data_studio </span>
       </div>
@@ -248,6 +259,7 @@
       :send-preference="formData.sendPreference"
       :is-loading="isLoading"
       :selected-model="formData.selectedModel"
+      :selected-model-type="formData.selectedModelType"
       :context-count="formData.contextCount"
       :enhanced-role-enabled="formData.enhancedRoleEnabled"
       :system-prompt="formData.systemPrompt"
@@ -282,25 +294,19 @@
 </el-dialog>
 </template>
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed, inject } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
-  UploadFilled,
   UserFilled,
   Cpu,
   Document,
-  Position,
   Delete,
-  Plus,
   CopyDocument,
   RefreshLeft,
   Top,
   Link,
   CaretRight,
-  Hide,
-  View,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI, fileAPI } from '@/services/api'
@@ -343,7 +349,8 @@ const loadDialogContent = async (dialogId: number) => {
         filteredContext.forEach((msg: any) => {
           messages.push({
             type: msg.role === 'user' ? 'user' : 'ai',
-            content: msg.content,
+            content: msg.content || msg.desc || '', // 支持desc字段作为内容
+            url: msg.url, // 添加url字段支持
             time: msg.time || getCurrentTime()
           })
         })
@@ -357,7 +364,8 @@ const loadDialogContent = async (dialogId: number) => {
             filteredContentObj.forEach((msg: any) => {
               messages.push({
                 type: msg.role === 'user' ? 'user' : 'ai',
-                content: msg.content,
+                content: msg.content || msg.desc || '', // 支持desc字段作为内容
+                url: msg.url, // 添加url字段支持
                 time: msg.time || getCurrentTime()
               })
             })
@@ -392,7 +400,7 @@ const filterSystemMessages = (messages: any[]) => {
 
 // 统一的异常消息过滤函数
 const filterAbnormalMessages = (messages: any[], options: { excludeIndex?: number, includeCurrent?: boolean } = {}) => {
-  const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？';
+  const welcomeMessage = t('chat.aiWelcomeMessage');
   return messages.filter((msg, msgIndex) => {
     // 保留欢迎消息
     if (msg.type === 'ai' && msg.content === welcomeMessage) {
@@ -420,8 +428,11 @@ const filterAbnormalMessages = (messages: any[], options: { excludeIndex?: numbe
   });
 }
 
+// 国际化
+const { t } = useI18n()
+
 // 统一的欢迎消息常量
-const WELCOME_MESSAGE = '您好！我是AI助手，有什么可以帮助您的吗？';
+const WELCOME_MESSAGE = t('chat.aiWelcomeMessage')
 
 // 待发送的消息队列
 const messages = reactive<Array<{
@@ -429,19 +440,17 @@ const messages = reactive<Array<{
   content: string
   time: string
   file?: File
+  url?: string  // 添加url字段支持图片链接
   isError?: boolean  // 添加错误状态
   finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls'  // 新增
   isTruncated?: boolean  // 新增
 }>>([
   {
     type: 'ai',
-    content: '您好！我是AI助手，有什么可以帮助您的吗？',
+    content: t('chat.aiWelcomeMessage'),
     time: getCurrentTime()
   }
 ])
-
-// 国际化
-const { t } = useI18n()
 
 // 自定义 renderer 用于处理数学公式
 const mathRenderer = {
@@ -479,7 +488,6 @@ const inputMessage = ref('')
 const uploadRef = ref()
 const isLoading = ref(false)
 const uploadedFile = ref<File | null>(null)
-const showUploadPopover = ref(false)
 
 // 添加字体大小控制 对话框
 const fontSize = computed({
@@ -573,7 +581,7 @@ const clearCurrentSession = () => {
   messages.splice(0, messages.length)
   messages.push({
     type: 'ai',
-    content: '您好！我是AI助手，有什么可以帮助您的吗？',
+    content: t('chat.aiWelcomeMessage'),
     time: getCurrentTime()
   })
   // 清空对话标题和当前对话ID
@@ -618,6 +626,7 @@ const exportConversationScreenshot = async () => {
         height: 'auto',
         filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
       },
+      backgroundColor: formData.isDarkTheme ? '#393939' : '#efefef',
       // 排除不需要截图的元素
       filter: (node: Node) => {
         if (node instanceof HTMLElement) {
@@ -858,9 +867,9 @@ const convertMarkdownToPlainText = (content: string) => {
 const deleteMessage = (index: number) => {
   if (index >= 0 && index < messages.length) {
     // 检查是否是AI欢迎消息，如果是则不允许删除
-    const welcomeMessage = '您好！我是AI助手，有什么可以帮助您的吗？';
+    const welcomeMessage = t('chat.aiWelcomeMessage');
     if (messages[index].content === welcomeMessage && messages[index].type === 'ai') {
-      ElMessage.warning('无法删除欢迎消息');
+      ElMessage.warning(t('chat.cannotDeleteWelcomeMessage'));
       return;
     }
 
@@ -876,37 +885,69 @@ const callApi = async (
   options: {
     isRetry?: boolean,
     originalIndex?: number,
-    isContinue?: boolean
+    isContinue?: boolean,
+    imageSize?: string  // 添加图片尺寸参数
   } = {}
 ) => {
-  const { isRetry = false, originalIndex, isContinue = false } = options;
+  const { isRetry = false, originalIndex, isContinue = false, imageSize = '1024x1024' } = options;
 
   isLoading.value = true;
 
   try {
     // 检查是否是图像生成模型
-    const isImageModel = formData.selectedModel && (formData.selectedModel.toLowerCase().includes('dall') || formData.selectedModel.toLowerCase().includes('image'));
+    // TODO 后端返回模型模态信息
+    const isImageModel = formData.selectedModelType === 2;
 
     if (isImageModel) {
       // 图像生成模型仍使用普通API
       const aiResponse: any = await chatAPI.sendImageGeneration(
         formData.selectedModel,
         userMessage.content,
-        formData.contextCount > 0 ? 'multi' : 'single',
+        'single',
         buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content),
-        formData.dialogTitle
+        formData.dialogTitle,
+        imageSize  // 添加图片尺寸参数
       );
 
-      // 处理响应
+      // 处理响应 - 简化逻辑，只关注URL字段
       let responseContent = '';
-      if (typeof aiResponse === 'object' && aiResponse.desc) {
-        responseContent = aiResponse.desc;
-        // 如果是图片生成，添加图片URL
+      
+      if (typeof aiResponse === 'object') {
+        // 优先检查直接的url字段
         if (aiResponse.url) {
-          responseContent += `\n图片链接: ${window.location.origin}${aiResponse.url}`;
+          responseContent = aiResponse.url;
+        }
+        // 检查content.context格式
+        else if (aiResponse.content && aiResponse.content.context) {
+          const context = aiResponse.content.context;
+          if (Array.isArray(context) && context.length > 0) {
+            // 查找assistant角色的消息
+            const assistantMsg = context.find(msg => msg.role === 'assistant');
+            if (assistantMsg && assistantMsg.url) {
+              responseContent = assistantMsg.url;
+            }
+          }
+        }
+        
+        // 如果找到了URL，根据是否是图片决定是否显示预览
+        if (responseContent) {
+          // 直接使用完整的URL，不再添加origin前缀
+          const finalUrl = responseContent;
+          
+          // 检查URL后缀名判断是否为图片
+          if (isImageUrl(finalUrl)) {
+            // 如果是图片，使用FILE_URL格式以便触发预览功能
+            responseContent = `[FILE_URL:${finalUrl}]`;
+          } else {
+            // 如果不是图片，只显示链接文本
+            responseContent = `文件链接: ${finalUrl}`;
+          }
+        } else {
+          // 没有找到URL，返回原始响应
+          responseContent = JSON.stringify(aiResponse);
         }
       } else {
-        responseContent = JSON.stringify(aiResponse);
+        responseContent = String(aiResponse);
       }
 
       // 根据是新消息还是重试消息决定如何添加到消息列表
@@ -918,10 +959,17 @@ const callApi = async (
           time: getCurrentTime()
         });
       } else {
-        // 添加新AI消息
+        // 添加新AI消息 - 如果responseContent是图片URL，也设置url字段
+        let finalUrl = '';
+        if (responseContent.startsWith('[FILE_URL:') && responseContent.endsWith(']')) {
+          // 提取URL
+          finalUrl = responseContent.substring(10, responseContent.length - 1);
+        }
+        
         messages.push({
           type: 'ai',
           content: responseContent,
+          url: finalUrl, // 设置url字段以便直接预览
           time: getCurrentTime()
         });
       }
@@ -1082,66 +1130,30 @@ const callApi = async (
   }
 }
 
-// 发送消息
-const sendMessage = async () => {
-  if (!inputMessage.value.trim()) return
-  if (!formData.selectedModel) {
-    ElMessage.warning('请先选择一个模型')
-    return
-  }
-
-  // 清除异常类的消息（包含重试或继续输出按钮的消息）
-  const normalMessages = filterAbnormalMessages(messages);
-
-  // 如果消息数组被过滤，则替换原数组
-  if (normalMessages.length !== messages.length) {
-    // 保留正常的消息
-    messages.splice(0, messages.length, ...normalMessages)
-  }
-
-  const userMessage = {
-    type: 'user' as const,
-    content: inputMessage.value,
-    time: getCurrentTime(),
-    file: uploadedFile.value || undefined
-  }
-
-  // 在构建对话数组之前先保存当前的上下文消息
-  const contextSnapshot = [...messages]; // 创建当前消息快照用于构建上下文
-
-  // 添加用户消息到数组
-  messages.push(userMessage)
-
-  // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
-  if (!formData.dialogTitle.trim()) {
-    // 截取前50个字符作为标题
-    formData.dialogTitle = inputMessage.value.length > 50
-      ? inputMessage.value.substring(0, 50) + '...'
-      : inputMessage.value
-  }
-
-  inputMessage.value = ''
-  uploadedFile.value = null
-  if (uploadRef.value) {
-    uploadRef.value.clearFiles()
-  }
-
-  // 滚动到底部
-  await nextTick()
-  scrollToBottom()
-
-  // 调用通用API函数
-  await callApi(userMessage, contextSnapshot)
-}
-
 // 处理InputArea组件的发送消息事件
-const handleSendMessage = async (message: string, file?: File) => {
+const handleSendMessage = async (message: string, file?: File, imageSize?: string) => {
   if (!message.trim()) return
   if (!formData.selectedModel) {
     ElMessage.warning('请先选择一个模型')
     return
   }
 
+  // 检查是否是图像生成模型
+  const isImageModel = formData.selectedModelType === 2;
+
+  // 提取图片尺寸信息（如果存在）
+  let processedMessage = message;
+  let finalImageSize = imageSize || '1024x1024'; // 默认尺寸
+
+  if (isImageModel) {
+    const imageSizeMatch = message.match(/\[IMAGE_SIZE:(.+?)\]/);
+    if (imageSizeMatch) {
+      finalImageSize = imageSizeMatch[1];
+      // 移除尺寸标记，只保留原始消息
+      processedMessage = message.replace(/\[IMAGE_SIZE:(.+?)\]/, '').trim();
+    }
+  }
+
   // 清除异常类的消息（包含重试或继续输出按钮的消息）
   const normalMessages = filterAbnormalMessages(messages);
 
@@ -1153,7 +1165,7 @@ const handleSendMessage = async (message: string, file?: File) => {
 
   const userMessage = {
     type: 'user' as const,
-    content: message,
+    content: processedMessage,
     time: getCurrentTime(),
     file: file || undefined
   }
@@ -1167,17 +1179,91 @@ const handleSendMessage = async (message: string, file?: File) => {
   // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
   if (!formData.dialogTitle.trim()) {
     // 截取前50个字符作为标题
-    formData.dialogTitle = message.length > 50
-      ? message.substring(0, 50) + '...'
-      : message
+    formData.dialogTitle = processedMessage.length > 50
+      ? processedMessage.substring(0, 50) + '...'
+      : processedMessage
   }
 
   // 滚动到底部
   await nextTick()
   scrollToBottom()
 
-  // 调用通用API函数
-  await callApi(userMessage, contextSnapshot)
+  // 根据是否是图像模型调用相应的API
+  if (isImageModel) {
+    // 调用图片生成API并传递尺寸参数
+    try {
+      isLoading.value = true;
+      const aiResponse: any = await chatAPI.sendImageGeneration(
+        formData.selectedModel,
+        processedMessage,
+        'single',
+        buildDialogArrayFromSnapshot(contextSnapshot, processedMessage),
+        formData.dialogTitle,
+        finalImageSize  // 传递图片尺寸参数
+      );
+
+      // 处理响应
+      let responseContent = '';
+      let imageUrl = '';
+      
+      if (typeof aiResponse === 'object') {
+        // 优先检查直接的url字段
+        if (aiResponse.url) {
+          imageUrl = aiResponse.url;
+          // 构建完整URL
+          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+            if (imageUrl.startsWith(':')) {
+              imageUrl = window.location.protocol + '//' + window.location.host + imageUrl;
+            } else if (imageUrl.startsWith('/')) {
+              imageUrl = window.location.protocol + '//' + window.location.host + imageUrl;
+            } else {
+              imageUrl = window.location.protocol + '//' + window.location.host + '/' + imageUrl;
+            }
+          }
+          responseContent = aiResponse.desc || '图片已生成';
+        } else {
+          responseContent = JSON.stringify(aiResponse);
+        }
+      } else {
+        responseContent = String(aiResponse);
+      }
+
+      // 添加AI消息 - 如果有图片URL，设置url字段
+      messages.push({
+        type: 'ai',
+        content: responseContent,
+        url: imageUrl, // 设置url字段以便直接预览
+        time: getCurrentTime()
+      });
+    } catch (error: any) {
+      console.error('图片生成API Error:', error);
+      let errorMessage = '图片生成失败，请重试';
+      if (error.response) {
+        errorMessage = `错误: ${error.response.data?.msg || error.response.statusText}`;
+      } else if (error.request) {
+        errorMessage = '网络请求失败，请检查后端服务是否正常运行';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      messages.push({
+        type: 'ai',
+        content: errorMessage,
+        time: getCurrentTime(),
+        isError: true
+      });
+    } finally {
+      isLoading.value = false;
+      await nextTick();
+      scrollToBottom();
+
+      // 刷新对话历史记录
+      emit('refresh-history');
+    }
+  } else {
+    // 调用普通API
+    await callApi(userMessage, contextSnapshot, { imageSize: finalImageSize })
+  }
 }
 
 // 重试发送特定AI消息（重新发送该消息所属的上下文）
@@ -1389,12 +1475,32 @@ const handleScroll = () => {
 // 文件相关处理
 const handleFileChange = async (file: any) => {
   try {
+   // 检查文件对象是否有效
+   if (!file) {
+      throw new Error('未选择文件')
+    }
+    
     // 检查是否为MD文件，如果是则重命名为TXT文件
-    let fileToUpload = file.raw;
-    if (file.raw.type === 'text/markdown' || file.name.toLowerCase().endsWith('.md')) {
+    let fileToUpload = file.raw || file; // 兼容不同的文件对象格式
+    
+    // 确保文件对象有必要的属性
+    if (!fileToUpload) {
+      throw new Error('文件对象无效')
+    }
+    
+    // 检查文件类型和扩展名
+    const fileType = fileToUpload.type || '';
+    const fileName = file.name || fileToUpload.name || '';
+    
+    if (fileType === 'text/markdown' || fileName.toLowerCase().endsWith('.md')) {
+      // 确保文件有text方法
+      if (typeof fileToUpload.text !== 'function') {
+        throw new Error('无法读取文件内容')
+      }
+      
       // 读取MD文件内容并创建新的TXT文件
-      const textContent = await file.raw.text();
-      const txtFileName = file.name.replace(/\.md$/, '.txt');
+      const textContent = await fileToUpload.text();
+      const txtFileName = fileName.replace(/\.md$/, '.txt');
       fileToUpload = new File([textContent], txtFileName, { type: 'text/plain' });
       ElMessage.info(`MD文件已转换为TXT格式: ${txtFileName}`)
     }
@@ -1503,45 +1609,51 @@ onUnmounted(() => {
 
 // 从消息内容中提取文件URL列表（兼容新旧格式）
 const extractFileUrls = (content: string): string[] => {
+  if (!content) return [];
+  
   const urls: string[] = [];
 
-  // 定义URL提取正则表达式
+  // 定义URL提取正则表达式 - 支持完整URL和相对路径
   const patterns = [
-    { regex: /\[FILE_URL:(https?:\/\/[^\]]+)\]/g, name: 'new' },         // 新格式: [FILE_URL:xxx]
-    { regex: /文件已上传:\s*(https?:\/\/[^\s]+)/g, name: 'old' }         // 旧格式: 文件已上传: xxx
+    { regex: /\[FILE_URL:(https?:\/\/[^\]]+)\]/g, name: 'new_full' },     // 新格式: [FILE_URL:http://xxx]
+    { regex: /\[FILE_URL:((?!https?:\/\/)[^\]]+)\]/g, name: 'new_relative' }, // 新格式: [FILE_URL:/xxx] 或 [FILE_URL::4567/xxx]（排除http://）
+    { regex: /文件已上传:\s*(https?:\/\/[^\s]+)/g, name: 'old_full' },     // 旧格式: 文件已上传: http://xxx
+    { regex: /文件已上传:\s*((?!https?:\/\/)[^\s]+)/g, name: 'old_relative' } // 旧格式: 文件已上传: /xxx 或 :4567/xxx（排除http://）
   ];
 
   // 遍历所有模式并提取URL
   patterns.forEach(({ regex }) => {
     let match;
     while ((match = regex.exec(content)) !== null) {
-      urls.push(match[1]);
+      let url = match[1];
+      
+      // 处理相对路径 - 如果不是完整的http(s) URL，则添加当前页面的protocol和host
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (url.startsWith(':')) {
+          // 处理 :4567/download/xxx 格式
+          url = window.location.protocol + '//' + window.location.host + url;
+        } else if (url.startsWith('/')) {
+          // 处理 /download/xxx 格式
+          url = window.location.protocol + '//' + window.location.host + url;
+        } else {
+          // 其他相对路径，添加当前host
+          url = window.location.protocol + '//' + window.location.host + '/' + url;
+        }
+      }
+      
+      urls.push(url);
     }
   });
 
   return urls;
 };
 
-// 测试函数（仅供验证，后续可以移除）
-// const testExtractFileUrls = () => {
-//   console.log("Test 1:", extractFileUrls("[FILE_URL:https://example.com/test.pdf]"));
-//   console.log("Test 2:", extractFileUrls("文件已上传: https://example.com/test2.jpg"));
-//   console.log("Test 3:", extractFileUrls("[FILE_URL:https://example.com/test.pdf] and 文件已上传: https://example.com/test2.jpg"));
-// };
-
-// 在组件挂载时运行测试（可选）
-// onMounted(() => {
-//   testExtractFileUrls();
-//   if (formData.isDarkTheme) {
-//     document.body.classList.add('dark-theme')
-//   } else {
-//     document.body.classList.remove('dark-theme')
-//   }
-// })
-
 // 获取纯文本内容（移除文件标记）
 const getTextContent = (content: string): string => {
-  return content.replace(/\[(FILE_URL|文件已上传):[^\]]+\]/g, '').trim()
+  if (content === null || content === undefined) {
+    return '';
+  }
+  return String(content).replace(/\[(FILE_URL|文件已上传):[^\]]+\]/g, '').trim()
 }
 
 // 判断URL是否为图片
@@ -1569,5 +1681,5 @@ watch(() => formData.isDarkTheme, (newVal) => {
 </script>
 
 <style scoped>
-@import './chat-content.css';
+@import '@/styles/chat-content.css';
 </style>

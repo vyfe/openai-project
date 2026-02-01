@@ -54,6 +54,7 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'ppt', 'pptx', 
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
+web_host = conf['common']['host']
 # 解析用户凭据，支持格式：用户名:密码:api_key（api_key可选）
 user_credentials = {}
 user_api_keys = {}  # 存储用户的专属API key
@@ -109,6 +110,77 @@ def convert_dialog_for_model(dialogvo: list, model: str) -> list:
     if is_gemini_model(model):
         return [convert_message_for_gemini(msg) for msg in dialogvo]
     return dialogvo  # 非Gemini模型保持原格式
+
+
+def url_to_file(url: str) -> bytes:
+    """
+    将URL转换为文件字节数据
+    """
+    try:
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            return response.content
+        else:
+            raise Exception(f"无法下载文件，状态码: {response.status_code}")
+    except Exception as e:
+        app.logger.error(f"URL转文件失败: {str(e)}")
+        raise
+
+
+def process_pic_dialog_with_urls(dialogs: str, dialog_mode: str) -> dict:
+    """
+    处理图片对话中的URL，将FILE_URL_PATTERN匹配到的URL转换为文件
+    返回处理后的对话数据和文件列表
+    """
+    result = {
+        'processed_dialogs': dialogs,
+        'files': [],
+        'text_content': dialogs
+    }
+    
+    if dialog_mode == 'single':
+        # 检查是否包含文件URL
+        file_urls = FILE_URL_PATTERN.findall(dialogs)
+        if file_urls:
+            # 提取纯文本内容
+            text_content = FILE_URL_PATTERN.sub('', dialogs).strip()
+            result['text_content'] = text_content
+            
+            # 下载文件
+            for url in file_urls:
+                try:
+                    file_data = url_to_file(url)
+                    filename = os.path.basename(urlparse(url).path) or 'file'
+                    # 创建文件元组 (filename, bytes, content_type)
+                    content_type = get_content_type(filename)
+                    result['files'].append({
+                        'url': url,
+                        'data': (filename, file_data, content_type),
+                        'filename': filename
+                    })
+                except Exception as e:
+                    app.logger.error(f"处理文件URL失败 {url}: {str(e)}")
+                    
+        result['processed_dialogs'] = result['text_content']
+    
+    return result
+
+
+def get_content_type(filename: str) -> str:
+    """
+    根据文件扩展名获取content type
+    """
+    ext = os.path.splitext(filename)[1].lower()
+    content_types = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.tiff': 'image/tiff'
+    }
+    return content_types.get(ext, 'application/octet-stream')
 
 
 def handle_api_exception(e, user=None, model=None, dialog_content=None):
@@ -211,14 +283,50 @@ def verify_credentials(user, password):
             return False, "密码错误"
         return True, None
 
+def get_request_data():
+    """
+    通用请求数据获取函数，兼容JSON和form格式
+    返回一个类似dict的对象，可以使用.get()方法获取数据
+    """
+    content_type = request.content_type
+
+    if content_type and 'application/json' in content_type:
+        # 如果是JSON请求，从JSON数据中获取参数
+        json_data = request.get_json(silent=True)
+        if json_data:
+            # 使用字典推导式将第一层元素转换为文本格式
+            text_data = {key: str(value) for key, value in json_data.items()}
+            return text_data
+        else:
+            # 如果JSON数据无效，回退到request.values
+            return request.values
+    else:
+        # 否则是表单数据或URL参数
+        return request.values
+
 
 def require_auth(f):
     """用户认证装饰器，用于验证用户凭据"""
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        user = request.values.get('user', '').strip()
-        password = request.values.get('password', '').strip()
+        # 首先检查Content-Type头以确定请求数据格式
+        content_type = request.content_type
+
+        if content_type and 'application/json' in content_type:
+            # 如果是JSON请求，从JSON数据中获取参数
+            json_data = request.get_json(silent=True)
+            if json_data:
+                user = json_data.get('user', '').strip()
+                password = json_data.get('password', '').strip()
+            else:
+                # 如果JSON数据无效，尝试从其他来源获取
+                user = request.values.get('user', '').strip()
+                password = request.values.get('password', '').strip()
+        else:
+            # 否则是表单数据或URL参数
+            user = request.values.get('user', '').strip()
+            password = request.values.get('password', '').strip()
 
         # 验证用户凭据
         is_valid, error_msg = verify_credentials(user, password)
@@ -364,6 +472,8 @@ def get_cached_models():
             # 添加元数据字段
             model['recommend'] = meta.get('recommend', False) if meta else False
             model['model_desc'] = meta.get('model_desc', '') if meta else ''
+            # 1-文本 2-图像
+            model['model_type'] = meta.get('model_type', '') if meta else 1
             enhanced_models.append(model)
         # ========== 新增结束 ==========
 
@@ -456,17 +566,20 @@ def handle_options():
 
 @app.route('/never_guess_my_usage/test', )
 def health_check():
-    app.logger.info(request.values)
+    app.logger.info(get_request_data())
     try:
-        return json.dumps(request.values.to_dict()), 200
+        return json.dumps(get_request_data().to_dict()), 200
     except json.JSONDecodeError:
         return {"msg": "json no ok"}, 200
 
 
 @app.route('/never_guess_my_usage/login', methods=['POST'])
 def login():
-    user = request.values.get('user', '').strip()
-    password = request.values.get('password', '').strip()
+    content_type = request.content_type
+    data = get_request_data()
+    # 否则是表单数据
+    user = data.get('user', '').strip()
+    password = data.get('password', '').strip()
 
     if not user:
         return {"success": False, "msg": "用户名不能为空"}, 200
@@ -480,13 +593,14 @@ def login():
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
-    app.logger.info(request.values)
+    data = get_request_data()
+    app.logger.info(data)
     try:
-        if request.values.get('param'):
-            param = request.values.get('param').split(",")
-            return sqlitelog.message_query(request.values.get('info'), param), 200
+        if data.get('param'):
+            param = data.get('param').split(",")
+            return sqlitelog.message_query(data.get('info'), param), 200
         else:
-            return sqlitelog.message_query(request.values.get('info')), 200
+            return sqlitelog.message_query(data.get('info')), 200
     except json.JSONDecodeError:
         return {"msg": "json no ok"}, 200
 
@@ -543,16 +657,18 @@ def parse_dialog_mode(dialogs, dialog_mode, dialog_title=None):
 @require_auth
 def dialog(user, password):
     # 对话接口
-    app.logger.info(request.values)
+    data = get_request_data()
+    app.logger.info(data)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        model = request.values.get('model')
+        model = data.get('model')
         # 获取前端传入的对话标题
-        dialog_title = request.values.get('dialog_title')
+        dialog_title = data.get('dialog_title')
 
         # 获取最大回复token参数
-        max_response_tokens = request.values.get('max_response_tokens', type=int)
+        max_response_tokens_raw = data.get('max_response_tokens')
+        max_response_tokens = int(max_response_tokens_raw) if max_response_tokens_raw is not None else None
 
         # 检查测试用户限制
         limit_error = check_test_user_limit(user)
@@ -563,9 +679,9 @@ def dialog(user, password):
         logging.info(f"user:{user}， model: {model}")
         if not is_valid_model(model):
             return {"msg": "not supported user or model"}, 200
-        dialogs = request.values.get('dialog')
+        dialogs = data.get('dialog')
         # 对话模式 single=单条 multi=上下文
-        dialog_mode = request.values.get('dialog_mode', 'single')
+        dialog_mode = data.get('dialog_mode', 'single')
 
         dialogvo, title = parse_dialog_mode(dialogs, dialog_mode, dialog_title)
         if dialogvo is None:
@@ -604,14 +720,17 @@ def dialog(user, password):
 @require_auth
 def dialog_stream(user, password):
     # 对话接口 - 流式响应
-    app.logger.info(request.values)
+    data = get_request_data()
+    app.logger.info(data)
     try:
-        model = request.values.get('model')
+        model = data.get('model', '')
+        app.logger.info(model)
         # 获取前端传入的对话标题
-        dialog_title = request.values.get('dialog_title')
-
+        dialog_title = data.get('dialog_title', '')
+        app.logger.info(dialog_title)
         # 获取最大回复token参数
-        max_response_tokens = request.values.get('max_response_tokens', type=int)
+        max_response_tokens_raw = data.get('max_response_tokens')
+        max_response_tokens = int(max_response_tokens_raw) if max_response_tokens_raw is not None else None
 
         # 检查测试用户限制
         limit_error = check_test_user_limit(user)
@@ -639,9 +758,9 @@ def dialog_stream(user, password):
                     'Connection': 'close'
                 }
             )
-        dialogs = request.values.get('dialog')
+        dialogs = data.get('dialog')
         # 对话模式 single=单条 multi=上下文
-        dialog_mode = request.values.get('dialog_mode', 'single')
+        dialog_mode = data.get('dialog_mode', 'single')
 
         dialogvo, title = parse_dialog_mode(dialogs, dialog_mode, dialog_title)
         if dialogvo is None:
@@ -724,52 +843,92 @@ def dialog_stream(user, password):
 @require_auth
 def dialog_pic(user, password):
     # 图片对话接口
-    app.logger.info(request.values)
+    data = get_request_data()
+    app.logger.info(data)
     try:
         # TODO 1 本地私钥解密
         # 2 用户名 + 上下文解析
-        model = request.values.get('model')
+        model = data.get('model')
         # 获取前端传入的对话标题
-        dialog_title = request.values.get('dialog_title')
+        dialog_title = data.get('dialog_title')
+        size = data.get('size', '1024x1024')
 
         # 用户白名单、model名根据配置检查
         logging.info(f"user:{user}， model: {model}")
         if not is_valid_model(model):
             return {"msg": "not supported user or model"}, 200
         # 对话模式 single=单条 multi=上下文/编辑
-        dialogs = request.values.get('dialog')
-        dialog_mode = request.values.get('dialog_mode', 'single')
+        dialogs = data.get('dialog')
+        dialog_mode = data.get('dialog_mode', 'single')
+        
+        # 处理FILE_URL_PATTERN匹配
+        processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
+        
         if dialog_mode == 'single':
-            dialogvo = {"role": "user", "desc": dialogs}
-            title = dialog_title or dialogs
+            dialogvo = {"role": "user", "desc": processed_data['text_content']}
+            title = dialog_title or processed_data['text_content']
 
             try:
-                result = get_client_for_user(user).images.generate(
-                    model=model,
-                    prompt=dialogs,
-                    n=1,
-                    response_format="url",
-                    size="1024x1024",
-                    timeout=120
-                )
+                # 如果有文件，使用图片编辑API；否则使用图片生成API
+                if processed_data['files']:
+                    # 使用第一个文件进行图片编辑
+                    file_info = processed_data['files'][0]
+                    result = get_client_for_user(user).images.edit(
+                        model=model,
+                        image=file_info['data'],
+                        prompt=processed_data['text_content'],
+                        n=1,
+                        response_format="url",
+                        size=size,
+                        timeout=120
+                    )
+                else:
+                    # 无文件，直接生成图片
+                    result = get_client_for_user(user).images.generate(
+                        model=model,
+                        prompt=processed_data['text_content'],
+                        n=1,
+                        response_format="url",
+                        size=size,
+                        timeout=120
+                    )
             except Exception as api_e:
                 return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
         elif dialog_mode == 'multi':
+            # 图片多轮对话暂时还不支持，先实现单条图片生成
             dialogvo = json.loads(dialogs)
             title = dialog_title or extract_title_from_dialog(dialogvo)  # 修复：改为使用新的提取函数
-            # 将连接图片转为本地的file对象
+            
+            # 处理multi模式中的URL
+            processed_multi_data = process_pic_dialog_with_urls(json.dumps(dialogvo), 'single')
+            
+            # 将连接图片转为本地的file对象（原有的本地文件处理逻辑）
             local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
 
             try:
-                with open(local_file, "rb") as image_file:
+                # 如果有URL文件，优先使用URL文件；否则使用本地文件
+                if processed_multi_data['files']:
+                    # 使用URL文件进行图片编辑
+                    file_info = processed_multi_data['files'][0]
                     result = get_client_for_user(user).images.edit(
                         model=model,
-                        image=image_file,
+                        image=file_info['data'],
                         prompt=dialogvo[-1]["desc"],
                         n=1,
                         response_format="url",
-                        size="1024x1024"
+                        size=size
                     )
+                else:
+                    # 使用本地文件进行图片编辑
+                    with open(local_file, "rb") as image_file:
+                        result = get_client_for_user(user).images.edit(
+                            model=model,
+                            image=image_file,
+                            prompt=dialogvo[-1]["desc"],
+                            n=1,
+                            response_format="url",
+                            size=size
+                        )
             except Exception as api_e:
                 return handle_api_exception(api_e, user=user, model=model, dialog_content=json.dumps(dialogs)), 200
         else:
@@ -778,7 +937,7 @@ def dialog_pic(user, password):
         app.logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
         # 暂时支持生成1张
-        desc = result.data[0].revised_prompt
+        desc = result.data[0].revised_prompt or '图片已生成'
         # 保存到本地后使用本地的下载url
         # TODO 异常提示词是没有url的，需要区分code
         response = requests.get(result.data[0].url)
@@ -792,7 +951,7 @@ def dialog_pic(user, password):
             logging.info(f"pic saving:{save_path}")
         else:
             return {"msg": "error requesting pic server"}, 501
-        result_save = {"role": "assistant", "desc": desc, "url": f':4567/download/images/{filename}'}
+        result_save = {"role": "assistant", "desc": desc, "url": f'{web_host}:4567/download/images/{filename}'}
         # 日志和对话单独记录，dialog中新增model-name字段？
         # 图片按条数统计
         sqlitelog.set_log(user, 1, model, json.dumps(result.to_dict()))
@@ -818,9 +977,10 @@ def dialog_his(user, password):
 @app.route('/never_guess_my_usage/split_his_content', methods=['POST'])
 @require_auth
 def dialog_content(user, password):
+    data = get_request_data()
     try:
         # 根据用户名+id获取历史纪录详情context
-        id = request.values.get('dialogId')
+        id = data.get('dialogId')
 
         app.logger.info(user + "," + id)
         # 理想状态下是列表
@@ -831,7 +991,7 @@ def dialog_content(user, password):
         return {"msg": "api return content not ok"}, 200
 
 
-@app.route('/never_guess_my_usage/usage', methods=['GET'])
+@app.route('/never_guess_my_usage/usage', methods=['GET', 'POST'])
 @require_auth
 def get_usage(user, password):
     """获取用户用量信息"""
@@ -985,8 +1145,9 @@ def get_usage(user, password):
 @app.route('/never_guess_my_usage/split_his_delete', methods=['POST'])
 @require_auth
 def dialog_delete(user, password):
+    data = get_request_data()
     """删除用户的历史会话（支持批量删除）"""
-    dialog_ids_str = request.values.get('dialog_ids', '[]')
+    dialog_ids_str = data.get('dialog_ids', '[]')
 
     # 解析并验证 dialog_ids
     dialog_ids = json.loads(dialog_ids_str)
@@ -1000,8 +1161,10 @@ def dialog_delete(user, password):
 @require_auth
 def update_dialog_title(user, password):
     """更新对话标题"""
-    dialog_id = request.values.get('dialog_id', type=int)
-    new_title = request.values.get('new_title', '').strip()
+    data = get_request_data()
+    dialog_id_raw = data.get('dialog_id')
+    dialog_id = int(dialog_id_raw) if dialog_id_raw is not None else None
+    new_title = data.get('new_title', '').strip()
 
     # 验证参数
     if dialog_id is None or not new_title:
@@ -1074,6 +1237,34 @@ def get_notifications():
     except Exception as e:
         app.logger.error(f"获取通知公告列表失败: {str(e)}")
         return {"success": False, "msg": f"获取通知公告列表失败: {str(e)}"}, 200
+
+@app.route('/never_guess_my_usage/del_password', methods=['POST'])
+@require_auth
+def user_reset_password(user, password):
+    """重置用户密码"""
+    try:
+        data = get_request_data()
+        new_password = data.get('new_password', '').strip()
+        if not new_password:
+            return jsonify({"success": False, "msg": "新密码不能为空"})
+
+        # 由于使用了require_auth装饰器，我们已经有了经过验证的用户信息
+        # 只允许用户重置自己的密码
+        current_user = user  # 从装饰器获得的用户名
+
+        # 调用sqlitelog中的重置密码函数
+        from sqlitelog import reset_user_password
+        success, msg = reset_user_password(current_user, new_password)
+
+        if success:
+            return jsonify({"success": True, "msg": msg})
+        else:
+            return jsonify({"success": False, "msg": msg})
+
+    except Exception as e:
+        app.logger.error(f"重置密码失败: {str(e)}")
+        return jsonify({"success": False, "msg": f"重置密码失败: {str(e)}"})
+
 # 在应用启动时初始化数据库表
 # 若不存在sqlite3 db，初始化
 sqlitelog.init_db()
@@ -1098,8 +1289,8 @@ if admin_app:
             view_func = admin_app.view_functions[rule.endpoint]
             # 注册到主应用，添加 /admin_api 前缀
             admin_rule = rule.rule
-            if not admin_rule.startswith('/admin_api'):
-                admin_rule = '/admin_api' + admin_rule
+            if not admin_rule.startswith('/never_guess_my_usage'):
+                admin_rule = '/never_guess_my_usage' + admin_rule
             # 使用新的 endpoint 名称避免冲突
             new_endpoint = f"admin_{rule.endpoint}"
             print(f"尝试注册路由: {admin_rule} -> {new_endpoint} (原endpoint: {rule.endpoint})")

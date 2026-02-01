@@ -38,6 +38,7 @@ class Dialog(Model):
 class ModelMeta(Model):
     model_name = CharField()  # 模型名称
     model_desc = CharField()  # 模型用途描述
+    model_type = IntegerField(default=1) # 模型的模态,1-文本，2-图像
     recommend = BooleanField()  # 是否推荐
     status_valid = BooleanField()  # 是否对外开放
 
@@ -53,6 +54,7 @@ class ModelMeta(Model):
             'id': self.id,
             'model_name': self.model_name,
             'model_desc': self.model_desc,
+            'model_type': self.model_type,
             'recommend': self.recommend,
             'status_valid': self.status_valid
         }
@@ -306,6 +308,25 @@ def verify_user_password(username: str, password: str, role: str = 'user') -> tu
     if not user.verify_password(password):
         return False, "密码错误", None
     return True, None, user
+
+
+def reset_user_password(username: str, new_password: str) -> tuple:
+    """重置用户密码"""
+    user = get_user_by_username(username)
+    if not user:
+        return False, "用户不存在"
+
+    try:
+        # 生成新密码哈希
+        password_hash, salt = User.hash_password(new_password)
+        user.password_hash = password_hash
+        user.salt = salt
+        user.updated_at = datetime.now()
+        user.save()
+
+        return True, "密码重置成功"
+    except Exception as e:
+        return False, f"重置密码失败: {str(e)}"
 
 def create_user(username: str, password: str, api_key: str = None):
     password_hash, salt = User.hash_password(password)

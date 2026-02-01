@@ -11,45 +11,56 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 300000, // 5分钟超时 (原为 120000)
   headers: {
-    'Content-Type': 'application/x-www-form-urlencoded'
+    'Content-Type': 'application/json'
   },
-  maxBodyLength: Infinity,  // 允许无限大的请求体               
+  maxBodyLength: Infinity,  // 允许无限大的请求体
   maxContentLength: Infinity,  // 允许无限大的响应体
 })
 
-// 请求拦截器 - 自动注入用户凭据并将数据转换为form格式
+// 请求拦截器 - 自动注入用户凭据并将数据转换为JSON格式
 api.interceptors.request.use(
   (config) => {
     // 获取认证信息并注入到请求参数中
     const authStore = useAuthStore()
     const credentials = authStore.getCredentials()
 
-    // 将凭据注入到参数中
-    if (credentials.user) {
-      if (config.params) {
-        config.params.user = credentials.user
-      } else {
-        config.params = { user: credentials.user }
+    // 根据请求类型处理认证信息
+    if (config.method?.toLowerCase() === 'post' && config.headers['Content-Type'] === 'application/json') {
+      // POST请求，认证信息加入请求体
+      if (!config.data) {
+        config.data = {}
       }
-    }
-
-    if (credentials.password) {
-      if (config.params) {
-        config.params.password = credentials.password
-      } else {
-        config.params = { ...config.params, password: credentials.password }
+      if (credentials.user) {
+        (config.data as any).user = credentials.user
       }
-    }
-
-    // 如果数据是对象，将其转换为form格式
-    if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
-      const formData = new URLSearchParams();
-      for (const key in config.data) {
-        if (config.data[key] !== undefined && config.data[key] !== null) {
-          formData.append(key, config.data[key]);
+      if (credentials.password) {
+        (config.data as any).password = credentials.password
+      }
+    } else {
+      // GET请求或其他类型，认证信息加入URL参数
+      if (credentials.user) {
+        if (config.params) {
+          config.params.user = credentials.user
+        } else {
+          config.params = { user: credentials.user }
         }
       }
-      config.data = formData.toString();
+
+      if (credentials.password) {
+        if (config.params) {
+          config.params.password = credentials.password
+        } else {
+          config.params = { ...config.params, password: credentials.password }
+        }
+      }
+    }
+
+    // 如果是普通对象数据且不是FormData，将其转换为JSON格式
+    if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
+      // 保持为JSON对象格式，不转换为表单数据
+      if (config.headers['Content-Type'] === 'application/json') {
+        config.data = JSON.stringify(config.data)
+      }
     }
     return config
   },
@@ -148,10 +159,10 @@ export const chatAPI = {
       method: 'POST',
       headers: {
         'Accept': 'text/event-stream',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
       },
-      body: new URLSearchParams(data).toString()
+      body: JSON.stringify(data)
     });
 
     if (!response.ok) {
@@ -212,7 +223,7 @@ export const chatAPI = {
   },
 
   // 图片生成接口
-  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string) => {
+  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string) => {
     const data: any = {
       model,
       dialog: prompt
@@ -223,6 +234,9 @@ export const chatAPI = {
     }
     if (dialogTitle) {
       data.dialog_title = dialogTitle
+    }
+    if (imageSize) {
+      data.size = imageSize
     }
     return api.post('/never_guess_my_usage/split_pic', data)
   },
@@ -253,12 +267,14 @@ export const chatAPI = {
 
   // 获取分组的模型列表
   getGroupedModels: () => {
-    return api.get('/never_guess_my_usage/models/grouped')
+    return api.post('/never_guess_my_usage/models/grouped',{})
   },
 
   // 获取用量信息
   getUsage: () => {
-    return api.get('/never_guess_my_usage/usage')
+    // 添加认证信息到数据中
+    const data: any = {}
+    return api.post('/never_guess_my_usage/usage', data)
   },
 
   // 获取分组系统提示词
@@ -271,6 +287,13 @@ export const chatAPI = {
     return api.post('/never_guess_my_usage/update_dialog_title', {
       dialog_id: dialogId,
       new_title: newTitle
+    })
+  },
+
+  // 重置密码
+  resetPassword: (newPassword: string) => {
+    return api.post('/never_guess_my_usage/del_password', {
+      new_password: newPassword
     })
   },
 

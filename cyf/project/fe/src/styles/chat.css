@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./user-settings.css";
 .chat-container {
   height: 100vh;
   display: flex;
@@ -910,7 +911,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 10;
   border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
