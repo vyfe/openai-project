@@ -194,6 +194,7 @@
           @click.stop
         >
           <NotificationPanel
+            :isDarkTheme="formData.isDarkTheme"
             isModal
             @close="showNotificationPanel = false"
           />
@@ -287,6 +288,7 @@ const usageData = ref<any>(null)
 watch(() => formData.contextCount, (val) => localStorage.setItem('contextCount', val.toString()))
 watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxResponseChars', val.toString()))
 watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
+watch(() => formData.isDarkTheme, (val) => localStorage.setItem('isDarkTheme', val))
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
 watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))

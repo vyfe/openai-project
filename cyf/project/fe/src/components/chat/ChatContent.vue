@@ -55,7 +55,7 @@
         <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
         <div class="back-to-top-btn input-btn" @click="toggleMobileInput">
           <el-icon>
-            <component :is="showMobileInput ? 'Hide' : 'View'" />
+            <component :is="showMobileInput ? 'View' : 'ChatDotSquare'" />
           </el-icon>
         </div>
         <el-button icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
@@ -592,12 +592,24 @@ const clearCurrentSession = () => {
 
 // 导出对话截屏（长截图）
 const exportConversationScreenshot = async () => {
+  // 检查页面中是否存在图片，如果有则弹出警告
+  const messagesContainer = document.querySelector('.messages-container') as HTMLElement;
+  if (messagesContainer) {
+    const images = messagesContainer.querySelectorAll('img.attachment-preview');
+    if (images.length > 0) {
+      ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
+        confirmButtonText: '确定',
+        type: 'warning'
+      });
+      return;
+    }
+  }
+
   try {
     // 动态导入html-to-image库
     const htmlToImageModule = await import('html-to-image');
-    const { toPng } = htmlToImageModule;
+    const { toJpeg } = htmlToImageModule;
 
-    const messagesContainer = document.querySelector('.messages-container') as HTMLElement;
     if (!messagesContainer) {
       ElMessage.error('无法找到对话容器');
       return;
@@ -608,6 +620,7 @@ const exportConversationScreenshot = async () => {
       overflow: messagesContainer.style.overflow,
       maxHeight: messagesContainer.style.maxHeight,
       height: messagesContainer.style.height,
+      position: messagesContainer.style.position,
     };
 
     // 临时修改样式以显示全部内容
@@ -615,8 +628,15 @@ const exportConversationScreenshot = async () => {
     messagesContainer.style.maxHeight = 'none';
     messagesContainer.style.height = 'auto';
 
+    // 确保容器有足够的空间展示所有内容
+    const originalPosition = messagesContainer.style.position;
+    messagesContainer.style.position = 'relative';
+
+    // 等待一段时间确保内容完全渲染
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     // 使用html-to-image直接生成图像，不需要克隆节点
-    const dataUrl = await toPng(messagesContainer, {
+    const dataUrl = await toJpeg(messagesContainer, {
       cacheBust: true, // 防止缓存问题
       pixelRatio: 2.5, // 提高清晰度
       style: {
@@ -626,7 +646,8 @@ const exportConversationScreenshot = async () => {
         height: 'auto',
         filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
       },
-      backgroundColor: formData.isDarkTheme ? '#393939' : '#efefef',
+      backgroundColor: formData.isDarkTheme ? '#000000' : '#efefef',
+      quality: 0.95, // JPEG质量，范围0-1
       // 排除不需要截图的元素
       filter: (node: Node) => {
         if (node instanceof HTMLElement) {
@@ -641,10 +662,11 @@ const exportConversationScreenshot = async () => {
     messagesContainer.style.overflow = originalStyles.overflow;
     messagesContainer.style.maxHeight = originalStyles.maxHeight;
     messagesContainer.style.height = originalStyles.height;
+    messagesContainer.style.position = originalStyles.position;
 
     // 创建下载链接
     const link = document.createElement('a');
-    link.download = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.png`;
+    link.download = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpeg`;
     link.href = dataUrl;
     link.click();
 
@@ -674,19 +696,19 @@ const renderMarkdownWithMath = (content: string) => {
   });
 
   // 首先处理显示数学公式 $$...$$（只在非代码块内容中处理）
-  let resultContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (match, math) => {
+  let resultContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (_, math) => {
     return mathRenderer.displayMath(math.trim());
   });
 
   // 然后处理内联数学公式 $...$（只在非代码块内容中处理）
-  resultContent = resultContent.replace(/\$([^\$]+)\$/g, (match, math) => {
+  resultContent = resultContent.replace(/\$([^\$]+)\$/g, (_, math) => {
     // 确保 $ 不是紧跟在字母或数字后面的（避免将价格等误认为数学公式）
     // 检查匹配项之前是否有字母或数字，或者检查是否为常见价格格式
-    const prevChar = content[content.indexOf(match) - 1];
+    const prevChar = content[content.indexOf(_)- 1];
     const pricePattern = /^\$\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
 
-    if (match.startsWith('\\$') || (prevChar && /\w/.test(prevChar)) || pricePattern.test(match + ' ')) {
-      return match; // 如果是类似 $50 的格式或前面紧接字母/数字，不处理
+    if (_.startsWith('\\$') || (prevChar && /\w/.test(prevChar)) || pricePattern.test(_ + ' ')) {
+      return _; // 如果是类似 $50 的格式或前面紧接字母/数字，不处理
     }
     return mathRenderer.inlineMath(math.trim());
   });
@@ -749,7 +771,7 @@ const copyMessageContent = async (content: string) => {
     ElMessage.success('内容已复制到剪贴板');
   } catch (err) {
     console.error('复制失败:', err);
-    // 如果 navigator.clipboard 不可用，使用传统的 document.execCommand 方法
+    // 如果 navigator.clipboard 不可用，回退到老方法
     try {
       const textArea = document.createElement('textarea');
       // 转换为带有结构的纯文本
@@ -757,9 +779,20 @@ const copyMessageContent = async (content: string) => {
       textArea.value = plainText;
       document.body.appendChild(textArea);
       textArea.select();
-      document.execCommand('copy');
+      // 现代浏览器使用 Clipboard API，老浏览器使用 execCommand
+      let successful = false;
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(plainText);
+        successful = true;
+      } else {
+        successful = document.execCommand('copy'); // 保留，但作为备用方案
+      }
       document.body.removeChild(textArea);
-      ElMessage.success('内容已复制到剪贴板');
+      if (successful) {
+        ElMessage.success('内容已复制到剪贴板');
+      } else {
+        throw new Error('复制失败');
+      }
     } catch (fallbackErr) {
       console.error('复制失败:', fallbackErr);
       ElMessage.error('复制失败，请手动选择内容');

@@ -163,13 +163,14 @@ if [ $UPDATE_BACKEND = true ]; then
     # 启动uWSGI服务
     echo "🏃‍♂️ 正在启动 uWSGI 服务..."
         # 等待服务启动
+    which uwsgi
     sleep 3
-    # 已知问题：
-    uwsgi --ini ./conf/uwsgi.ini &
+    # 已知问题：uwsgi路径，必须使用lighthouse下的uwsgi
+    /home/lighthouse/.local/bin/uwsgi --ini ./conf/uwsgi.ini &
 
-    # 检查后端是否成功启动（通过检测Unix socket文件）
-    if [ -S "/tmp/uwsgi.sock" ]; then
-        echo "✅ 后端服务已通过Unix socket /tmp/uwsgi.sock 启动"
+    # 检查后端是否成功启动
+    if lsof -i :$SERVER_PORT >/dev/null 2>&1; then
+        echo "✅ 后端服务已在端口 $SERVER_PORT 启动"
     else
         echo "❌ 错误: 后端服务启动失败，请检查日志"
         exit 1

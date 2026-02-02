@@ -2148,7 +2148,7 @@ body.dark-theme .messages-container-temp {
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
-  z-index: 100;
+  z-index: 0;
 }
 
 .back-to-top-btn {
@@ -2168,7 +2168,7 @@ body.dark-theme .messages-container-temp {
   cursor: pointer;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
-  z-index: 100;
+  z-index: 0;
 }
 
 .back-to-top-btn.input-btn {
