@@ -660,6 +660,10 @@ const loadDialogHistory = async () => {
     const response: any = await chatAPI.getDialogHistory()
     if (response && response.content) {
       formData.dialogHistory = response.content
+      // 设置最新的对话ID为当前对话ID
+      if (response.content.length > 0) {
+        formData.currentDialogId = response.content[0].id
+      }
       // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
     } else {
       formData.dialogHistory = []

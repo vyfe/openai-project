@@ -54,7 +54,7 @@ for arg in "$@"; do
             UPDATE_BACKEND=true
             shift
             ;;
-        --restart)
+        --rest)
             RESTART=true
             shift
             ;;
@@ -84,22 +84,25 @@ check_command "nginx"
 if [ $RESTART = true ]; then
     echo "🔄 重启模式：将终止现有服务并重新启动"
 
-    # 检查后端端口占用并终止占用进程
-    echo "🔍 检查后端端口 $SERVER_PORT 占用情况..."
-    PORT_PIDS=$(lsof -ti:$SERVER_PORT 2>/dev/null)
-    if [ -n "$PORT_PIDS" ]; then
-        echo "⚠️  端口 $SERVER_PORT 被占用，正在终止进程 $PORT_PIDS..."
-        kill -9 $PORT_PIDS 2>/dev/null
-        sleep 2
-    fi
-
-    # 检查并终止现有的uwsgi进程
+    # 首先尝试优雅地停止现有的uwsgi进程
+    echo "🔍 查找并停止现有的 uWSGI 进程..."
     UWSGI_PIDS=$(pgrep -f "uwsgi" 2>/dev/null)
     if [ -n "$UWSGI_PIDS" ]; then
         echo "⚠️  终止现有的 uWSGI 进程 $UWSGI_PIDS..."
         kill -9 $UWSGI_PIDS 2>/dev/null
-        sleep 2
+        # 等待优雅停止
+        sleep 5
+        # 再次检查是否有残留进程，如果有则强制终止
+        UWSGI_PIDS_LEFT=$(pgrep -f "uwsgi.*server\.py\|uwsgi.*--ini\|uwsgi.*uwsgi\.ini" 2>/dev/null)
+        if [ -n "$UWSGI_PIDS_LEFT" ]; then
+            echo "⚠️  发现残留进程 $UWSGI_PIDS_LEFT，强制终止..."
+            kill -9 $UWSGI_PIDS_LEFT 2>/dev/null
+        fi
     fi
+
+    # 等待端口释放
+    echo "⏳ 等待端口 $SERVER_PORT 释放..."
+    timeout 30 bash -c "while lsof -i:$SERVER_PORT; do sleep 1; done" 2>/dev/null || true
 fi
 
 # 创建项目目录
@@ -159,24 +162,14 @@ if [ $UPDATE_BACKEND = true ]; then
 
     # 启动uWSGI服务
     echo "🏃‍♂️ 正在启动 uWSGI 服务..."
-    # 检查是否有uwsgi进程正在运行，如果有则终止它们
-    UWSGI_PIDS=$(pgrep uwsgi 2>/dev/null)
-    if [ -n "$UWSGI_PIDS" ]; then
-        echo "⚠️  终止现有的 uWSGI 进程 $UWSGI_PIDS..."
-        kill $UWSGI_PIDS 2>/dev/null || true
-    else
-        echo "ℹ️  未发现运行中的 uWSGI 进程，跳过终止步骤"
-    fi
-    # 等待服务杀死
+        # 等待服务启动
     sleep 3
+    # 已知问题：
     uwsgi --ini ./conf/uwsgi.ini &
 
-    # 等待服务启动
-    sleep 3
-
-    # 检查后端是否成功启动
-    if lsof -i :$SERVER_PORT >/dev/null 2>&1; then
-        echo "✅ 后端服务已在端口 $SERVER_PORT 启动"
+    # 检查后端是否成功启动（通过检测Unix socket文件）
+    if [ -S "/tmp/uwsgi.sock" ]; then
+        echo "✅ 后端服务已通过Unix socket /tmp/uwsgi.sock 启动"
     else
         echo "❌ 错误: 后端服务启动失败，请检查日志"
         exit 1

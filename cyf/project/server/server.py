@@ -861,82 +861,45 @@ def dialog_pic(user, password):
         # 对话模式 single=单条 multi=上下文/编辑
         dialogs = data.get('dialog')
         dialog_mode = data.get('dialog_mode', 'single')
-        
+        dialog_id = data.get('dialogId') or None
         # 处理FILE_URL_PATTERN匹配
         processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
         
         if dialog_mode == 'single':
-            dialogvo = {"role": "user", "desc": processed_data['original_content']}  # 使用原始内容保存历史记录
+            dialogvo = []  # 使用原始内容保存历史记录
             title = dialog_title or processed_data['original_content']
-
-            try:
-                # 如果有文件，使用图片编辑API；否则使用图片生成API
-                if processed_data['files']:
-                    # 使用第一个文件进行图片编辑
-                    file_info = processed_data['files'][0]
-                    result = get_client_for_user(user).images.edit(
-                        model=model,
-                        image=file_info['data'],
-                        prompt=processed_data['text_content'],
-                        n=1,
-                        response_format="url",
-                        size=size,
-                        timeout=120
-                    )
-                else:
-                    # 无文件，直接生成图片
-                    result = get_client_for_user(user).images.generate(
-                        model=model,
-                        prompt=processed_data['text_content'],
-                        n=1,
-                        response_format="url",
-                        size=size,
-                        timeout=120
-                    )
-            except Exception as api_e:
-                return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
         elif dialog_mode == 'multi':
-            # 图片多轮对话暂时还不支持，先实现单条图片生成
+            # 多轮对话优化：根据前端编辑后的历史记录来保存
             dialogvo = json.loads(dialogs)
-            title = dialog_title or extract_title_from_dialog(dialogvo)  # 修复：改为使用新的提取函数
-            
-            # 处理multi模式中的URL，保留原始内容
-            processed_multi_data = process_pic_dialog_with_urls(json.dumps(dialogvo), 'single')
-            # 更新最后一个对话项，保留原始内容
-            if processed_multi_data['original_content']:
-                dialogvo[-1]['desc'] = processed_multi_data['original_content']
-            
-            # 将连接图片转为本地的file对象（原有的本地文件处理逻辑）
-            local_file = str(dialogvo[-2]["url"]).replace(":4567/download", "/home/www/downloads")
+            title = dialog_title or extract_title_from_dialog(dialogvo)
 
-            try:
-                # 如果有URL文件，优先使用URL文件；否则使用本地文件
-                if processed_multi_data['files']:
-                    # 使用URL文件进行图片编辑
-                    file_info = processed_multi_data['files'][0]
-                    result = get_client_for_user(user).images.edit(
-                        model=model,
-                        image=file_info['data'],
-                        prompt=processed_multi_data['text_content'] if processed_multi_data['text_content'] else dialogvo[-1]["desc"],
-                        n=1,
-                        response_format="url",
-                        size=size
-                    )
-                else:
-                    # 使用本地文件进行图片编辑
-                    with open(local_file, "rb") as image_file:
-                        result = get_client_for_user(user).images.edit(
-                            model=model,
-                            image=image_file,
-                            prompt=processed_multi_data['text_content'] if processed_multi_data['text_content'] else dialogvo[-1]["desc"],
-                            n=1,
-                            response_format="url",
-                            size=size
-                        )
-            except Exception as api_e:
-                return handle_api_exception(api_e, user=user, model=model, dialog_content=json.dumps(dialogs)), 200
-        else:
-            return {"msg": "not supported dialog_mode"}, 200
+                
+        try:
+            # 如果有文件，使用图片编辑API；否则使用图片生成API
+            if processed_data['files']:
+                # 使用第一个文件进行图片编辑
+                file_info = processed_data['files'][0]
+                result = get_client_for_user(user).images.edit(
+                    model=model,
+                    image=file_info['data'],
+                    prompt=processed_data['text_content'],
+                    n=1,
+                    response_format="url",
+                    size=size,
+                    timeout=120
+                )
+            else:
+                # 无文件，直接生成图片
+                result = get_client_for_user(user).images.generate(
+                    model=model,
+                    prompt=processed_data['text_content'],
+                    n=1,
+                    response_format="url",
+                    size=size,
+                    timeout=120
+                )
+        except Exception as api_e:
+            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
 
         app.logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
@@ -960,12 +923,30 @@ def dialog_pic(user, password):
         result_save = {"role": "assistant", "desc": desc, "url": f'{result.data[0].url}'}
         # 日志和对话单独记录，dialog中新增model-name字段？
         # 图片按条数统计
+       
         sqlitelog.set_log(user, 1, model, json.dumps(result.to_dict()))
         # 5 dialog组装：上下文+本次问题回答
-        if not isinstance(dialogvo, list):
-            dialogvo = [dialogvo]
-        dialogvo.append(result_save)
-        sqlitelog.set_dialog(user, model,"pic", title, json.dumps(dialogvo))
+        try:
+            # 根据对话模式处理新的对话项
+            if dialog_mode == 'single':
+                # 单轮对话模式，直接添加当前对话和结果
+                new_entry = {"role": "user", "desc": processed_data['original_content']}
+                dialogvo.append(new_entry)
+                dialogvo.append(result_save)
+            else:
+                # 多轮对话模式，追加当前对话和结果
+                if not isinstance(dialogvo, list):
+                    dialogvo = [dialogvo]
+                dialogvo.append(result_save)
+            # 使用相同的标题，但保留原来的对话ID
+            sqlitelog.set_dialog(user, model, "pic", title, json.dumps(dialogvo), dialog_id)
+        except Exception as e:
+            # 如果查询数据库出现错误，仍然按照原来逻辑处理
+            app.logger.error(f"获取对话历史失败: {str(e)}")
+            if not isinstance(dialogvo, list):
+                dialogvo = [dialogvo]
+            dialogvo.append(result_save)
+            sqlitelog.set_dialog(user, model, "pic", title, json.dumps(dialogvo))
         return result_save, 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
@@ -975,7 +956,7 @@ def dialog_pic(user, password):
 def dialog_his(user, password):
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     app.logger.info(user)
-    min_time_str = (datetime.now() - timedelta(days=7)).date()
+    min_time_str = (datetime.now() - timedelta(days=5)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
     dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
     return {"content": dialog_list}, 200

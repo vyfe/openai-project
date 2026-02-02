@@ -223,7 +223,7 @@ export const chatAPI = {
   },
 
   // 图片生成接口
-  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string) => {
+  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number) => {
     const data: any = {
       model,
       dialog: prompt
@@ -237,6 +237,9 @@ export const chatAPI = {
     }
     if (imageSize) {
       data.size = imageSize
+    }
+    if (dialogId) {
+      data.dialogId = dialogId
     }
     return api.post('/never_guess_my_usage/split_pic', data)
   },

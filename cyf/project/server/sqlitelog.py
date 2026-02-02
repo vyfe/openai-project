@@ -180,9 +180,12 @@ def check_test_limit_exceeded(user_ip: str, default_limit: int) -> bool:
 def set_log(user: str, usage: int, model: str, text: str):
     Log.create(username=user, usage=usage, modelname=model, request_text=text)
 
-def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: str):
+def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: str, id: int = None):
     time_str=datetime.now().strftime("%Y-%m-%d")
-    Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute()
+    if id is not None:
+        Dialog.update(modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).where(Dialog.id == id).execute()
+    else:
+        Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute()
 
 def get_dialog_list(user: str, date: date):
     query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.modelname, Dialog.dialog_name, Dialog.start_date)
@@ -198,7 +201,7 @@ def get_dialog_context(user: str, id: int):
         query = Dialog.get(Dialog.username == user, Dialog.id == id)
         return query
     except DoesNotExist:
-        return []
+        return None
 
 
 def delete_dialogs(user: str, dialog_ids: list) -> int:

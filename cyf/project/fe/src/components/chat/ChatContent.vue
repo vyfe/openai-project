@@ -906,7 +906,8 @@ const callApi = async (
         'single',
         buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content),
         formData.dialogTitle,
-        imageSize  // 添加图片尺寸参数
+        imageSize,  // 添加图片尺寸参数
+        formData.currentDialogId || 0
       );
 
       // 处理响应 - 简化逻辑，只关注URL字段
@@ -1137,7 +1138,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
     ElMessage.warning('请先选择一个模型')
     return
   }
-
+  console.log('发送消息数组:', messages)
   // 检查是否是图像生成模型
   const isImageModel = formData.selectedModelType === 2;
 
@@ -1145,41 +1146,52 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
   let processedMessage = message;
   let finalImageSize = imageSize || '1024x1024'; // 默认尺寸
 
+  // 优化：获取最新的messages状态，查找上一条AI消息中的url字段（适用于所有模型）
+  // 获取当前用户消息之前的最后一条AI消息（排除系统消息和用户消息）
+  let lastAiMessageIndex = -1;
+  
+  // 从数组末尾向前遍历，跳过可能的当前正在输入的用户消息
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    // 找到第一条AI消息（排除欢迎消息）
+    if (msg.type === 'ai' && msg.content && msg.content !== t('chat.aiWelcomeMessage')) {
+      lastAiMessageIndex = i;
+      break;
+    }
+  }
+
+  if (lastAiMessageIndex !== -1) {
+    const lastAiMessage = messages[lastAiMessageIndex];
+    console.log('找到的上一条AI消息:', lastAiMessage);
+    
+    // 检查上一条AI消息是否有url字段（AI返回的图片保存在message.url中）
+    if (lastAiMessage.url) {
+      // 将url字段转化为[FILE_URL]格式并追加到本次入参后面
+      processedMessage = processedMessage + '\n[FILE_URL:' + lastAiMessage.url + ']';
+      console.log('添加图片URL到消息:', lastAiMessage.url);
+    } else {
+      // 兼容旧逻辑：检查上一条AI消息的内容中是否包含[FILE_URL]
+      const fileUrls = extractFileUrls(lastAiMessage.content);
+      if (fileUrls.length > 0) {
+        // 提取原始的[FILE_URL:xxx]格式文本
+        const fileUrlMatches = lastAiMessage.content.match(/\[FILE_URL:[^\]]+\]/g);
+        if (fileUrlMatches) {
+          // 将上一条消息中的[FILE_URL]文本追加到本次入参后面
+          processedMessage = processedMessage + '\n' + fileUrlMatches.join('\n');
+          console.log('添加内容中的图片URL到消息:', fileUrlMatches);
+        }
+      }
+    }
+  } else {
+    console.log('未找到上一条AI消息');
+  }
+
   if (isImageModel) {
     const imageSizeMatch = message.match(/\[IMAGE_SIZE:(.+?)\]/);
     if (imageSizeMatch) {
       finalImageSize = imageSizeMatch[1];
       // 移除尺寸标记，只保留原始消息
-      processedMessage = message.replace(/\[IMAGE_SIZE:(.+?)\]/, '').trim();
-    }
-
-    // 优化：如果上一条AI消息中有url字段（AI返回的图片），将其转化为[FILE_URL]格式追加到本次的入参后面
-    // 获取上一条AI消息（排除系统消息和用户消息）
-    const lastAiMessageIndex = messages.reduceRight((lastIndex, msg, index) => {
-      if (msg.type === 'ai' && msg.content && msg.content !== t('chat.aiWelcomeMessage')) {
-        return index;
-      }
-      return lastIndex;
-    }, -1);
-
-    if (lastAiMessageIndex !== -1) {
-      const lastAiMessage = messages[lastAiMessageIndex];
-      // 检查上一条AI消息是否有url字段（AI返回的图片保存在message.url中）
-      if (lastAiMessage.url) {
-        // 将url字段转化为[FILE_URL]格式并追加到本次入参后面
-        processedMessage = processedMessage + '\n[FILE_URL:' + lastAiMessage.url + ']';
-      } else {
-        // 兼容旧逻辑：检查上一条AI消息的内容中是否包含[FILE_URL]
-        const fileUrls = extractFileUrls(lastAiMessage.content);
-        if (fileUrls.length > 0) {
-          // 提取原始的[FILE_URL:xxx]格式文本
-          const fileUrlMatches = lastAiMessage.content.match(/\[FILE_URL:[^\]]+\]/g);
-          if (fileUrlMatches) {
-            // 将上一条消息中的[FILE_URL]文本追加到本次入参后面
-            processedMessage = processedMessage + '\n' + fileUrlMatches.join('\n');
-          }
-        }
-      }
+      processedMessage = processedMessage.replace(/\[IMAGE_SIZE:(.+?)\]/, '').trim();
     }
   }
 
@@ -1225,10 +1237,11 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
       const aiResponse: any = await chatAPI.sendImageGeneration(
         formData.selectedModel,
         processedMessage,
-        'single',
+        formData.contextCount > 0 ? 'multi' : 'single',
         buildDialogArrayFromSnapshot(contextSnapshot, processedMessage),
         formData.dialogTitle,
-        finalImageSize  // 传递图片尺寸参数
+        finalImageSize,  // 传递图片尺寸参数
+        formData.currentDialogId || 0  // 传递对话ID参数
       );
 
       // 处理响应
@@ -1414,7 +1427,7 @@ const currentEnhancedRoleContent = computed(() => {
 
 // 从消息快照构建对话数组函数
 const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): Array<{role: string, content: string}> => {
-  const dialogArray: Array<{role: string, content: string}> = []
+  const dialogArray: Array<{role: string, content: string, url?: string}> = []
 
   // 如果有角色设定，添加到最前面
   // 根据enhancedRoleEnabled状态决定使用systemPrompt还是currentEnhancedRoleContent作为system角色的内容
@@ -1438,7 +1451,8 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
   for (const msg of messagesToInclude) {
     dialogArray.push({
       role: msg.type === 'user' ? 'user' : 'assistant',
-      content: msg.content
+      content: msg.content,
+      url: msg.url || ''
     })
   }
 
