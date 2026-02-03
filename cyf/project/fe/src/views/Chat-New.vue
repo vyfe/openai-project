@@ -288,7 +288,7 @@ const usageData = ref<any>(null)
 watch(() => formData.contextCount, (val) => localStorage.setItem('contextCount', val.toString()))
 watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxResponseChars', val.toString()))
 watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
-watch(() => formData.isDarkTheme, (val) => localStorage.setItem('isDarkTheme', val))
+watch(() => formData.isDarkTheme, (val) => localStorage.setItem('isDarkTheme', val.toString()))
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
 watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
@@ -371,16 +371,132 @@ const loadDialogHistory = async () => {
   }
 }
 
+// 主题管理
+const themeManager = {
+  // 检查当前时间是否属于夜间时段
+  isNightTime: () => {
+    const currentHour = new Date().getHours();
+    // 夜间时段：19:00 - 06:59 (晚上7点到早上7点)
+    return currentHour >= 19 || currentHour < 7;
+  },
+
+  // 检查是否用户手动设置了主题
+  hasUserManuallySet: () => {
+    return localStorage.getItem('themeManualOverride') === 'true';
+  },
+
+  // 标记用户已手动选择主题
+  markManualSelection: (manual: boolean) => {
+    localStorage.setItem('themeManualOverride', manual.toString());
+  },
+
+  // 获取主题状态 - 自动模式基于时间，手动模式基于存储
+  getThemeState: () => {
+    if (themeManager.hasUserManuallySet()) {
+      return JSON.parse(localStorage.getItem('isDarkTheme') || 'false');
+    } else {
+      return themeManager.isNightTime();
+    }
+  },
+
+  // 应用主题到DOM
+  applyTheme: (isDark: boolean) => {
+    if (isDark) {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  },
+
+  // 定时器引用
+  timer: null as number | null,
+
+  // 自动切换主题
+  autoSwitchTheme: () => {
+    const isCurrentlyManual = themeManager.hasUserManuallySet();
+    const autoTheme = themeManager.isNightTime();
+    const currentManualTheme = JSON.parse(localStorage.getItem('isDarkTheme') || 'false');
+
+    console.log('autoTheme:', autoTheme, 'currentManualTheme:', currentManualTheme, 'isCurrentlyManual:', isCurrentlyManual);
+
+    if (isCurrentlyManual) {
+      console.log('用户手动选择了主题');
+      // 检查用户当前的手动选择是否与自动模式一致
+      if (currentManualTheme === autoTheme) {
+        // 如果用户当前的选择与自动模式一致，可以自动切换回自动模式
+        // 这样可以让系统恢复到自动管理状态
+        console.log('恢复到自动模式');
+        themeManager.markManualSelection(false);
+        // 注意：这里不改变实际的 theme，只是更新管理模式
+      } else {
+        // 用户选择与自动模式不一致，继续保持手动模式
+        console.log('保持手动模式');
+        return; // 退出函数，不执行自动切换逻辑
+      }
+    }
+
+    // 只有在自动模式下才执行自动切换逻辑
+    if (!themeManager.hasUserManuallySet()) {
+      console.log('自动切换主题');
+      if (autoTheme !== formData.isDarkTheme) {
+        console.log('切换主题');
+        formData.isDarkTheme = autoTheme;
+        themeManager.applyTheme(formData.isDarkTheme);
+      }
+    }
+  },
+
+  // 开始自动检查
+  startAutoCheck: () => {
+    // 立即执行一次
+    themeManager.autoSwitchTheme();
+    // 每分钟检查一次
+    themeManager.timer = window.setInterval(themeManager.autoSwitchTheme, 60000);
+  },
+
+  // 停止自动检查
+  stopAutoCheck: () => {
+    if (themeManager.timer) {
+      clearInterval(themeManager.timer);
+      themeManager.timer = null;
+    }
+  }
+};
+
+// 页面可见性改变时检查主题
+const handleVisibilityChange = () => {
+  if (!document.hidden) {
+    themeManager.autoSwitchTheme();
+  }
+};
+
+// 组件挂载后初始化
+onMounted(() => {
+  // 初始化主题状态
+  formData.isDarkTheme = themeManager.getThemeState();
+  themeManager.applyTheme(formData.isDarkTheme);
+
+  // 开始自动检查（仅当未手动设置时）
+  themeManager.startAutoCheck();
+
+  // 监听页面可见性变化
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+// 组件卸载前清理
+onUnmounted(() => {
+  themeManager.stopAutoCheck();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
+
 // 切换主题
 const toggleTheme = () => {
-  formData.isDarkTheme = !formData.isDarkTheme
-  // 实际的主题切换逻辑
-  if (formData.isDarkTheme) {
-    document.body.classList.add('dark-theme')
-  } else {
-    document.body.classList.remove('dark-theme')
-  }
-}
+  formData.isDarkTheme = !formData.isDarkTheme;
+  themeManager.markManualSelection(true); // 标记用户手动选择
+  localStorage.setItem('isDarkTheme', JSON.stringify(formData.isDarkTheme)); // 保存选择
+  themeManager.applyTheme(formData.isDarkTheme); // 应用主题
+  // 不停止自动检查，而是让自动检查来决定何时回到自动模式
+};
 
 // 登出
 const logout = () => {

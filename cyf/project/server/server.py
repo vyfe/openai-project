@@ -139,30 +139,29 @@ def process_pic_dialog_with_urls(dialogs: str, dialog_mode: str) -> dict:
         'original_content': dialogs  # 保留原始内容用于历史记录
     }
     
-    if dialog_mode == 'single':
-        # 检查是否包含文件URL
-        file_urls = FILE_URL_PATTERN.findall(dialogs)
-        if file_urls:
-            # 提取纯文本内容（用于API调用）
-            text_content = FILE_URL_PATTERN.sub('', dialogs).strip()
-            result['text_content'] = text_content
-            
-            # 下载文件
-            for url in file_urls:
-                try:
-                    file_data = url_to_file(url)
-                    filename = os.path.basename(urlparse(url).path) or 'file'
-                    # 创建文件元组 (filename, bytes, content_type)
-                    content_type = get_content_type(filename)
-                    result['files'].append({
-                        'url': url,
-                        'data': (filename, file_data, content_type),
-                        'filename': filename
-                    })
-                except Exception as e:
-                    app.logger.error(f"处理文件URL失败 {url}: {str(e)}")
-                    
-        result['processed_dialogs'] = result['text_content']
+    # 检查是否包含文件URL
+    file_urls = FILE_URL_PATTERN.findall(dialogs)
+    if file_urls:
+        # 提取纯文本内容（用于API调用）
+        text_content = FILE_URL_PATTERN.sub('', dialogs).strip()
+        result['text_content'] = text_content
+        
+        # 下载文件
+        for url in file_urls:
+            try:
+                file_data = url_to_file(url)
+                filename = os.path.basename(urlparse(url).path) or 'file'
+                # 创建文件元组 (filename, bytes, content_type)
+                content_type = get_content_type(filename)
+                result['files'].append({
+                    'url': url,
+                    'data': (filename, file_data, content_type),
+                    'filename': filename
+                })
+            except Exception as e:
+                app.logger.error(f"处理文件URL失败 {url}: {str(e)}")
+                
+    result['processed_dialogs'] = result['text_content']
     
     return result
 
@@ -862,26 +861,27 @@ def dialog_pic(user, password):
         dialogs = data.get('dialog')
         dialog_mode = data.get('dialog_mode', 'single')
         dialog_id = data.get('dialogId') or None
-        # 处理FILE_URL_PATTERN匹配
-        processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
         
         if dialog_mode == 'single':
             dialogvo = []  # 使用原始内容保存历史记录
+            # 处理FILE_URL_PATTERN匹配
+            processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
             title = dialog_title or processed_data['original_content']
         elif dialog_mode == 'multi':
             # 多轮对话优化：根据前端编辑后的历史记录来保存
             dialogvo = json.loads(dialogs)
             title = dialog_title or extract_title_from_dialog(dialogvo)
+            # 使用最新一条作为入参
+            processed_data = process_pic_dialog_with_urls(json.dumps(dialogvo[-1]), dialog_mode)
 
                 
         try:
             # 如果有文件，使用图片编辑API；否则使用图片生成API
             if processed_data['files']:
-                # 使用第一个文件进行图片编辑
-                file_info = processed_data['files'][0]
+                # 使用第一个文件进行图片编辑,多图编辑兼容性不太好
                 result = get_client_for_user(user).images.edit(
                     model=model,
-                    image=file_info['data'],
+                    image=processed_data['files'][0]['data'],
                     prompt=processed_data['text_content'],
                     n=1,
                     response_format="url",

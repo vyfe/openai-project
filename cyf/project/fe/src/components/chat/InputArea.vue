@@ -73,14 +73,7 @@ import {
   Plus,
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
-import { Props } from '@/components/chat/types'
-
-// 定义文件上传响应的类型
-interface FileUploadResponse {
-  content?: string;
-  msg?: string;
-  [key: string]: any; // 允许其他属性
-}
+import { Props, FileUploadResponse } from '@/components/chat/types'
 
 const props = withDefaults(defineProps<Props>(), {
   sendPreference: 'enter',
@@ -289,7 +282,7 @@ const handleFileChange = async (file: any) => {
     }
   } catch (error: any) {
     console.error('文件上传错误:', error)
-    let errorMessage = '文件上传失败'
+    let errorMessage =  t('chat.fileUploadFailed')
     if (error.response?.data?.msg) {
       errorMessage = error.response.data.msg
     } else if (error?.response?.data?.content) {

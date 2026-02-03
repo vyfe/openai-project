@@ -309,7 +309,7 @@ import {
   CaretRight,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { chatAPI, fileAPI } from '@/services/api'
+import { chatAPI } from '@/services/api'
 import { FormData } from '@/utils/main'
 import InputArea from './InputArea.vue' // 新增：导入InputArea组件
 import 'highlight.js/styles/github-dark.css'
@@ -1548,66 +1548,18 @@ const handleScroll = () => {
   }
 }
 
-// 文件相关处理
-const handleFileChange = async (file: any) => {
+// 文件相关处理 - 这里只处理从InputArea传来的文件上传成功后的UI更新
+const handleFileChange = (file: any) => {
   try {
-   // 检查文件对象是否有效
-   if (!file) {
-      throw new Error('未选择文件')
-    }
-    
-    // 检查是否为MD文件，如果是则重命名为TXT文件
-    let fileToUpload = file.raw || file; // 兼容不同的文件对象格式
-    
-    // 确保文件对象有必要的属性
-    if (!fileToUpload) {
-      throw new Error('文件对象无效')
-    }
-    
-    // 检查文件类型和扩展名
-    const fileType = fileToUpload.type || '';
-    const fileName = file.name || fileToUpload.name || '';
-    
-    if (fileType === 'text/markdown' || fileName.toLowerCase().endsWith('.md')) {
-      // 确保文件有text方法
-      if (typeof fileToUpload.text !== 'function') {
-        throw new Error('无法读取文件内容')
-      }
-      
-      // 读取MD文件内容并创建新的TXT文件
-      const textContent = await fileToUpload.text();
-      const txtFileName = fileName.replace(/\.md$/, '.txt');
-      fileToUpload = new File([textContent], txtFileName, { type: 'text/plain' });
-      ElMessage.info(`MD文件已转换为TXT格式: ${txtFileName}`)
-    }
-
-    // 上传文件到服务器
-    const response = await fileAPI.upload(fileToUpload)
-    if (response && response.data.content) {
-      // 文件上传成功，将URL添加到当前消息中
-      uploadedFile.value = fileToUpload
-      // 如果后端返回的content是相对路径或缺少host，则补充完整URL
-      let fullUrl = response.data.content
-      if (response.data.content.startsWith(':')) {
-        // 如果返回以冒号开头（如 :4567/download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.data.content
-      } else if (response.data.content.startsWith('/')) {
-        // 如果返回以斜杠开头（如 /download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.data.content
-      }
-      // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
-      inputMessage.value += `\n[FILE_URL:${fullUrl}]`
-      ElMessage.success(`文件 "${fileToUpload.name}" 已上传`)
-    } else {
-      throw new Error(response.data.msg || '文件上传失败')
+    // 这个方法现在只负责在InputArea组件完成文件上传后更新UI状态
+    // InputArea组件已经在其内部完成了文件上传到服务器的操作
+    if (file) {
+      uploadedFile.value = file;
+      // ElMessage.success(`文件 "${file.name}" 已准备就绪`);
     }
   } catch (error: any) {
-    console.error('文件上传错误:', error)
-    let errorMessage = '文件上传失败'
-    if (error.response?.data?.msg) {
-      errorMessage = error.response.data.msg
-    }
-    ElMessage.error(errorMessage)
+    console.error('处理文件变更错误:', error)
+    ElMessage.error('处理文件失败')
   }
 }
 

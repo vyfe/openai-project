@@ -86,3 +86,10 @@ export interface Props {
   isMobile?: boolean
   fontSize?: string
 }
+
+// 定义文件上传响应的类型
+export interface FileUploadResponse {
+  content?: string;
+  msg?: string;
+  [key: string]: any; // 允许其他属性
+}
