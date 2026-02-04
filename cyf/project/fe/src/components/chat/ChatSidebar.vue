@@ -3,7 +3,22 @@
   <transition name="sidebar-slide">
     <div v-show="!formData.sidebarCollapsed" class="chat-sidebar" :class="{ 'sidebar-mobile': formData.isMobile }">
       <el-button v-if="formData.isMobile" class="sidebar-close-btn" :icon="Close" circle @click="formData.sidebarCollapsed = true" />
-      <div class="model-selector" @click.stop>
+      <!-- 侧边栏导航按钮 -->
+      <div class="sidebar-nav">
+        <button
+          v-for="section in sectionButtons"
+          :key="section.key"
+          @click="activeSection = section.key"
+          class="sidebar-nav-btn"
+          :class="{ 'active': activeSection === section.key }"
+        >
+          <el-icon :size="16"><component :is="section.icon" /></el-icon>
+          <span>{{ section.label }}</span>
+        </button>
+      </div>
+      <!-- 内容区域容器 -->
+      <div class="sidebar-content">
+        <div class="model-selector" @click.stop v-show="activeSection === 'model'">
         <h3>{{ t('chat.selectProvider') }}</h3>
         <div class="provider-selector">
           <el-select v-model="formData.providerValue" :placeholder="t('chat.selectProvider')" size="small" filterable clearable
@@ -22,7 +37,7 @@
           </el-select>
         </div>
       </div>
-      <div class="dialog-history-section">
+      <div class="dialog-history-section" v-show="activeSection === 'model'">
         <!-- 显示选中模型的描述 -->
         <div v-if="formData.currentModelDesc" class="model-description">
           <div class="model-desc-text">
@@ -34,9 +49,8 @@
         </div>
       </div>
 
-      <div class="dialog-history-section">
+      <div class="dialog-history-section" v-show="activeSection === 'history'">
         <div class="history-section-header">
-          <h3>{{ t('chat.history') }}</h3>
           <div class="history-actions">
             <el-button type="default" size="small" text @click="loadDialogHistory" :loading="formData.loadingHistory" class="text-gray-700 dark:text-gray-300 hover:bg-transparent">
               {{ t('chat.refreshHistory') }}
@@ -93,7 +107,7 @@
       </div>
 
       <!-- 上下文设置部分 -->
-      <div class="context-settings-section">
+      <div class="context-settings-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.contextSettings') }}</h3>
         <div class="context-slider-wrapper">
           <div class="context-label">
@@ -126,8 +140,7 @@
       </div>
 
       <!-- 角色设定部分 -->
-      <div class="system-prompt-section">
-        <h3>{{ t('chat.roleSettingTitle') }}</h3>
+      <div class="system-prompt-section" v-show="activeSection === 'role'">
         <el-input v-model="formData.systemPrompt" type="textarea" :rows="3" :disabled="formData.enhancedRoleEnabled"
           :placeholder="t('chat.systemPromptPlaceholderSidebar')" resize="vertical" @blur="handleSystemPromptBlur" />
         <div class="system-prompt-hint">{{ t('chat.aiBehaviorHint') }}</div>
@@ -209,7 +222,7 @@
       </div>
 
       <!-- 发送键偏好设置 -->
-      <div class="send-preference-section">
+      <div class="send-preference-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.sendSetting') }}</h3>
         <div class="send-preference-wrapper">
           <el-switch v-model="formData.sendPreference" :active-value="'enter'" :inactive-value="'ctrl_enter'"
@@ -220,6 +233,7 @@
         </div>
       </div>
     </div>
+  </div>
   </transition>
 
   <!-- 移动端遮罩 -->
@@ -239,6 +253,10 @@ import {
   EditPen,
   Loading,
   InfoFilled,
+  Monitor,
+  Clock,
+  Setting,
+  UserFilled,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
@@ -646,6 +664,27 @@ const loadingEnhancedRoles = ref(false)
 
 // 使用国际化
 const { t } = useI18n()
+
+// 定义侧边栏区域类型
+type SidebarSection = 'model' | 'history' | 'settings' | 'role'
+
+// 当前激活的侧边栏区域
+const activeSection = ref<SidebarSection>(
+  (localStorage.getItem('sidebarActiveSection') as SidebarSection) || 'history'
+)
+
+// 监听并持久化
+watch(activeSection, (newVal) => {
+  localStorage.setItem('sidebarActiveSection', newVal)
+})
+
+// 导航按钮配置
+const sectionButtons = [
+  { key: 'model' as const, label: t('chat.model'), icon: Monitor },
+  { key: 'history' as const, label: t('chat.history'), icon: Clock },
+  { key: 'role' as const, label: t('chat.roleSettingTitle'), icon: UserFilled },
+  { key: 'settings' as const, label: t('chat.settings'), icon: Setting },
+]
 
 
 // 加载对话历史

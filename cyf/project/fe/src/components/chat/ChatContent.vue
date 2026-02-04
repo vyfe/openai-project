@@ -519,26 +519,6 @@ const messagesContainer = ref<HTMLElement>()
 const previewImageUrl = ref('')
 const showImagePreview = ref(false)
 
-// 添加键盘可见性检测
-const isKeyboardVisible = ref(false)
-const originalViewportHeight = ref(window.innerHeight)
-
-// 检测视口高度变化以判断软键盘是否弹出
-const checkKeyboardVisibility = () => {
-  const currentHeight = window.innerHeight
-  const heightDifference = originalViewportHeight.value - currentHeight
-
-  // 如果视口高度减少超过150px，我们认为键盘弹出了
-  isKeyboardVisible.value = heightDifference > 150
-}
-
-// 监听视口变化以检测键盘状态
-const handleViewportChange = () => {
-  if (formData.isMobile) {
-    checkKeyboardVisibility()
-  }
-}
-
 // 当用户点击更新标题按钮时
 const updateDialogTitle = async () => {
   if (!formData.currentDialogId) {

@@ -54,6 +54,9 @@
 /* 在侧边栏展开时的过渡效果 */
 .chat-sidebar {
   transition: transform 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .sidebar-slide-enter-active,
@@ -67,4 +70,194 @@
 
 .sidebar-slide-leave-to {
   transform: translateX(-100%);
+}
+
+/* 侧边栏导航按钮 */
+.sidebar-nav {
+  display: flex;
+  gap: 4px;
+  margin-top: 26px;
+  padding: 4px;
+  background: #f3f4f6;
+  border-radius: 8px;
+  flex-shrink: 0; /* 导航栏不压缩 */
+}
+
+.sidebar-nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  color: #6b7280;
+}
+
+/* 桌面端：标签在图标下方 */
+@media (min-width: 481px) {
+  .sidebar-nav-btn {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+.sidebar-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.sidebar-nav-btn.active {
+  background: white;
+  color: #3b82f6;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 暗色主题 */
+.dark-theme .sidebar-nav {
+  background: #374151;
+}
+
+.dark-theme .sidebar-nav-btn {
+  color: #9ca3af;
+}
+
+.dark-theme .sidebar-nav-btn:hover {
+  background: rgba(55, 65, 81, 0.5);
+}
+
+.dark-theme .sidebar-nav-btn.active {
+  background: #4b5563;
+  color: #60a5fa;
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .sidebar-nav {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .sidebar-nav-btn {
+    padding: 6px 8px;
+    font-size: 10px;
+    flex-direction: row; /* 移动端标签在图标右侧 */
+    gap: 6px;
+  }
+
+  .sidebar-nav-btn span {
+    display: inline; /* 移动端显示标签 */
+  }
+}
+
+/* 内容区域样式 */
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden; /* 防止出现横向滚动条 */
+  -webkit-overflow-scrolling: touch;
+  min-height: 0; /* 使内容区域可以正确滚动 */
+  width: 100%; /* 确保宽度占满容器，防止内部元素溢出 */
+  box-sizing: border-box; /* 确保padding和border不会增加总宽度 */
+}
+
+/* 自定义滚动条样式，仅在内容超长时显示，使其与内部组件样式对齐 */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px; /* 更细的滚动条，只在需要时显示 */
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+  visibility: hidden; /* 默认隐藏轨道 */
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background-color: rgba(193, 193, 193, 0.5); /* 半透明，更柔和 */
+  border-radius: 3px;
+  visibility: hidden; /* 默认隐藏滑块 */
+}
+
+.sidebar-content:hover::-webkit-scrollbar-track,
+.sidebar-content:hover::-webkit-scrollbar-thumb {
+  visibility: visible; /* 悬停时显示滚动条 */
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(168, 168, 168, 0.8);
+}
+
+/* 当内容确实需要滚动时才显示滚动条 */
+.sidebar-content:active::-webkit-scrollbar-track,
+.sidebar-content:active::-webkit-scrollbar-thumb {
+  visibility: visible;
+}
+
+/* 暗色主题下的滚动条样式 */
+.dark-theme .sidebar-content::-webkit-scrollbar-thumb {
+  background-color: rgba(93, 93, 93, 0.5);
+}
+
+.dark-theme .sidebar-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(122, 122, 122, 0.8);
+}
+
+/* 为内容区域的子元素添加样式以确保正常布局 */
+.sidebar-content > * {
+  min-height: unset; /* 确保内容可以正确适应容器 */
+  width: 100%;
+}
+
+/* 滑块容器样式，确保滑块和标签在指定宽度范围内 */
+.context-slider-wrapper {
+  width: 90%;
+  margin: 0 auto 20px auto; /* 居中并对上下留白 */
+  padding: 10px 0;
+  box-sizing: border-box;
+}
+
+.context-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.context-label span {
+  font-size: 14px;
+  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-hint {
+  margin-top: 15px;
+  font-size: 0.6em;
+  color: #6b7280;
+  width: 100%;
+  word-wrap: break-word;
+}
+
+body.dark-theme .context-hint {
+  color: #9a9a9a;
+}
+
+/* 对话历史列表样式 */
+.dialog-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dialog-history-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }

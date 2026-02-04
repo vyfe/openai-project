@@ -159,7 +159,9 @@ const messages = {
       updatePasswordFailed: '密码更新失败',
       currentPasswordIncorrect: '当前密码不正确',
       passwordUpdateNotice: '密码更新成功，请使用新密码重新登录。',
-      modelLoading: '请稍等，答案马上就到'
+      modelLoading: '请稍等，答案马上就到',
+      modelSelection: '模型选择',
+      roleEnhancement: '角色增强'
     },
     login: {
       title: '智能对话系统',
@@ -338,7 +340,9 @@ const messages = {
       updatePasswordFailed: 'Password update failed',
       currentPasswordIncorrect: 'Current password is incorrect',
       passwordUpdateNotice: 'Password updated successfully, please log in again with your new password.',
-      modelLoading: 'Here comes the answer...'
+      modelLoading: 'Here comes the answer...',
+      modelSelection: 'Model Selection',
+      roleEnhancement: 'Role Enhancement'
     },
     login: {
       title: 'Smart Conversation System',
