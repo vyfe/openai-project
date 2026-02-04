@@ -129,7 +129,7 @@ export const chatAPI = {
   sendChatStream: async (
     model: string,
     message: string,
-    onChunk: (content: string, done: boolean, finishReason?: string) => void,
+    onChunk: (content: string, done: boolean, finishReason?: string, response?: any) => void,
     dialogMode: string = 'single',
     dialog?: any,
     dialogTitle?: string,
@@ -201,7 +201,7 @@ export const chatAPI = {
                   throw new Error(parsedData.error.msg || 'API请求失败');
                 }
 
-                onChunk(parsedData.content, parsedData.done, parsedData.finish_reason);
+                onChunk(parsedData.content, parsedData.done, parsedData.finish_reason, parsedData);
 
                 if (parsedData.done) {
                   return; // 结束读取

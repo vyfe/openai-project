@@ -702,14 +702,20 @@ def dialog(user, password):
             app.logger.info(result)
             sqlitelog.set_log(user, tokens, model, json.dumps(result.to_dict()))
             # 5 dialog组装：上下文+本次问题，返回答案
-            sqlitelog.set_dialog(user, model, "chat",  title,
+            dialog_id = sqlitelog.set_dialog(user, model, "chat",  title,
                                  json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
-            # 仅返回role、content和finish_reason
-            return {
+            # 仅返回role、content、finish_reason和dialog_id
+            response_data = {
                 "role": result.choices[0].message.role,
                 "content": result.choices[0].message.content,
                 "finish_reason": result.choices[0].finish_reason
-            }, 200
+            }
+
+            # 如果是新对话（没有传入对话ID），则返回新创建的对话ID
+            if dialog_id:
+                response_data["dialog_id"] = dialog_id
+
+            return response_data, 200
         except Exception as api_e:
             return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
     except json.JSONDecodeError:
@@ -800,15 +806,16 @@ def dialog_stream(user, password):
                         if chunk.choices[0].finish_reason:
                             finish_reason = chunk.choices[0].finish_reason
 
-                yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason})}\n\n"
-
                 # 记录日志 - 获取实际使用的token数
                 # 在流式响应中无法获取usage，所以使用估算的方式
                 tokens_used = len(full_content.encode('utf-8')) // 4  # 粗略估算token数量
                 sqlitelog.set_log(user, tokens_used, model, json.dumps({"content": full_content}))
                 # 记录对话
-                sqlitelog.set_dialog(user, model, "chat", title,
+                dialog_id = sqlitelog.set_dialog(user, model, "chat", title,
                                     json.dumps(dialogvo + [{"role": "assistant", "content": full_content}]))
+
+                # 发送完成标志，同时发送对话ID
+                yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id})}\n\n"
 
             except Exception as api_e:
                 error_response = handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs)

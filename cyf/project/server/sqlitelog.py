@@ -183,9 +183,12 @@ def set_log(user: str, usage: int, model: str, text: str):
 def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: str, id: int = None):
     time_str=datetime.now().strftime("%Y-%m-%d")
     if id is not None:
+        # 更新现有对话
         Dialog.update(modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).where(Dialog.id == id).execute()
+        return id  # 返回更新的对话ID
     else:
-        Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute()
+        # 创建新对话
+        return (Dialog.replace(username=user, chattype=chattype, modelname=model, dialog_name=dialog_name, start_date=time_str, context=context).execute())
 
 def get_dialog_list(user: str, date: date):
     query = (Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.modelname, Dialog.dialog_name, Dialog.start_date)

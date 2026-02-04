@@ -945,7 +945,7 @@ const callApi = async (
 
       // 处理响应 - 简化逻辑，只关注URL字段
       let responseContent = '';
-      
+
       if (typeof aiResponse === 'object') {
         // 优先检查直接的url字段
         if (aiResponse.url) {
@@ -962,12 +962,21 @@ const callApi = async (
             }
           }
         }
-        
+
+        // 检查并更新对话ID（如果后端返回了新的对话ID）
+        if (aiResponse.dialog_id && !formData.currentDialogId) {
+          formData.currentDialogId = aiResponse.dialog_id;
+          // 如果没有设置标题，使用新对话的ID作为标题
+          if (!formData.dialogTitle.trim()) {
+            formData.dialogTitle = `对话 ${aiResponse.dialog_id}`;
+          }
+        }
+
         // 如果找到了URL，根据是否是图片决定是否显示预览
         if (responseContent) {
           // 直接使用完整的URL，不再添加origin前缀
           const finalUrl = responseContent;
-          
+
           // 检查URL后缀名判断是否为图片
           if (isImageUrl(finalUrl)) {
             // 如果是图片，使用FILE_URL格式以便触发预览功能
@@ -1037,7 +1046,7 @@ const callApi = async (
         await chatAPI.sendChatStream(
           formData.selectedModel,
           userMessage.content,
-          (content, done, finishReason) => {
+          (content, done, finishReason, response) => {
             messages[aiMessageIndex].content += content;
             if (done) {
               isLoading.value = false;
@@ -1048,6 +1057,15 @@ const callApi = async (
               // 如果内容仍然为空，说明出现了问题
               else if (messages[aiMessageIndex].content === '') {
                 messages[aiMessageIndex].isError = true;
+              }
+
+              // 检查并更新对话ID（如果后端返回了新的对话ID）
+              if (response && response.dialog_id && !formData.currentDialogId) {
+                formData.currentDialogId = response.dialog_id;
+                // 如果没有设置标题，使用新对话的ID作为标题
+                if (!formData.dialogTitle.trim()) {
+                  formData.dialogTitle = `对话 ${response.dialog_id}`;
+                }
               }
             }
             // 在每次更新内容后滚动到底部
@@ -1099,6 +1117,15 @@ const callApi = async (
         if (response.finish_reason === 'length') {
           messages[aiMessageIndex].finishReason = response.finish_reason as 'length';
           messages[aiMessageIndex].isTruncated = true;
+        }
+
+        // 检查并更新对话ID（如果后端返回了新的对话ID）
+        if (response.dialog_id && !formData.currentDialogId) {
+          formData.currentDialogId = response.dialog_id;
+          // 如果没有设置标题，使用新对话的ID作为标题
+          if (!formData.dialogTitle.trim()) {
+            formData.dialogTitle = `对话 ${response.dialog_id}`;
+          }
         }
 
         isLoading.value = false;
@@ -1292,6 +1319,15 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
             }
           }
           responseContent = aiResponse.desc || '图片已生成';
+
+          // 检查并更新对话ID（如果后端返回了新的对话ID）
+          if (aiResponse.dialog_id && !formData.currentDialogId) {
+            formData.currentDialogId = aiResponse.dialog_id;
+            // 如果没有设置标题，使用新对话的ID作为标题
+            if (!formData.dialogTitle.trim()) {
+              formData.dialogTitle = `对话 ${aiResponse.dialog_id}`;
+            }
+          }
         } else {
           responseContent = JSON.stringify(aiResponse);
         }
