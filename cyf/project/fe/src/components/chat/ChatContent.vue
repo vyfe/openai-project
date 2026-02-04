@@ -1050,11 +1050,9 @@ const callApi = async (
                 messages[aiMessageIndex].isError = true;
               }
             }
-            // 只在用户位于底部时才滚动
+            // 在每次更新内容后滚动到底部
             nextTick(() => {
-              if (formData.isScrolledToBottom) {
-                scrollToBottom();
-              }
+              scrollToBottom();
             });
           },
           formData.contextCount > 0 ? 'multi' : 'single',
@@ -1106,9 +1104,7 @@ const callApi = async (
         isLoading.value = false;
         // 滚动到底部
         nextTick(() => {
-          if (formData.isScrolledToBottom) {
-            scrollToBottom();
-          }
+          scrollToBottom();
         });
       }
     }
@@ -1155,7 +1151,7 @@ const callApi = async (
   } finally {
     isLoading.value = false;
     await nextTick();
-    scrollToBottom();
+    scrollToBottomOnNewMessage();
 
     if (!isRetry && !isContinue) {
       // 刷新对话历史记录（仅新消息发送时）
@@ -1260,7 +1256,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
 
   // 滚动到底部
   await nextTick()
-  scrollToBottom()
+  scrollToBottomOnNewMessage()
 
   // 根据是否是图像模型调用相应的API
   if (isImageModel) {
@@ -1330,7 +1326,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
     } finally {
       isLoading.value = false;
       await nextTick();
-      scrollToBottom();
+      scrollToBottomOnNewMessage();
 
       // 刷新对话历史记录
       emit('refresh-history');
@@ -1524,27 +1520,55 @@ const scrollToTop = () => {
 const toggleMobileInput = () => {
   showMobileInput.value = !showMobileInput.value
 }
-const scrollToBottom = () => {
-  if (messagesContainer.value && formData.isScrolledToBottom) {
-    // 只有在用户已经滚动到底部时才继续滚动
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+
+// 智能滚动到底部函数
+const scrollToBottom = (force = false) => {
+  if (messagesContainer.value) {
+    // 无论用户当前位置如何，都滚动到底部
+    messagesContainer.value.scrollTo({
+      top: messagesContainer.value.scrollHeight,
+      behavior: 'smooth'
+    });
   }
 }
 
-// 监听滚动事件，判断用户是否滚动到了底部
+// 立即滚动到底部函数（用于强制滚动）
+const scrollToBottomImmediate = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+  }
+}
+
+// 监听滚动事件，但现在我们始终自动滚动到底部
 const handleScroll = () => {
   if (messagesContainer.value) {
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-    // 如果距离底部小于50像素，则认为是在底部
-    formData.isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 50
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
 
     // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
-    showBackToTop.value = scrollTop > clientHeight
+    showBackToTop.value = scrollTop > clientHeight;
+  }
+}
 
-    // 如果软键盘弹出，自动保持滚动到底部
-    if (isKeyboardVisible.value) {
-      scrollToBottom()
-    }
+// 使用防抖函数优化滚动性能
+const debounce = (func: Function, wait: number) => {
+  let timeout: number | null = null;
+  return (...args: any[]) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = window.setTimeout(() => func(...args), wait);
+  };
+};
+
+// 防抖处理滚动事件
+const debouncedHandleScroll = debounce(handleScroll, 100);
+
+// 添加一个专门用于新消息的滚动函数
+const scrollToBottomOnNewMessage = () => {
+  // 无论用户当前在何处，只要有新消息就滚动到底部
+  if (messagesContainer.value) {
+    // 短时间内立即滚动到底部，给用户更好的体验
+    setTimeout(() => {
+      messagesContainer.value!.scrollTop = messagesContainer.value!.scrollHeight;
+    }, 10); // 短延迟让DOM更新
   }
 }
 
@@ -1620,8 +1644,13 @@ onMounted(() => {
   // 添加滚动事件监听器
   const container = messagesContainer.value
   if (container) {
-    container.addEventListener('scroll', handleScroll)
+    container.addEventListener('scroll', debouncedHandleScroll)
   }
+
+  // 组件挂载后立即滚动到底部
+  nextTick(() => {
+    scrollToBottom(true);
+  });
 })
 
 // 组件卸载时移除事件监听器
@@ -1631,9 +1660,18 @@ onUnmounted(() => {
   // 移除滚动事件监听器
   const container = messagesContainer.value
   if (container) {
-    container.removeEventListener('scroll', handleScroll)
+    container.removeEventListener('scroll', debouncedHandleScroll)
   }
 })
+
+// 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
+watch(messages, () => {
+  nextTick(() => {
+    if (formData.isScrolledToBottom) {
+      scrollToBottom();
+    }
+  });
+}, { deep: true });
 
 // 从消息内容中提取文件URL列表（兼容新旧格式）
 const extractFileUrls = (content: string): string[] => {
@@ -1695,6 +1733,13 @@ watch(() => formData.currentDialogId, async (newDialogId) => {
     await loadDialogContent(newDialogId)
   }
 })
+
+// 监听消息数组长度变化，当有新消息时自动滚动到底部
+watch(() => messages.length, () => {
+  nextTick(() => {
+    scrollToBottomOnNewMessage();
+  });
+});
 
 // 监听暗色主题变化
 watch(() => formData.isDarkTheme, (newVal) => {
