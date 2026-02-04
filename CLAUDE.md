@@ -36,7 +36,7 @@
 ```
 cyf/
 └── project/
-    ├── client/          # 旧版客户端代码（Python/Tkinter）
+    ├── client/          # 旧版客户端代码（Python/Tkinter）- 已不再维护
     │   ├── client.py        # 主客户端界面 (使用CustomTkinter)
     │   ├── client_support.py # 客户端支持功能
     │   ├── client_pack.py   # 客户端打包脚本
@@ -44,21 +44,28 @@ cyf/
     ├── fe/              # 新版前端代码（Vue/TypeScript）
     │   ├── src/             # 源代码目录
     │   │   ├── components/  # 组件目录
-    │   │   ├── pages/       # 页面目录
+    │   │   │   └── chat/    # 聊天相关组件
+    │   │   ├── views/       # 页面视图目录
     │   │   ├── services/    # API服务目录
-    │   │   ├── stores/      # 状态管理目录
+    │   │   ├── stores/      # 状态管理目录(Pinia)
     │   │   ├── router/      # 路由配置目录
-    │   │   └── views/       # 视图组件目录
+    │   │   ├── styles/      # CSS样式文件目录
+    │   │   └── composables/ # Vue组合式API目录
     │   ├── public/          # 静态资源目录
     │   ├── package.json     # 项目依赖配置
     │   ├── vite.config.ts   # 构建配置
     │   └── tsconfig.json    # TypeScript配置
     └── server/          # 服务端代码
         ├── server.py        # 主服务端应用 (Flask)
-        ├── server_pack.py   # 服务端打包脚本
+        ├── server_admin.py  # 管理员API接口
         ├── sqlitelog.py     # SQLite日志记录模块
         ├── deploy.sh        # 部署脚本
-        └── conf/            # 服务端配置
+        ├── local-run.sh     # 本地开发运行脚本
+        ├── init/            # 初始化脚本目录
+        │   ├── init_model_meta.py  # 模型元数据初始化
+        │   └── init_user_data.py   # 用户数据初始化
+        └── conf/            # 服务端配置目录
+            ├── conf.ini     # 服务端配置文件
             ├── conf.ini.tpl # 服务端配置模板
             └── uwsgi.ini    # uWSGI配置文件
 ```
@@ -75,10 +82,14 @@ cyf/
   - GPT-3.5-turbo
   - DALL-E 图像生成
 - 文件上传功能 (支持 txt, pdf, png, jpg, jpeg, gif, ppt, pptx)
+- 截图上传功能，支持处理屏幕截图
 - SQLite数据库日志记录系统
   - 记录用户请求、用量、模型使用情况
   - 记录对话历史和上下文
+  - 支持对话标题管理和历史记录
 - 使用uWSGI部署，支持多进程和线程
+- 管理员API接口，支持用户管理和系统配置
+- 模型元数据初始化和用户数据初始化脚本
 
 ### 前端 (fe/)
 - 基于Vue 3和TypeScript的现代化Web界面
@@ -94,6 +105,10 @@ cyf/
 - 使用 `white-space: pre-wrap` 保持代码格式的同时允许换行
 - 使用 `table-layout: fixed` 确保表格在小屏幕上布局稳定
 - 使用 `word-break: break-word` 和 `overflow-wrap: break-word` 确保长内容能正确换行
+- 新增截图上传功能，可通过点击相机图标上传屏幕截图
+- 支持对话标题自动生成和手动编辑
+- 提供用户设置界面，可配置界面主题和偏好
+- 实现了流畅的滚动和消息加载机制
 
 ### 客户端 (client/) - 旧版
 - 基于CustomTkinter的图形用户界面
@@ -113,6 +128,14 @@ cyf/
 - `api.api_key`: OpenAI API密钥
 - `api.api_host`: OpenAI API主机地址
 - `model.*`: 各种模型的映射名称
+- `server.port`: 服务端口配置（默认39997）
+- `server.host`: 服务端主机地址配置
+
+### 系统管理功能
+- 管理员API接口 (`server_admin.py`) 提供用户管理功能
+- 模型元数据初始化脚本 (`init/init_model_meta.py`)
+- 用户数据初始化脚本 (`init/init_user_data.py`)
+- 支持对话标题自动生成和历史记录管理
 
 ### 部署方式
 - 使用uWSGI运行Flask应用
@@ -129,6 +152,9 @@ cyf/
 - Requests (HTTP请求)
 - Peewee (SQLite ORM)
 - uWSGI (应用服务器)
+- ConfigParser (配置文件处理)
+- hashlib (密码哈希)
+- secrets (安全随机数生成)
 
 ### 前端 (新)
 - Vue 3 (UI框架)
@@ -137,6 +163,9 @@ cyf/
 - Element Plus (UI组件库)
 - Pinia (状态管理)
 - Axios (HTTP客户端)
+- Vue Router (路由管理)
+- Tailwind CSS v4 (样式框架)
+- Vue I18n (国际化支持)
 
 ### 客户端 (旧)
 - Python 3
@@ -161,6 +190,44 @@ cyf/
 - `start_date`: 开始日期
 - `context`: 对话上下文
 
+### ModelMeta 表
+- `model_name`: 模型名称
+- `model_desc`: 模型用途描述
+- `model_type`: 模型的模态（1-文本，2-图像）
+- `recommend`: 是否推荐
+- `status_valid`: 是否对外开放
+
+### SystemPrompt 表
+- `role_name`: 角色名称
+- `role_group`: 角色分组
+- `role_desc`: 角色描述
+- `role_content`: 角色提示词
+- `status_valid`: 是否对外开放
+
+### TestLimit 表
+- `user_ip`: 用户IP地址
+- `user_count`: 使用次数
+- `limit`: 使用上限
+
+### User 表
+- `username`: 用户名
+- `password_hash`: 密码哈希值
+- `salt`: 密码盐值
+- `api_key`: 用户专属API密钥
+- `role`: 用户角色
+- `is_active`: 账户是否激活
+- `created_at`: 创建时间
+- `updated_at`: 更新时间
+
+### Notification 表
+- `title`: 通知标题
+- `content`: 通知内容
+- `publish_time`: 发布时间
+- `status`: 状态（active/inactive）
+- `priority`: 优先级
+- `created_at`: 创建时间
+- `updated_at`: 更新时间
+
 ## 部署说明
 
 ### 服务端部署
@@ -169,12 +236,14 @@ cyf/
 3. 修改 `conf/conf.ini` 中的API密钥和其他设置
 4. 运行 `deploy.sh` 脚本启动服务
 5. 服务将在39997端口监听
+6. （可选）运行初始化脚本 `python init/init_model_meta.py` 和 `python init/init_user_data.py`
 
 ### 前端部署
 1. 进入 `cyf/project/fe` 目录
 2. 执行 `npm install` 安装依赖
 3. 执行 `npm run build` 构建生产版本
 4. 将生成的 `dist` 目录部署到Web服务器
+5. 确保前端能够通过API代理或CORS访问后端服务
 
 ### 开发模式启动
 1. 启动服务端：`cd cyf/project/server && python server.py`
@@ -241,6 +310,9 @@ bash start-dev.sh
 - **关键运行说明**：服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件
 - 前端通过 `http://localhost:39997` 访问后端API
 - CSS样式都通过tailwind4进行管理
+- 前端实现了截图上传功能，支持处理屏幕截图
+- 新增对话标题自动生成功能，提升用户体验
+- 用户可在用户设置界面配置界面主题和个性化偏好
 
 ## 关键运行说明
 - 服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件
@@ -268,3 +340,5 @@ bash start-dev.sh
 - 使用 `word-break: break-word` 和 `overflow-wrap: break-word` 确保长内容能正确换行
 - Element Plus 组件在移动端需要特殊的间距和尺寸调整
 - 在Vue组件中使用 `:deep()` 选择器可以穿透作用域样式修改第三方组件样式
+- 移动端优化图片和文件上传体验，提供清晰的进度反馈
+- 为移动端适配聊天输入框和按钮的触摸区域大小

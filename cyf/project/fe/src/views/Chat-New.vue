@@ -364,7 +364,6 @@ const loadDialogHistory = async () => {
       ElMessage.info('暂无历史对话')
     }
   } catch (error: any) {
-    console.error(t('chat.loadHistoryError'), error)
     ElMessage.error(t('chat.loadHistoryFailed'))
   } finally {
     formData.loadingHistory = false
@@ -420,26 +419,21 @@ const themeManager = {
     console.log('autoTheme:', autoTheme, 'currentManualTheme:', currentManualTheme, 'isCurrentlyManual:', isCurrentlyManual);
 
     if (isCurrentlyManual) {
-      console.log('用户手动选择了主题');
       // 检查用户当前的手动选择是否与自动模式一致
       if (currentManualTheme === autoTheme) {
         // 如果用户当前的选择与自动模式一致，可以自动切换回自动模式
         // 这样可以让系统恢复到自动管理状态
-        console.log('恢复到自动模式');
         themeManager.markManualSelection(false);
         // 注意：这里不改变实际的 theme，只是更新管理模式
       } else {
         // 用户选择与自动模式不一致，继续保持手动模式
-        console.log('保持手动模式');
         return; // 退出函数，不执行自动切换逻辑
       }
     }
 
     // 只有在自动模式下才执行自动切换逻辑
     if (!themeManager.hasUserManuallySet()) {
-      console.log('自动切换主题');
       if (autoTheme !== formData.isDarkTheme) {
-        console.log('切换主题');
         formData.isDarkTheme = autoTheme;
         themeManager.applyTheme(formData.isDarkTheme);
       }

@@ -161,7 +161,11 @@ const messages = {
       passwordUpdateNotice: '密码更新成功，请使用新密码重新登录。',
       modelLoading: '请稍等，答案马上就到',
       modelSelection: '模型选择',
-      roleEnhancement: '角色增强'
+      roleEnhancement: '角色增强',
+      configImportExport: '配置导入导出',
+      exportConfig: '导出配置',
+      importConfig: '导入配置',
+      importExportHint: '导出当前浏览器配置，或导入他人分享的配置'
     },
     login: {
       title: '智能对话系统',
@@ -342,7 +346,11 @@ const messages = {
       passwordUpdateNotice: 'Password updated successfully, please log in again with your new password.',
       modelLoading: 'Here comes the answer...',
       modelSelection: 'Model Selection',
-      roleEnhancement: 'Role Enhancement'
+      roleEnhancement: 'Role Enhancement',
+      configImportExport: 'Config Import/Export',
+      exportConfig: 'Export Config',
+      importConfig: 'Import Config',
+      importExportHint: 'Export current browser config, or import shared config from others'
     },
     login: {
       title: 'Smart Conversation System',

@@ -659,76 +659,148 @@ const exportConversationScreenshot = async () => {
 
 // 解析包含数学公式的Markdown内容
 const renderMarkdownWithMath = (content: string) => {
-  // 保存代码块内容，防止其中的数学公式被错误处理
-  const codeBlockPlaceholders: string[] = [];
-  const inlineCodePlaceholders: string[] = [];
-
-  // 提取并替换代码块（```code```）
-  let processedContent = content.replace(/```[\s\S]*?```/g, (match) => {
-    codeBlockPlaceholders.push(match);
-    return `__CODE_BLOCK_PLACEHOLDER_${codeBlockPlaceholders.length - 1}__`;
-  });
-
-  // 提取并替换行内代码（`code`）
-  processedContent = processedContent.replace(/`[^`]*`/g, (match) => {
-    inlineCodePlaceholders.push(match);
-    return `__INLINE_CODE_PLACEHOLDER_${inlineCodePlaceholders.length - 1}__`;
-  });
-
-  // 首先处理显示数学公式 $$...$$（只在非代码块内容中处理）
-  let resultContent = processedContent.replace(/\$\$(.*?)\$\$/gs, (_, math) => {
-    return mathRenderer.displayMath(math.trim());
-  });
-
-  // 然后处理内联数学公式 $...$（只在非代码块内容中处理）
-  resultContent = resultContent.replace(/\$([^\$]+)\$/g, (_, math) => {
-    // 确保 $ 不是紧跟在字母或数字后面的（避免将价格等误认为数学公式）
-    // 检查匹配项之前是否有字母或数字，或者检查是否为常见价格格式
-    const prevChar = content[content.indexOf(_)- 1];
-    const pricePattern = /^\$\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
-
-    if (_.startsWith('\\$') || (prevChar && /\w/.test(prevChar)) || pricePattern.test(_ + ' ')) {
-      return _; // 如果是类似 $50 的格式或前面紧接字母/数字，不处理
-    }
-    return mathRenderer.inlineMath(math.trim());
-  });
-
-  // 将代码块内容还原回去
-  for (let i = 0; i < codeBlockPlaceholders.length; i++) {
-    resultContent = resultContent.replace(
-      `__CODE_BLOCK_PLACEHOLDER_${i}__`,
-      codeBlockPlaceholders[i]
-    );
-  }
-
-  // 将行内代码内容还原回去
-  for (let i = 0; i < inlineCodePlaceholders.length; i++) {
-    resultContent = resultContent.replace(
-      `__INLINE_CODE_PLACEHOLDER_${i}__`,
-      inlineCodePlaceholders[i]
-    );
-  }
-
-  // 解析 Markdown
+  // 首先解析 Markdown，这样代码块会被正确识别和处理
   let result: string;
   try {
     // marked.parse 应该是同步函数，但如果它返回Promise，我们处理这种情况
-    const parsedContent = marked.parse(resultContent || '');
+    const parsedContent = marked.parse(content || '');
     if (parsedContent instanceof Promise) {
       // 如果是Promise，我们无法在此同步上下文中处理它，使用原始内容
-      result = resultContent || '';
+      result = content || '';
     } else {
       result = typeof parsedContent === 'string' ? parsedContent.trim() : String(parsedContent);
     }
   } catch (error) {
     console.error('Markdown parsing error:', error);
-    result = resultContent || '';
+    result = content || '';
+  }
+
+  // 保存代码块内容（pre标签和code标签），防止其中的数学公式被错误处理
+  const preBlockPlaceholders: string[] = [];
+  const codeBlockPlaceholders: string[] = [];
+
+  // 提取并替换 <pre><code> 块
+  let processedResult = result.replace(/<pre><code[^>]*>[\s\S]*?<\/code><\/pre>/g, (match) => {
+    preBlockPlaceholders.push(match);
+    return `__PRE_BLOCK_PLACEHOLDER_${preBlockPlaceholders.length - 1}__`;
+  });
+
+  // 提取并替换 <code> 块（行内代码）
+  processedResult = processedResult.replace(/<code[^>]*>[\s\S]*?<\/code>/g, (match) => {
+    codeBlockPlaceholders.push(match);
+    return `__INLINE_CODE_PLACEHOLDER_${codeBlockPlaceholders.length - 1}__`;
+  });
+
+  // 首先处理显示数学公式 $$...$$，支持跨多行的公式
+  // 先将内容按HTML标签分割，但只匹配真正的HTML标签
+  let resultContent = processedResult;
+
+  // 匹配HTML标签的正则表达式：只匹配由字母数字和连字符组成的标签名
+  // 这样可以避免将 x < y 或 y > x 误匹配为HTML标签
+  const htmlTagRegex = /<\/?([a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g;
+
+  // 使用正则表达式找到所有HTML标签的位置
+  const parts: { content: string, isHtml: boolean }[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = htmlTagRegex.exec(resultContent)) !== null) {
+    // 添加标签前的文本（非HTML部分）
+    if (match.index > lastIndex) {
+      parts.push({
+        content: resultContent.substring(lastIndex, match.index),
+        isHtml: false
+      });
+    }
+
+    // 添加HTML标签
+    parts.push({
+      content: match[0],
+      isHtml: true
+    });
+
+    lastIndex = htmlTagRegex.lastIndex;
+  }
+
+  // 添加最后剩余的文本
+  if (lastIndex < resultContent.length) {
+    parts.push({
+      content: resultContent.substring(lastIndex),
+      isHtml: false
+    });
+  }
+
+  // 对每个非HTML部分处理数学公式
+  let finalContent = '';
+  for (const part of parts) {
+    if (part.isHtml) {
+      // HTML标签部分直接添加
+      finalContent += part.content;
+    } else {
+      // 非HTML部分处理数学公式
+      let modifiedPart = part.content;
+
+      // 在处理数学公式前，先将HTML实体临时解码，让KaTeX能正确识别
+      // 注意：我们只解码数学相关的实体，其他实体保持不变
+      const decodeMathEntities = (text: string) => {
+        return text
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&') // 同时处理 & 符号
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+      };
+
+      // 解码数学相关的HTML实体，便于KaTeX识别
+      const decodedText = decodeMathEntities(modifiedPart);
+
+      // 处理显示数学公式 $$...$$
+      let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
+        // 去除首尾空白但保留内部格式
+        const trimmedMath = math.trim();
+        return mathRenderer.displayMath(trimmedMath);
+      });
+
+      // 处理内联数学公式 $...$
+      processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
+        // 避免对已经渲染的数学公式再次处理
+        if (math.includes('katex') || math.includes('class="katex')) {
+          return `$${math}$`; // 返回原始内容
+        }
+        // 检查是否是价格格式，例如 $50、$100 等
+        const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
+        if (pricePattern.test(math)) {
+          return `$${math}$`; // 价格格式，不处理为数学公式
+        }
+        return mathRenderer.inlineMath(math.trim());
+      });
+
+      finalContent += processedText;
+    }
+  }
+
+  resultContent = finalContent;
+
+  // 将 <pre><code> 块内容还原回去
+  for (let i = 0; i < preBlockPlaceholders.length; i++) {
+    resultContent = resultContent.replace(
+      `__PRE_BLOCK_PLACEHOLDER_${i}__`,
+      preBlockPlaceholders[i]
+    );
+  }
+
+  // 将 <code> 块内容还原回去
+  for (let i = 0; i < codeBlockPlaceholders.length; i++) {
+    resultContent = resultContent.replace(
+      `__INLINE_CODE_PLACEHOLDER_${i}__`,
+      codeBlockPlaceholders[i]
+    );
   }
 
   // 为Markdown生成的图片添加CSS类
-  result = result.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
+  resultContent = resultContent.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
 
-  return result;
+  return resultContent;
 }
 
 const renderMarkdown = (content: string) => {

@@ -157,6 +157,7 @@
 
 /* 内容区域样式 */
 .sidebar-content {
+  margin-top: 20px;
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden; /* 防止出现横向滚动条 */
@@ -259,5 +260,31 @@ body.dark-theme .context-hint {
 .dialog-history-section {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: 90%;
+}
+
+/* 导入导出配置部分样式 */
+.import-export-section {
+  margin-top: 20px;
+}
+
+.import-export-wrapper {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.import-export-wrapper .el-button {
+  flex: 1;
+}
+
+.import-export-hint {
+  font-size: 0.6em;
+  color: #6b7280;
+  margin-top: 10px;
+}
+
+body.dark-theme .import-export-hint {
+  color: #9a9a9a;
 }

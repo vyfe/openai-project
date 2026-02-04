@@ -1091,11 +1091,8 @@
 }
 
 /* 上下文设置部分样式 */
-.context-settings-section {
-  margin-top: 30px;
-}
 
-.context-settings-section h3 {
+.settings-section h3 {
   color: #5a7bc1;
   font-size: 16px;
   margin-bottom: 16px;
@@ -1487,11 +1484,6 @@ body.dark-theme .enhanced-role-interface :deep(.el-tabs__item.is-active) {
   border-top: 1px solid rgba(144, 180, 248, 0.3);
 }
 
-.send-preference-section h3 {
-  color: #5a7bc1;
-  font-size: 16px;
-  margin-bottom: 12px;
-}
 
 .send-preference-wrapper {
   padding: 12px 0;
@@ -2431,10 +2423,6 @@ body.dark-theme .model-selector h3 {
   color: #e0e0e0;
 }
 
-body.dark-theme .dialog-history-section {
-  border-top: 1px solid rgba(85, 85, 85, 0.3);
-}
-
 body.dark-theme .dialog-history-section h3 {
   color: #e0e0e0;
 }
@@ -2474,10 +2462,6 @@ body.dark-theme .no-dialogs {
 
 body.dark-theme .delete-btn {
   color: #e0e0e0;
-}
-
-body.dark-theme .context-settings-section {
-  border-top: 1px solid rgba(85, 85, 85, 0.3);
 }
 
 body.dark-theme .context-label {
@@ -2533,10 +2517,6 @@ body.dark-theme .role-tab.enhanced-role {
 
 body.dark-theme .send-preference-section {
   border-top: 1px solid rgba(85, 85, 85, 0.3);
-}
-
-body.dark-theme .send-preference-section h3 {
-  color: #e0e0e0;
 }
 
 body.dark-theme .send-preference-hint {

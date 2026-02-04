@@ -37,7 +37,7 @@
           </el-select>
         </div>
       </div>
-      <div class="dialog-history-section" v-show="activeSection === 'model'">
+      <div class="context-settings-section" v-show="activeSection === 'model'">
         <!-- 显示选中模型的描述 -->
         <div v-if="formData.currentModelDesc" class="model-description">
           <div class="model-desc-text">
@@ -107,7 +107,7 @@
       </div>
 
       <!-- 上下文设置部分 -->
-      <div class="context-settings-section" v-show="activeSection === 'settings'">
+      <div class="context-settings-section settings-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.contextSettings') }}</h3>
         <div class="context-slider-wrapper">
           <div class="context-label">
@@ -222,7 +222,7 @@
       </div>
 
       <!-- 发送键偏好设置 -->
-      <div class="send-preference-section" v-show="activeSection === 'settings'">
+      <div class="send-preference-section settings-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.sendSetting') }}</h3>
         <div class="send-preference-wrapper">
           <el-switch v-model="formData.sendPreference" :active-value="'enter'" :inactive-value="'ctrl_enter'"
@@ -230,6 +230,22 @@
           <div class="send-preference-hint">
             {{ t('chat.currentSendMethod') }}{{ formData.sendPreference === 'enter' ? t('chat.currentSendMethodEnter') : t('chat.currentSendMethodCtrlEnter') }}
           </div>
+        </div>
+      </div>
+
+      <!-- 配置导入导出 -->
+      <div class="import-export-section settings-section" v-show="activeSection === 'settings'">
+        <h3>{{ t('chat.configImportExport') }}</h3>
+        <div class="import-export-wrapper">
+          <el-button type="primary" size="small" @click="exportConfig">
+            {{ t('chat.exportConfig') }}
+          </el-button>
+          <el-button type="success" size="small" @click="showImportDialog">
+            {{ t('chat.importConfig') }}
+          </el-button>
+        </div>
+        <div class="import-export-hint">
+          {{ t('chat.importExportHint') }}
         </div>
       </div>
     </div>
@@ -418,6 +434,112 @@ const renameRole = (roleId: string) => {
       }
       saveCustomRoles() // 保存自定义角色
     }
+  }
+}
+
+// 导出配置函数
+const exportConfig = () => {
+  try {
+    // 获取所有localStorage项
+    const localStorageData: Record<string, string> = {}
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key) {
+        localStorageData[key] = localStorage.getItem(key) || ''
+      }
+    }
+
+    // 将数据转换为JSON字符串并进行Base64编码
+    const jsonString = JSON.stringify(localStorageData)
+    const base64String = btoa(encodeURIComponent(jsonString))
+
+    // 复制到剪贴板
+    navigator.clipboard.writeText(base64String).then(() => {
+      ElMessage.success('配置已导出并复制到剪贴板！')
+    }).catch(err => {
+      console.error('复制到剪贴板失败:', err)
+      // 如果复制失败，显示弹窗让用户手动复制
+      ElMessageBox.alert(
+        `<div style="word-break: break-all; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px;">
+          ${base64String}
+        </div>`,
+        '配置导出成功',
+        {
+          confirmButtonText: '确定',
+          dangerouslyUseHTMLString: true,
+          customClass: 'copy-config-dialog'
+        }
+      )
+    })
+  } catch (error) {
+    console.error('导出配置失败:', error)
+    ElMessage.error('导出配置失败')
+  }
+}
+
+// 显示导入配置对话框
+const showImportDialog = () => {
+  ElMessageBox.prompt('请输入导出的配置字符串（Base64编码）', '导入配置', {
+    confirmButtonText: '导入',
+    cancelButtonText: '取消',
+    inputType: 'textarea',
+    inputPlaceholder: '在此粘贴配置字符串...',
+    inputValidator: (value) => {
+      if (!value) return false
+      try {
+        // 尝试解码Base64并解析JSON
+        const decoded = decodeURIComponent(atob(value))
+        JSON.parse(decoded)
+        return true
+      } catch (e) {
+        return '配置字符串格式不正确，请检查是否为有效的Base64编码'
+      }
+    },
+    inputErrorMessage: '配置字符串格式不正确'
+  }).then(({ value }) => {
+    importConfig(value)
+  }).catch(() => {
+    // 用户取消导入
+  })
+}
+
+// 导入配置函数
+const importConfig = (base64String: string) => {
+  try {
+    // 解码Base64字符串
+    const decoded = decodeURIComponent(atob(base64String))
+    const localStorageData = JSON.parse(decoded)
+
+    // 验证数据格式
+    if (typeof localStorageData !== 'object' || localStorageData === null) {
+      throw new Error('配置数据格式不正确')
+    }
+
+    // 清空现有localStorage
+    localStorage.clear()
+
+    // 恢复所有数据
+    Object.keys(localStorageData).forEach(key => {
+      localStorage.setItem(key, localStorageData[key])
+    })
+
+    // 重新加载页面以应用新配置
+    ElMessageBox.confirm(
+      '配置导入成功！是否立即刷新页面以应用新配置？',
+      '导入成功',
+      {
+        confirmButtonText: '立即刷新',
+        cancelButtonText: '稍后手动刷新',
+        type: 'success'
+      }
+    ).then(() => {
+      window.location.reload()
+    }).catch(() => {
+      ElMessage.info('配置已保存，可在稍后手动刷新页面应用')
+    })
+  } catch (error) {
+    console.error('导入配置失败:', error)
+    ElMessage.error('导入配置失败，请检查配置字符串是否有效')
   }
 }
 
