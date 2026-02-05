@@ -380,7 +380,7 @@ const loadDialogContent = async (dialogId: number) => {
         }
       }
 
-      ElMessage.success('对话内容已加载')
+      // ElMessage.success('对话内容已加载')
     }
   } catch (error: any) {
     console.error('加载对话内容错误:', error)

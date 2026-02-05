@@ -146,7 +146,7 @@
   .sidebar-nav-btn {
     padding: 6px 8px;
     font-size: 10px;
-    flex-direction: row; /* 移动端标签在图标右侧 */
+    flex-direction: column; /* 移动端标签在图标右侧 */
     gap: 6px;
   }
 

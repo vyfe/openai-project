@@ -1549,7 +1549,7 @@ body.dark-theme .enhanced-role-interface :deep(.el-tabs__item.is-active) {
   box-sizing: border-box !important;
   width: 100% !important;
   min-height: 100vh !important;
-  font-family: var(--el-font-family, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif) !important;
+  font-family: var(--el-font-family, system-ui, -apple-system, "Noto Sans SC", BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif) !important;
   font-size: var(--el-font-size-base, 14px) !important;
   line-height: var(--el-line-height-base, 1.5) !important;
   color: var(--el-text-color-primary, #303133) !important;
@@ -2173,10 +2173,9 @@ body.dark-theme .messages-container-temp {
   margin-left: 10px;
   background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
   border: none;
-  color: white;
 }
 
-.usage-btn:hover {
+.tech-button:hover {
   background: linear-gradient(135deg, #ffcc00 0%, #ff8c00 100%);
   color: white;
 }
@@ -2184,6 +2183,7 @@ body.dark-theme .messages-container-temp {
 .usage-content {
   min-width: 280px;
 }
+
 
 .loading {
   display: flex;

@@ -5,7 +5,7 @@
       <div class="header-left-flex">
         <div class="header-title-section">
           <el-button
-            class="sidebar-toggle-btn"
+            class="sidebar-toggle-btn tech-button"
             :icon="formData.sidebarCollapsed ? Expand : Fold"
             circle size="small"
             @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
@@ -24,7 +24,7 @@
           >
             <template #reference>
               <el-button
-                class="usage-btn"
+                class="usage-btn tech-button"
                 :icon="Coin"
                 size="small"
                 @click="fetchUsage"
@@ -62,7 +62,7 @@
             :icon="Document"
             size="small"
             @click="showLatexHelp = true"
-            class="latex-help-btn"
+            class="latex-help-btn tech-button"
           >
             {{ formData.isMobile ? '' : t('chat.latexHelp') }}
           </el-button>
@@ -72,7 +72,7 @@
             :icon="Bell"
             size="small"
             @click="showNotificationPanel = true"
-            class="notification-btn"
+            class="notification-btn tech-button"
           >
             {{ formData.isMobile ? '' : t('chat.notifications') }}
           </el-button>
@@ -83,7 +83,7 @@
         <!-- 语言切换按钮 -->
         <el-button
           @click="toggleLanguage"
-          class="logout-btn"
+          class="logout-btn tech-button"
           :class="{'rounded-full': true}"
           size="small"
           :icon="SwitchFilled"
@@ -91,13 +91,13 @@
           {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
         </el-button>
 
-        <el-button @click="toggleTheme" class="theme-toggle-btn" :icon="formData.isDarkTheme ? Sunny : Moon">
+        <el-button @click="toggleTheme" class="theme-toggle-btn tech-button" :icon="formData.isDarkTheme ? Sunny : Moon">
           {{ formData.isMobile ? '' : (formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')) }}
         </el-button>
 
         <!-- 用户菜单 -->
         <el-dropdown class="user-menu">
-          <el-button class="user-btn" type="default">
+          <el-button class="user-btn tech-button" type="default">
             <span class="user-name">{{ authStore.user }}</span>
             <el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </el-button>
@@ -602,9 +602,269 @@ onUnmounted(() => {
 </script>
 
 <style>
+/* 导入科技感字体 */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 @import '@/styles/chat.css';
 
-/* 语言切换按钮样式 */
+
+/* 科技感动画关键帧 */
+@keyframes techGlow {
+  0% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5),
+                inset 0 0 5px rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8),
+                inset 0 0 10px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5),
+                inset 0 0 5px rgba(59, 130, 246, 0.1);
+  }
+}
+
+@keyframes techPulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes techBorder {
+  0% {
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.8);
+  }
+  100% {
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes techRipple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+@keyframes techScan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes techFlicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 左上角标题样式优化 */
+.header-title-section h2 {
+  font-family: "Noto Sans SC", sans-serif;
+  font-weight: 600;
+  font-size: 24px;
+  background: linear-gradient(135deg, #f63be7 0%, #1d4ed8 50% , #5c79f6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+  letter-spacing: 1px;
+  position: relative;
+}
+
+.header-title-section h2::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, rgba(59, 130, 246, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%);
+  filter: blur(15px);
+  z-index: -1;
+  animation: techGlow 3s ease-in-out infinite;
+}
+
+/* 科技感按钮基础样式 */
+.tech-button {
+  position: relative;
+  overflow: hidden;
+  font-family: "Noto Sans SC", sans-serif;
+  font-weight: bold;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+/* 扫描光线效果 */
+.tech-button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 246, 0.6), transparent);
+  transition: left 0.6s;
+  pointer-events: none;
+}
+
+.tech-button:hover::after {
+  left: 100%;
+}
+
+/* 波纹效果容器 */
+.tech-button {
+  overflow: hidden;
+}
+
+/* 科技感边框动画 */
+.tech-button::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6);
+  border-radius: inherit;
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+}
+
+.tech-button:hover::before {
+  opacity: 1;
+  animation: techBorder 2s linear infinite;
+}
+
+.tech-button:hover {
+  animation: techPulse 0.6s ease-in-out;
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+  transform: translateY(-2px);
+}
+
+.tech-button:active {
+  transform: translateY(0);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+/* 点击波纹效果 */
+.tech-button.ripple-effect::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  transform: scale(0);
+  animation: techRipple 0.6s ease-out;
+  pointer-events: none;
+}
+
+/* 科技感按钮基础样式 - 保持原始背景色 */
+.tech-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+}
+
+/* 扫描光线效果 */
+.tech-button::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 246, 0.4), transparent);
+  transition: left 0.6s;
+  pointer-events: none;
+}
+
+.tech-button:hover::after {
+  left: 100%;
+}
+
+/* 科技感边框动画 */
+.tech-button::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6);
+  border-radius: inherit;
+  opacity: 0;
+  z-index: -1;
+  transition: opacity 0.3s ease;
+}
+
+.tech-button:hover::before {
+  opacity: 1;
+  animation: techBorder 2s linear infinite;
+}
+
+.tech-button:hover {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.tech-button:active {
+  transform: translateY(0);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+/* 侧边栏切换按钮 */
+.sidebar-toggle-btn {
+  animation: techBorder 4s ease-in-out infinite;
+  border-radius: 50% !important;
+}
+
+/* 用量查询按钮 */
+.usage-btn {
+  /* 保持原始背景色 */
+}
+
+/* LaTeX帮助按钮 */
+.latex-help-btn {
+  /* 保持原始背景色 */
+}
+
+/* 通知按钮 */
+.notification-btn {
+  /* 保持原始背景色 */
+}
+
+/* 语言切换按钮 */
 .language-toggle-btn {
   width: 36px;
   height: 36px;
@@ -616,6 +876,103 @@ onUnmounted(() => {
   margin-right: 10px;
   border-radius: 50% !important;
   padding: 0;
+}
+
+/* 主题切换按钮 */
+.theme-toggle-btn {
+  /* 保持原始背景色 */
+}
+
+/* 用户菜单按钮 */
+.user-btn {
+  padding: 8px 12px;
+  border-radius: 20px;
+  background-color: var(--el-button-bg-color, #f0f0f0);
+  border: 1px solid var(--el-border-color, #dcdfe6);
+}
+
+.user-name {
+  margin-right: 6px;
+  font-weight: 500;
+  font-family: 'Exo 2', sans-serif;
+}
+
+/* 按钮图标动画 */
+.tech-button .el-icon {
+  transition: all 0.3s ease;
+}
+
+.tech-button:hover .el-icon {
+  transform: scale(1.2) rotate(5deg);
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
+}
+
+/* 用户菜单下拉动画 */
+.el-dropdown-menu {
+  animation: techFadeIn 0.3s ease-out;
+}
+
+@keyframes techFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.el-dropdown-item {
+  transition: all 0.2s ease;
+}
+
+.el-dropdown-item:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  transform: translateX(5px);
+}
+
+/* 暗色主题下的效果 - 简洁风格 */
+.dark-theme .tech-button:hover {
+  border-color: rgba(147, 197, 253, 0.6);
+  box-shadow: 0 2px 8px rgba(147, 197, 253, 0.2);
+}
+
+.dark-theme .header-title-section h2 {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .header-title-section h2 {
+    font-size: 20px;
+  }
+  
+  .tech-button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .language-toggle-btn {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+  }
+}
+
+/* 为移动端调整样式 */
+@media (max-width: 768px) {
+  .user-menu {
+    margin-left: 5px;
+  }
+
+  .user-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 
 /* 用户菜单样式 */

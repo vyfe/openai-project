@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n'
 const messages = {
   zh: {
     chat: {
-      title: '智能聊天',
+      title: '慧聊',
       model: '模型',
       history: '对话历史',
       settings: '设置',
@@ -168,13 +168,13 @@ const messages = {
       importExportHint: '导出当前浏览器配置，或导入他人分享的配置'
     },
     login: {
-      title: '智能对话系统',
+      title: '慧聊 - 智能对话',
       subtitle: '登录您的账户',
       usernamePlaceholder: '请输入用户名',
       passwordPlaceholder: '请输入密码',
       submitButton: '登录',
       viewNotifications: '查看通知',
-      description: '体验智能对话，让AI为您服务',
+      description: '有慧聊，才会聊',
       githubLink: '开源项目 GitHub',
       contactInfo: 'vx:pata_data_studio',
       failedMessage: '登录失败，请检查用户名和密码',
