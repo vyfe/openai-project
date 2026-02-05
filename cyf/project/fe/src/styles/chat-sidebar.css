@@ -72,7 +72,7 @@
   transform: translateX(-100%);
 }
 
-/* 侧边栏导航按钮 */
+/* 侧边栏导航按钮容器 */
 .sidebar-nav {
   display: flex;
   gap: 4px;
@@ -81,8 +81,11 @@
   background: #f3f4f6;
   border-radius: 8px;
   flex-shrink: 0; /* 导航栏不压缩 */
+  position: relative;
+  overflow: hidden;
 }
 
+/* 侧边栏导航按钮 */
 .sidebar-nav-btn {
   flex: 1;
   display: flex;
@@ -95,9 +98,27 @@
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: transparent;
   color: #6b7280;
+  position: relative;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* 为导航按钮添加底部指示条 */
+.sidebar-nav-btn::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 2px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  z-index: -1;
 }
 
 /* 桌面端：标签在图标下方 */
@@ -108,14 +129,25 @@
   }
 }
 
+/* 悬停效果增强 */
 .sidebar-nav-btn:hover {
   background: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+  color: #3b82f6;
 }
 
 .sidebar-nav-btn.active {
   background: white;
   color: #3b82f6;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* 激活状态下显示底部指示条 */
+.sidebar-nav-btn.active::after {
+  width: 100%;
+  opacity: 1;
+  left: 0;
 }
 
 /* 暗色主题 */
@@ -129,11 +161,23 @@
 
 .dark-theme .sidebar-nav-btn:hover {
   background: rgba(55, 65, 81, 0.5);
+  transform: translateY(-1px);
 }
 
 .dark-theme .sidebar-nav-btn.active {
   background: #4b5563;
   color: #60a5fa;
+}
+
+/* 暗色主题下的底部指示条 */
+.dark-theme .sidebar-nav-btn::after {
+  background: linear-gradient(90deg, #60a5fa, #93c5fd);
+}
+
+.dark-theme .sidebar-nav-btn.active::after {
+  width: 100%;
+  opacity: 1;
+  left: 0;
 }
 
 /* 移动端适配 */
@@ -148,10 +192,15 @@
     font-size: 10px;
     flex-direction: column; /* 移动端标签在图标右侧 */
     gap: 6px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .sidebar-nav-btn span {
     display: inline; /* 移动端显示标签 */
+  }
+
+  .sidebar-nav-btn.active::after {
+    height: 2px; /* 移动端指示条稍微细一些 */
   }
 }
 

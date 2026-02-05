@@ -817,24 +817,21 @@ function getCurrentTime() {
 // 复制消息内容到剪贴板
 const copyMessageContent = async (content: string) => {
   try {
-    // 转换为带有结构的纯文本
-    const plainText = convertMarkdownToPlainText(content);
-    await navigator.clipboard.writeText(plainText);
+    // 直接复制原始内容，而不是转换后的HTML
+    await navigator.clipboard.writeText(content);
     ElMessage.success('内容已复制到剪贴板');
   } catch (err) {
     console.error('复制失败:', err);
     // 如果 navigator.clipboard 不可用，回退到老方法
     try {
       const textArea = document.createElement('textarea');
-      // 转换为带有结构的纯文本
-      const plainText = convertMarkdownToPlainText(content);
-      textArea.value = plainText;
+      textArea.value = content; // 直接使用原始内容
       document.body.appendChild(textArea);
       textArea.select();
       // 现代浏览器使用 Clipboard API，老浏览器使用 execCommand
       let successful = false;
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(plainText);
+        await navigator.clipboard.writeText(content); // 直接使用原始内容
         successful = true;
       } else {
         successful = document.execCommand('copy'); // 保留，但作为备用方案
