@@ -134,7 +134,7 @@
               </el-popconfirm>
             </div>
           </div>
-          <div class="message-text" v-html="renderMarkdown(getTextContent(message.content))"></div>
+          <div class="message-text" v-html="message.type === 'user' ? renderLatexOnly(getTextContent(message.content)) : renderMarkdown(getTextContent(message.content))"></div>
           <!-- TODO(human): 添加响应式表格和代码块的移动端优化，确保在小屏幕上能够良好显示 -->
           <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
           <!-- 图片预览 - 支持从消息url字段和内容中提取，避免重复显示 -->
@@ -316,6 +316,7 @@ import 'highlight.js/styles/github-dark.css'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { marked } from 'marked'
+import { highlightCode } from '@/utils/highlight.js'
 
 // 定义 props 和 emits
 const props = defineProps<{
@@ -657,6 +658,98 @@ const exportConversationScreenshot = async () => {
   }
 }
 
+// 仅渲染LaTeX数学公式的函数
+const renderLatexOnly = (content: string) => {
+  if (!content) return '';
+
+  let resultContent = content;
+
+  // 处理显示数学公式 $$...$$
+  // 先将内容按HTML标签分割，但只匹配真正的HTML标签
+  const htmlTagRegex = /<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g;
+
+  // 使用正则表达式找到所有HTML标签的位置
+  const parts: { content: string, isHtml: boolean }[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = htmlTagRegex.exec(resultContent)) !== null) {
+    // 添加标签前的文本（非HTML部分）
+    if (match.index > lastIndex) {
+      parts.push({
+        content: resultContent.substring(lastIndex, match.index),
+        isHtml: false
+      });
+    }
+
+    // 添加HTML标签
+    parts.push({
+      content: match[0],
+      isHtml: true
+    });
+
+    lastIndex = htmlTagRegex.lastIndex;
+  }
+
+  // 添加最后剩余的文本
+  if (lastIndex < resultContent.length) {
+    parts.push({
+      content: resultContent.substring(lastIndex),
+      isHtml: false
+    });
+  }
+
+  // 对每个非HTML部分处理数学公式
+  let finalContent = '';
+  for (const part of parts) {
+    if (part.isHtml) {
+      // HTML标签部分直接添加
+      finalContent += part.content;
+    } else {
+      // 非HTML部分处理数学公式
+      let modifiedPart = part.content;
+
+      // 在处理数学公式前，先将HTML实体临时解码，让KaTeX能正确识别
+      const decodeMathEntities = (text: string) => {
+        return text
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&') // 同时处理 & 符号
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+      };
+
+      // 解码数学相关的HTML实体，便于KaTeX识别
+      const decodedText = decodeMathEntities(modifiedPart);
+
+      // 处理显示数学公式 $$...$$
+      let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
+        // 去除首尾空白但保留内部格式
+        const trimmedMath = math.trim();
+        return mathRenderer.displayMath(trimmedMath);
+      });
+
+      // 处理内联数学公式 $...$
+      processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
+        // 避免对已经渲染的数学公式再次处理
+        if (math.includes('katex') || math.includes('class="katex')) {
+          return `$${math}$`; // 返回原始内容
+        }
+        // 检查是否是价格格式，例如 $50、$100 等
+        const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
+        if (pricePattern.test(math)) {
+          return `$${math}$`; // 价格格式，不处理为数学公式
+        }
+        return mathRenderer.inlineMath(math.trim());
+      });
+
+      finalContent += processedText;
+    }
+  }
+
+  return finalContent;
+};
+
 // 解析包含数学公式的Markdown内容
 const renderMarkdownWithMath = (content: string) => {
   // 首先解析 Markdown，这样代码块会被正确识别和处理
@@ -797,8 +890,27 @@ const renderMarkdownWithMath = (content: string) => {
     );
   }
 
+  // 处理有序列表的start属性，确保连续编号能正确显示
+  // 使用正则表达式匹配 <ol start="n"> 或 <ol start=n> 标签并确保CSS支持该属性
+  resultContent = resultContent.replace(/<ol(\s+(?:[^>]*?\s+)?start\s*=\s*["']?(\d+)["']?(?:\s+[^>]*)?|\s+[^>]*?)>/gi, (match, attributes, startNum) => {
+    if (startNum) {
+      const num = parseInt(startNum);
+      // 修正开始数字（由于CSS counter的特性，我们需要减1来获得正确的起始值）
+      const cssCounterValue = num - 1;
+      // 在属性中加入CSS变量和class，保留其他所有属性
+      const cleanedAttributes = attributes.replace(/\s*start\s*=\s*["']?\d+["']?\s*/i, '').trim();
+      return `<ol${cleanedAttributes} start="${num}" style="--ol-start: ${cssCounterValue};" class="ordered-list-with-start">`;
+    } else {
+      // 如果没有start属性，保留原始标签
+      return match;
+    }
+  });
+
   // 为Markdown生成的图片添加CSS类
   resultContent = resultContent.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
+
+  // 应用语法高亮
+  resultContent = highlightCode(resultContent);
 
   return resultContent;
 }

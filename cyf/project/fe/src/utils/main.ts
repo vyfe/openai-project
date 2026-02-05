@@ -9,7 +9,7 @@ export interface FormData {
     isMobile: boolean;
     streamEnabled: boolean;
     systemPrompt: string;
-    sendPreference: string;
+    sendPreference: 'enter' | 'ctrl_enter' | undefined;
     dialogTitle: string;
     dialogHistory: any[];
     loadingHistory: boolean;

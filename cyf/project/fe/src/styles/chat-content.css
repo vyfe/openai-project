@@ -150,9 +150,11 @@
   width: 100%;
   border-collapse: collapse;
   margin: 5px 0; /* 从10px减少到5px */
-  overflow: auto;
-  display: block;
+  overflow: auto; /* 允许滚动 */
+  display: block; /* 使其可以滚动 */
   border: 1px solid #ddd; /* 添加表格外边框 */
+  max-width: 100%; /* 确保不超过容器宽度 */
+  position: relative; /* 为内部滚动条定位 */
 }
 
 .message-text :deep(th),
@@ -168,19 +170,128 @@
   padding: 4px; /* 从8px减少到4px */
 }
 
-.message-text pre {
-  background-color: #2d3748;
-  color: #e2e8f0;
+.message-text :deep(pre) {
   padding: 8px; /* 从12px减少到8px */
   border-radius: 6px;
   overflow-x: auto;
   margin: 5px 0; /* 从10px减少到5px */
   font-size: 13px; /* 从14px减少到13px */
   line-height: 1.4; /* 从1.5减少到1.4 */
+  max-width: 100%; /* 确保不超过容器宽度 */
+  display: block; /* 确保是块级元素 */
+  white-space: pre; /* 保持空格和换行 */
+  word-wrap: normal; /* 禁止单词换行 */
+  word-break: normal; /* 保持正常单词断行 */
+  position: relative; /* 为内部滚动条定位 */
 }
 
-.message-text code {
+.message-text :deep(code) {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  white-space: pre-wrap; /* 保持空格，但允许换行 */
+  word-wrap: break-word; /* 在长单词或URL地址内部进行换行 */
+  word-break: break-word; /* 在字符间断行 */
+  max-width: 100%;
+  overflow-x: auto; /* 当内容超出时显示滚动条 */
+  display: inline;
+  padding: 2px 4px; /* 添加内边距以改善视觉效果 */
+  background-color: rgba(245, 245, 245, 0.5); /* 为行内代码添加背景色 */
+  border-radius: 4px; /* 圆角效果 */
+}
+
+.message-text :deep(.hljs) {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  color: #333;
+  background: #f8f8f8;
+  border-radius: 6px;
+  font-size: 13px; /* 与现有代码字体大小一致 */
+  line-height: 1.4; /* 与现有代码行高一致 */
+  margin: 5px 0; /* 与现有代码块边距一致 */
+}
+
+.message-text :deep(.hljs-comment),
+.message-text :deep(.hljs-quote) {
+  color: #998;
+  font-style: italic;
+}
+
+.message-text :deep(.hljs-keyword),
+.message-text :deep(.hljs-selector-tag),
+.message-text :deep(.hljs-subst) {
+  color: #333;
+  font-weight: bold;
+}
+
+.message-text :deep(.hljs-number),
+.message-text :deep(.hljs-literal),
+.message-text :deep(.hljs-variable),
+.message-text :deep(.hljs-template-variable),
+.message-text :deep(.hljs-tag .hljs-attr) {
+  color: #008080;
+}
+
+.message-text :deep(.hljs-string),
+.message-text :deep(.hljs-doctag) {
+  color: #d6336c;
+}
+
+.message-text :deep(.hljs-title),
+.message-text :deep(.hljs-section),
+.message-text :deep(.hljs-selector-id) {
+  color: #900;
+  font-weight: bold;
+}
+
+.message-text :deep(.hljs-subst) {
+  font-weight: normal;
+}
+
+.message-text :deep(.hljs-type),
+.message-text :deep(.hljs-class .hljs-title) {
+  color: #458;
+  font-weight: bold;
+}
+
+.message-text :deep(.hljs-tag),
+.message-text :deep(.hljs-name),
+.message-text :deep(.hljs-attribute) {
+  color: #000080;
+  font-weight: normal;
+}
+
+.message-text :deep(.hljs-regexp),
+.message-text :deep(.hljs-link) {
+  color: #009926;
+}
+
+.message-text :deep(.hljs-symbol),
+.message-text :deep(.hljs-bullet) {
+  color: #990073;
+}
+
+.message-text :deep(.hljs-built_in),
+.message-text :deep(.hljs-builtin-name) {
+  color: #0086b3;
+}
+
+.message-text :deep(.hljs-meta),
+.message-text :deep(.hljs-deletion) {
+  color: #999;
+  background: #fdd;
+}
+
+.message-text :deep(.hljs-addition) {
+  color: #fff;
+  background: #a6e22e;
+}
+
+.message-text :deep(.hljs-emphasis) {
+  font-style: italic;
+}
+
+.message-text :deep(.hljs-strong) {
+  font-weight: bold;
 }
 
 .message-text blockquote {
@@ -208,6 +319,7 @@
 
 .message-text :deep(ul) {
   list-style: disc; /* 确保无序列表使用圆点 */
+  line-height: 1.6;
 }
 
 .message-text :deep(ul) > li,
@@ -215,6 +327,7 @@
   margin-bottom: 3px; /* 从5px减少到3px */
   line-height: 1.6;
   list-style-position: outside; /* 确保列表标记在内容外部 */
+  white-space: normal;
 }
 
 .message-text :deep(ol) > li {
@@ -227,7 +340,7 @@
 .message-text :deep(ul ol),
 .message-text :deep(ol ul),
 .message-text :deep(ol ol) {
-  margin: 0;
+  margin: 5px 0;
   padding-left: 15px; /* 从20px减少到15px */
 }
 
@@ -409,12 +522,24 @@
 /* 修复列表显示问题，特别是有序列表的数字序号显示 */
 .message-text :deep(ol) {
   counter-reset: item; /* 重置计数器 */
+  list-style: none; /* 隐藏默认数字 */
+  padding-left: 20px;
+  margin: 5px 0;
+}
+
+.message-text :deep(ol.ordered-list-with-start) {
+  counter-reset: item var(--ol-start, 0); /* 从指定值开始计数 */
 }
 
 .message-text :deep(ol) li {
   counter-increment: item; /* 递增计数器 */
   list-style-type: none; /* 隐藏默认数字 */
   position: relative; /* 为自定义序号定位 */
+  margin-bottom: 3px;
+}
+
+.message-text :deep(ol.ordered-list-with-start) li {
+  counter-increment: item; /* 按顺序递增 */
 }
 
 .message-text :deep(ol) li:before {
@@ -423,6 +548,10 @@
   left: -20px; /* 定位到适当位置 */
   color: inherit; /* 使用继承的颜色 */
   font-weight: normal; /* 确保序号字体正常 */
+}
+
+.message-text :deep(ol.ordered-list-with-start) li:before {
+  content: counter(item) ". "; /* 使用计数器值作为序号，从设定的起始值开始 */
 }
 
 .copyright-watermark-inline,
@@ -622,10 +751,13 @@
   .message-text pre {
     font-size: 11px; /* 从12px减少到11px */
     padding: 6px; /* 从8px减少到6px */
+    overflow-x: auto; /* 确保代码块在移动设备上可滚动 */
+    white-space: pre; /* 保持预格式化文本的换行 */
   }
 
   .message-text code {
     font-size: 11px; /* 从12px减少到11px */
+    overflow-x: auto; /* 确保行内代码在移动设备上可滚动 */
   }
 
   .message-text table,
@@ -709,6 +841,99 @@ body.dark-theme .message-text :deep(h6) {
   color: #6c737a;
 }
 
+/* 暗色主题下代码高亮样式 */
+body.dark-theme .message-text :deep(.hljs) {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  color: #e6e1dc;
+  background: #2d2d2d;
+}
+
+body.dark-theme .message-text :deep(.hljs-comment),
+body.dark-theme .message-text :deep(.hljs-quote) {
+  color: #999;
+  font-style: italic;
+}
+
+body.dark-theme .message-text :deep(.hljs-keyword),
+body.dark-theme .message-text :deep(.hljs-selector-tag),
+body.dark-theme .message-text :deep(.hljs-subst) {
+  color: #cc99cc;
+  font-weight: bold;
+}
+
+body.dark-theme .message-text :deep(.hljs-number),
+body.dark-theme .message-text :deep(.hljs-literal),
+body.dark-theme .message-text :deep(.hljs-variable),
+body.dark-theme .message-text :deep(.hljs-template-variable),
+body.dark-theme .message-text :deep(.hljs-tag .hljs-attr) {
+  color: #f99157;
+}
+
+body.dark-theme .message-text :deep(.hljs-string),
+body.dark-theme .message-text :deep(.hljs-doctag) {
+  color: #8cc265;
+}
+
+body.dark-theme .message-text :deep(.hljs-title),
+body.dark-theme .message-text :deep(.hljs-section),
+body.dark-theme .message-text :deep(.hljs-selector-id) {
+  color: #ffcc66;
+  font-weight: bold;
+}
+
+body.dark-theme .message-text :deep(.hljs-subst) {
+  font-weight: normal;
+}
+
+body.dark-theme .message-text :deep(.hljs-type),
+body.dark-theme .message-text :deep(.hljs-class .hljs-title) {
+  color: #ee6699;
+  font-weight: bold;
+}
+
+body.dark-theme .message-text :deep(.hljs-tag),
+body.dark-theme .message-text :deep(.hljs-name),
+body.dark-theme .message-text :deep(.hljs-attribute) {
+  color: #66cccc;
+  font-weight: normal;
+}
+
+body.dark-theme .message-text :deep(.hljs-regexp),
+body.dark-theme .message-text :deep(.hljs-link) {
+  color: #75a5d0;
+}
+
+body.dark-theme .message-text :deep(.hljs-symbol),
+body.dark-theme .message-text :deep(.hljs-bullet) {
+  color: #f99157;
+}
+
+body.dark-theme .message-text :deep(.hljs-built_in),
+body.dark-theme .message-text :deep(.hljs-builtin-name) {
+  color: #6699cc;
+}
+
+body.dark-theme .message-text :deep(.hljs-meta),
+body.dark-theme .message-text :deep(.hljs-deletion) {
+  color: #e6e1dc;
+  background: #642c2c;
+}
+
+body.dark-theme .message-text :deep(.hljs-addition) {
+  color: #2d2d2d;
+  background: #a6e22e;
+}
+
+body.dark-theme .message-text :deep(.hljs-emphasis) {
+  font-style: italic;
+}
+
+body.dark-theme .message-text :deep(.hljs-strong) {
+  font-weight: bold;
+}
+
 body.dark-theme .conversation-title,
 body.dark-theme .copyright-watermark-inline,
 body.dark-theme .github-link-inline {
@@ -725,4 +950,46 @@ body.dark-theme .toggle-input-btn {
 
 body.dark-theme .toggle-input-btn:hover {
   background: rgba(100, 180, 100, 1);
+}
+
+/* 自定义滚动条样式，仅在内容超长时显示，使其与内部组件样式对齐 */
+.message-text pre::-webkit-scrollbar,
+.message-text code::-webkit-scrollbar,
+.message-text table::-webkit-scrollbar {
+  width: 8px; /* 滚动条宽度 */
+  height: 8px; /* 水平滚动条高度 */
+}
+
+.message-text pre::-webkit-scrollbar-track,
+.message-text code::-webkit-scrollbar-track,
+.message-text table::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1); /* 滚动条轨道背景 */
+  border-radius: 4px;
+}
+
+.message-text pre::-webkit-scrollbar-thumb,
+.message-text code::-webkit-scrollbar-thumb,
+.message-text table::-webkit-scrollbar-thumb {
+  background-color: rgba(150, 150, 150, 0.5); /* 滚动条滑块颜色 */
+  border-radius: 4px;
+  transition: background-color 0.3s;
+}
+
+.message-text pre::-webkit-scrollbar-thumb:hover,
+.message-text code::-webkit-scrollbar-thumb:hover,
+.message-text table::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 100, 100, 0.7); /* 滚动条滑块悬停颜色 */
+}
+
+/* 暗色主题滚动条样式 */
+body.dark-theme .message-text pre::-webkit-scrollbar-thumb,
+body.dark-theme .message-text code::-webkit-scrollbar-thumb,
+body.dark-theme .message-text table::-webkit-scrollbar-thumb {
+  background-color: rgba(100, 100, 100, 0.5); /* 暗色主题下的滚动条滑块颜色 */
+}
+
+body.dark-theme .message-text pre::-webkit-scrollbar-thumb:hover,
+body.dark-theme .message-text code::-webkit-scrollbar-thumb:hover,
+body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(150, 150, 150, 0.7); /* 暗色主题下的滚动条滑块悬停颜色 */
 }

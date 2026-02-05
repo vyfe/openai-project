@@ -169,13 +169,13 @@
       <p>{{ t('chat.useDollarSign') }} <code>$...$</code> {{ t('chat.surroundFormula') }} <code>$E=mc^2$</code></p>
 
       <h4>{{ t('chat.standaloneFormula') }}</h4>
-      <p>{{ t('chat.useDollarSign') }} <code>$$...$$</code> {{ t('chat.surroundFormula') }} <code>$$y = X\\beta + \\epsilon$$</code></p>
+      <p>{{ t('chat.useDollarSign') }} <code>$$...$$</code> {{ t('chat.surroundFormula') }} <code>$$y = X\beta + \epsilon$$</code></p>
 
       <h4>{{ t('chat.examples') }}</h4>
       <div class="example-formulas">
-        <p><strong>{{ t('chat.quadraticFormula') }}：</strong> $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$</p>
-        <p><strong>{{ t('chat.eulerIdentity') }} ：</strong> $$e^{i\\pi} + 1 = 0$$</p>
-        <p><strong>{{ t('chat.matrix') }}：</strong> $A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}$</p>
+        <p><strong>{{ t('chat.quadraticFormula') }}：</strong> $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$</p>
+        <p><strong>{{ t('chat.eulerIdentity') }} ：</strong> $$e^{i\pi} + 1 = 0$$</p>
+        <p><strong>{{ t('chat.matrix') }}：</strong> $A = \begin{bmatrix} a & b \\ c & d \end{bmatrix}$</p>
       </div>
 
       <p>{{ t('chat.formulaWillRender') }}</p>
@@ -847,21 +847,6 @@ onUnmounted(() => {
 .sidebar-toggle-btn {
   animation: techBorder 4s ease-in-out infinite;
   border-radius: 50% !important;
-}
-
-/* 用量查询按钮 */
-.usage-btn {
-  /* 保持原始背景色 */
-}
-
-/* LaTeX帮助按钮 */
-.latex-help-btn {
-  /* 保持原始背景色 */
-}
-
-/* 通知按钮 */
-.notification-btn {
-  /* 保持原始背景色 */
 }
 
 /* 语言切换按钮 */

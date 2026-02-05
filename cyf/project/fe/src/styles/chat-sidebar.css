@@ -337,3 +337,161 @@ body.dark-theme .context-hint {
 body.dark-theme .import-export-hint {
   color: #9a9a9a;
 }
+
+/* 模型选择器样式 */
+.model-selector {
+  margin-bottom: 15px;
+}
+
+.model-selector h3 {
+  font-size: 16px;
+  margin: 0 0 10px 0;
+  color: #374151;
+  font-weight: 600;
+}
+
+.dark-theme .model-selector h3 {
+  color: #e5e7eb;
+}
+
+.model-selector .el-select,
+.provider-selector .el-select {
+  width: 100%;
+  margin-bottom: 15px;
+}
+
+/* 放大下拉选择器 */
+.model-selector :deep(.el-select .el-input__wrapper),
+.provider-selector :deep(.el-select .el-input__wrapper),
+.model-selector :deep(.el-cascader .el-input__wrapper) {
+  padding: 10px 15px;
+  font-size: 16px;
+  height: 48px !important;
+  min-height: 48px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) inset;
+}
+
+/* 针对暗色主题的下拉框样式 */
+.dark-theme .model-selector :deep(.el-select .el-input__wrapper),
+.dark-theme .provider-selector :deep(.el-select .el-input__wrapper),
+.dark-theme .model-selector :deep(.el-cascader .el-input__wrapper) {
+  background-color: #374151;
+  border-color: #4b5563;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) inset;
+}
+
+/* 增大选项的高度以方便点击 */
+.model-selector :deep(.el-select .el-select-dropdown__item),
+.provider-selector :deep(.el-select .el-select-dropdown__item),
+.model-selector :deep(.el-cascader .el-cascader__dropdown .el-select-dropdown__item) {
+  height: 44px;
+  line-height: 44px;
+  font-size: 15px;
+  padding: 0 16px;
+  transition: all 0.2s ease;
+}
+
+/* 为下拉选项添加悬停效果 */
+.model-selector :deep(.el-select .el-select-dropdown__item:hover),
+.provider-selector :deep(.el-select .el-select-dropdown__item:hover),
+.model-selector :deep(.el-cascader .el-cascader__dropdown .el-select-dropdown__item:hover) {
+  background-color: #f0f9ff;
+  transform: translateX(4px);
+}
+
+/* 暗色主题下的悬停效果 */
+.dark-theme .model-selector :deep(.el-select .el-select-dropdown__item:hover),
+.dark-theme .provider-selector :deep(.el-select .el-select-dropdown__item:hover),
+.dark-theme .model-selector :deep(.el-cascader .el-cascader__dropdown .el-select-dropdown__item:hover) {
+  background-color: #374151;
+}
+
+/* 选中项的样式 */
+.model-selector :deep(.el-select .el-select-dropdown__item.selected),
+.provider-selector :deep(.el-select .el-select-dropdown__item.selected),
+.model-selector :deep(.el-cascader .el-cascader__dropdown .el-select-dropdown__item.selected) {
+  background-color: #dbeafe;
+  font-weight: 500;
+}
+
+.dark-theme .model-selector :deep(.el-select .el-select-dropdown__item.selected),
+.dark-theme .provider-selector :deep(.el-select .el-select-dropdown__item.selected),
+.dark-theme .model-selector :deep(.el-cascader .el-cascader__dropdown .el-select-dropdown__item.selected) {
+  background-color: #1e3a8a;
+}
+
+/* 增大选择框内的标签大小 */
+.model-selector :deep(.el-select .el-select__tags .el-select__tags-text),
+.provider-selector :deep(.el-select .el-select__tags .el-select__tags-text) {
+  font-size: 15px;
+}
+
+/* 模型描述区域样式 */
+.model-description {
+  margin-top: 15px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border-radius: 10px;
+  border-left: 4px solid #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+  border: 1px solid #dbeafe;
+  transition: all 0.3s ease;
+  animation: slideInDown 0.3s ease-out;
+}
+
+.dark-theme .model-description {
+  background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  border-left-color: #60a5fa;
+  border-color: #3730a3;
+}
+
+.model-desc-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.model-desc-text .el-icon {
+  font-size: 18px;
+  margin-top: 2px;
+  color: #3b82f6;
+  flex-shrink: 0; /* 图标不压缩 */
+}
+
+.dark-theme .model-desc-text .el-icon {
+  color: #60a5fa;
+}
+
+.model-desc-text span {
+  font-size: 14px;
+  color: #1e3a8a;
+  line-height: 1.6;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  flex: 1;
+}
+
+.dark-theme .model-desc-text span {
+  color: #bfdbfe;
+}
+
+/* 添加滑入动画 */
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 对话历史部分样式 */
+.dialog-history-section {
+  padding: 10px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

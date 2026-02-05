@@ -2142,7 +2142,6 @@ body.dark-theme .user-info {
 }
 
 body.dark-theme .usage-btn {
-  background: linear-gradient(135deg, #b8860b 0%, #daa520 100%);
   border: none;
   color: white;
 }
