@@ -1,0 +1,211 @@
+/* 优化的字体大小控制样式，包含滑块动画效果 */
+
+.font-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.font-size-label {
+  white-space: nowrap;
+  font-size: 14px;
+  color: #606266;
+  transition: color 0.3s ease;
+}
+
+body.dark-theme .font-size-label {
+  color: #c6cbd3;
+}
+
+/* 自定义字体大小选择控件的整体容器 */
+.font-size-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: #f4f4f5;
+  border-radius: 25px;
+  padding: 2px;
+  border: 1px solid #dcdfe6;
+  transition: all 0.3s ease;
+  margin-left: 20px;
+}
+
+.font-size-selector:hover {
+  border-color: #c0c4cc;
+  box-shadow: 0 0 0 2px rgba(144, 147, 164, 0.1);
+}
+
+/* 滑块背景 */
+.font-size-slider-bg {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  height: calc(100% - 4px);
+  width: calc(33.333% - 2px);
+  background: #409eff;
+  border-radius: 25px;
+  transition: all 0.4s cubic-bezier(0.65, 0, 0.35, 1);
+  z-index: 0;
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.2);
+}
+
+/* 字体大小选项按钮组 */
+.font-size-options {
+  position: relative;
+  display: flex;
+  gap: 0;
+  z-index: 1;
+}
+
+.font-size-option {
+  position: relative;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #909399;
+  cursor: pointer;
+  border-radius: 25px;
+  transition: all 0.3s ease;
+  z-index: 2;
+  min-width: 40px;
+  text-align: center;
+}
+
+.font-size-option:hover {
+  color: #606266;
+  background-color: transparent;
+}
+
+.font-size-option.active {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* 根据选中的选项移动滑块 */
+.font-size-controls[data-value="small"] .font-size-slider-bg {
+  transform: translateX(0);
+}
+
+.font-size-controls[data-value="medium"] .font-size-slider-bg {
+  transform: translateX(100%);
+}
+
+.font-size-controls[data-value="large"] .font-size-slider-bg {
+  transform: translateX(200%);
+}
+
+/* 优化按钮动画效果 */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.action-buttons .el-button {
+  transition: all 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.action-buttons .el-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.8s;
+  z-index: -1;
+}
+
+.action-buttons .el-button:hover::before {
+  left: 100%;
+}
+
+.action-buttons .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.action-buttons .el-button:active {
+  transform: translateY(0);
+}
+
+/* 针对不同类型的按钮设置不同动画效果 */
+.action-buttons .el-button--primary {
+  transition: all 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.action-buttons .el-button--warning {
+  transition: all 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* 按钮图标动画 */
+.action-buttons .el-button .el-icon {
+  transition: transform 0.3s ease;
+}
+
+.action-buttons .el-button:hover .el-icon {
+  transform: scale(1.1);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .font-size-controls {
+    flex-direction: row;
+    width: 100%;
+    justify-content: start;
+  }
+
+  .font-size-label {
+    font-size: 13px;
+  }
+
+  .font-size-option {
+    padding: 5px 10px;
+    min-width: 36px;
+    font-size: 12px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-buttons .el-button {
+    width: 100%;
+    margin: 2px 0;
+  }
+}
+
+/* 暗色主题支持 */
+body.dark-theme .font-size-selector {
+  background: #2d2d2d;
+  border-color: #555;
+}
+
+body.dark-theme .font-size-option {
+  color: #a0a0a0;
+}
+
+body.dark-theme .font-size-option:hover {
+  color: #c0c0c0;
+}
+
+body.dark-theme .font-size-option.active {
+  color: #ffffff;
+}
+
+body.dark-theme .font-size-slider-bg {
+  background: #337ecc;
+  box-shadow: 0 2px 4px rgba(51, 126, 204, 0.2);
+}
+
+body.dark-theme .font-size-selector:hover {
+  border-color: #787878;
+  box-shadow: 0 0 0 2px rgba(120, 120, 120, 0.1);
+}

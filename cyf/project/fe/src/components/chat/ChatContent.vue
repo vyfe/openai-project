@@ -15,15 +15,34 @@
         </div>
 
         <!-- 新增：字体大小控制 -->
-        <div class="font-size-controls">
+        <div class="font-size-controls" :data-value="fontSize">
           <span class="font-size-label">{{ t('chat.fontSizeLabel') }}:</span>
-          <el-tooltip :content="t('chat.fontSizeLabel')" placement="bottom">
-            <el-radio-group v-model="fontSize" size="small" @change="handleFontSizeChange">
-              <el-radio-button value="small">{{ t('chat.small') }}</el-radio-button>
-              <el-radio-button value="medium">{{ t('chat.medium') }}</el-radio-button>
-              <el-radio-button value="large">{{ t('chat.large') }}</el-radio-button>
-            </el-radio-group>
-          </el-tooltip>
+          <div class="font-size-selector">
+            <div class="font-size-slider-bg"></div>
+            <div class="font-size-options">
+              <div
+                class="font-size-option"
+                :class="{ active: fontSize === 'small' }"
+                @click="handleFontSizeChange('small')"
+              >
+                {{ t('chat.small') }}
+              </div>
+              <div
+                class="font-size-option"
+                :class="{ active: fontSize === 'medium' }"
+                @click="handleFontSizeChange('medium')"
+              >
+                {{ t('chat.medium') }}
+              </div>
+              <div
+                class="font-size-option"
+                :class="{ active: fontSize === 'large' }"
+                @click="handleFontSizeChange('large')"
+              >
+                {{ t('chat.large') }}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="action-buttons">
@@ -77,13 +96,34 @@
           </div>
 
           <!-- 字体大小控制 -->
-          <div class="font-size-controls">
+          <div class="font-size-controls" :data-value="fontSize">
             <span class="mobile-form-label">{{ t('chat.fontSizeLabel') }}</span>
-            <el-radio-group v-model="fontSize" size="default" @change="handleFontSizeChange">
-              <el-radio-button value="small">{{ t('chat.small') }}</el-radio-button>
-              <el-radio-button value="medium">{{ t('chat.medium') }}</el-radio-button>
-              <el-radio-button value="large">{{ t('chat.large') }}</el-radio-button>
-            </el-radio-group>
+            <div class="font-size-selector">
+              <div class="font-size-slider-bg"></div>
+              <div class="font-size-options">
+                <div
+                  class="font-size-option"
+                  :class="{ active: fontSize === 'small' }"
+                  @click="handleFontSizeChange('small')"
+                >
+                  {{ t('chat.small') }}
+                </div>
+                <div
+                  class="font-size-option"
+                  :class="{ active: fontSize === 'medium' }"
+                  @click="handleFontSizeChange('medium')"
+                >
+                  {{ t('chat.medium') }}
+                </div>
+                <div
+                  class="font-size-option"
+                  :class="{ active: fontSize === 'large' }"
+                  @click="handleFontSizeChange('large')"
+                >
+                  {{ t('chat.large') }}
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- 操作按钮 -->
@@ -106,7 +146,7 @@
         </div>
       </el-drawer>
     </div>
-    <div class="messages-container" :class="'font-' + fontSize" ref="messagesContainer">
+    <div class="messages-container" :class="'font-size-' + fontSize" ref="messagesContainer">
       <!-- 对话区域内嵌水印（用于长截图） -->
       <div class="message-author">
         <p v-if="formData.dialogTitle" class="conversation-title">{{ formData.dialogTitle }}</p>
@@ -503,6 +543,61 @@ const fontSize = computed({
   }
 })
 
+// 全局字体大小类切换函数
+const updateGlobalFontSizeClass = (size: string) => {
+  // 移除现有的字体大小类
+  document.body.classList.remove('font-size-small', 'font-size-medium', 'font-size-large')
+  // 添加当前选择的字体大小类
+  document.body.classList.add(`font-size-${size}`)
+}
+
+// 根据主题调整字体大小选择器样式
+const updateFontSizeSelectorTheme = () => {
+  const selector = document.querySelector('.font-size-selector');
+  if (selector) {
+    if (formData.isDarkTheme) {
+      selector.classList.add('dark-theme');
+      selector.classList.remove('light-theme');
+    } else {
+      selector.classList.add('light-theme');
+      selector.classList.remove('dark-theme');
+    }
+  }
+}
+
+// 监听主题变化并更新字体大小选择器样式
+const setupThemeWatcher = () => {
+  // 监听主题变化
+  watch(() => formData.isDarkTheme, (newVal) => {
+    if (newVal) {
+      document.body.classList.add('dark-theme')
+    } else {
+      document.body.classList.remove('dark-theme')
+    }
+    // 更新字体大小选择器的主题样式
+    updateFontSizeSelectorTheme()
+  }, { immediate: true })
+}
+
+// 初始化主题和字体大小设置
+const initializeSettings = () => {
+  // 从localStorage获取字体大小设置
+  const savedFontSize = localStorage.getItem('fontSize')
+  if (savedFontSize && ['small', 'medium', 'large'].includes(savedFontSize)) {
+    formData.fontSize = savedFontSize
+    updateGlobalFontSizeClass(savedFontSize)
+  }
+
+  // 从localStorage获取主题设置
+  const savedTheme = localStorage.getItem('isDarkTheme')
+  if (savedTheme !== null) {
+    formData.isDarkTheme = savedTheme === 'true'
+  }
+}
+
+// TODO(human): 添加一个函数来在页面加载时根据localStorage中的主题设置来初始化主题
+// 这样用户在刷新页面后仍能保持他们选择的主题和字体大小设置
+
 // 控制是否显示回到顶部按钮
 const showBackToTop = ref(false)
 
@@ -553,8 +648,19 @@ const updateDialogTitle = async () => {
 
 // 处理字体大小变化
 const handleFontSizeChange = (size: string) => {
-  // 可以在这里执行一些额外的逻辑，如果需要
-  fontSize.value = size
+  // 保存当前的字体大小到formData
+  if (formData) {
+    formData.fontSize = size
+  }
+
+  // 更新localStorage
+  localStorage.setItem('fontSize', size)
+
+  // 更新全局字体大小类
+  updateGlobalFontSizeClass(size)
+
+  // 更新字体大小选择器的主题样式
+  updateFontSizeSelectorTheme()
 }
 
 // 清空当前会话
@@ -587,6 +693,9 @@ const exportConversationScreenshot = async () => {
   }
 
   try {
+    // 检测是否为移动设备，如果是则应用更快的导出设置
+    const isMobileDevice = window.innerWidth < 768;
+
     // 动态导入html-to-image库
     const htmlToImageModule = await import('html-to-image');
     const { toJpeg } = htmlToImageModule;
@@ -594,6 +703,22 @@ const exportConversationScreenshot = async () => {
     if (!messagesContainer) {
       ElMessage.error('无法找到对话容器');
       return;
+    }
+
+    // 添加截图模式类，以应用备用字体样式
+    document.body.classList.add('screenshot-mode');
+
+    // 为了优化性能，在移动设备上先隐藏一些不必要的元素
+    let hiddenElements: HTMLElement[] = [];
+    if (isMobileDevice) {
+      // 隐藏一些在截图时不必要的元素，减少渲染负担
+      const elementsToHide = document.querySelectorAll('.message-actions, .typing, .streaming-indicator, .back-to-top-btn, .github-link-inline');
+      elementsToHide.forEach(el => {
+        if (el instanceof HTMLElement) {
+          el.style.visibility = 'hidden';
+          hiddenElements.push(el);
+        }
+      });
     }
 
     // 保存原始样式
@@ -609,26 +734,41 @@ const exportConversationScreenshot = async () => {
     messagesContainer.style.maxHeight = 'none';
     messagesContainer.style.height = 'auto';
 
-    // 确保容器有足够的空间展示所有内容
-    const originalPosition = messagesContainer.style.position;
     messagesContainer.style.position = 'relative';
 
-    // 等待一段时间确保内容完全渲染
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // 根据设备类型设置不同的等待时间，移动端使用较短的等待时间
+    const waitTime = isMobileDevice ? 200 : 500; // 移动端进一步减少等待时间以提高性能
+
+    // 等待内容渲染
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+
+    // 根据设备性能调整参数
+    const pixelRatio = 2.0;
+    const quality = 1.1;
+
+    // 显示导出提示
+    const loadingMessage = ElMessage({
+      message: isMobileDevice ? '正在导出截图，请稍候...' : '正在导出截图...',
+      type: 'info',
+      duration: 0 // 不自动关闭
+    });
 
     // 使用html-to-image直接生成图像，不需要克隆节点
     const dataUrl = await toJpeg(messagesContainer, {
       cacheBust: true, // 防止缓存问题
-      pixelRatio: 2.5, // 提高清晰度
+      pixelRatio: pixelRatio, // 根据设备调整清晰度
+      skipFonts: true, // 移动端跳过字体加载以提高性能
       style: {
         // 确保元素在截图中显示完整内容
         overflow: 'visible',
         maxHeight: 'none',
         height: 'auto',
         filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
+        // 临时覆盖字体以避免Google Fonts加载问题
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
       },
       backgroundColor: formData.isDarkTheme ? '#000000' : '#efefef',
-      quality: 0.95, // JPEG质量，范围0-1
+      quality: quality, // 根据设备调整质量
       // 排除不需要截图的元素
       filter: (node: Node) => {
         if (node instanceof HTMLElement) {
@@ -639,11 +779,22 @@ const exportConversationScreenshot = async () => {
       }
     });
 
+    // 关闭加载提示
+    loadingMessage.close();
+
+    // 恢复隐藏的元素（如果有的话）
+    hiddenElements.forEach(el => {
+      el.style.visibility = 'visible';
+    });
+
     // 恢复原始样式
     messagesContainer.style.overflow = originalStyles.overflow;
     messagesContainer.style.maxHeight = originalStyles.maxHeight;
     messagesContainer.style.height = originalStyles.height;
     messagesContainer.style.position = originalStyles.position;
+
+    // 移除截图模式类
+    document.body.classList.remove('screenshot-mode');
 
     // 创建下载链接
     const link = document.createElement('a');
@@ -654,6 +805,13 @@ const exportConversationScreenshot = async () => {
     ElMessage.success('对话截图已导出');
   } catch (error) {
     console.error('导出截图失败:', error);
+    // 关闭可能存在的加载提示
+    try {
+      // 即使出现错误也要确保移除截图模式类
+      document.body.classList.remove('screenshot-mode');
+    } catch(e) {
+      console.error('移除截图模式类时出错:', e);
+    }
     ElMessage.error('导出截图失败，请稍后重试');
   }
 }
@@ -961,101 +1119,6 @@ const copyMessageContent = async (content: string) => {
   }
 }
 
-// 将Markdown内容转换为纯文本格式，保留结构信息
-const convertMarkdownToPlainText = (content: string) => {
-  // 创建一个临时div来解析HTML
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = renderMarkdownWithMath(content);
-
-  // 递归处理DOM节点，保留适当的格式
-  const processNode = (node: Node): string => {
-    let result = '';
-
-    if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent || '';
-    }
-
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      const element = node as HTMLElement;
-      const tagName = element.tagName.toLowerCase();
-
-      // 根据标签类型添加适当的格式化
-      switch (tagName) {
-        case 'h1':
-        case 'h2':
-        case 'h3':
-        case 'h4':
-        case 'h5':
-        case 'h6':
-          // 标题添加对应的#号
-          result += '#'.repeat(parseInt(tagName.charAt(1))) + ' ';
-          break;
-        case 'li':
-          // 列表项前添加项目符号
-          result += '• ';
-          break;
-        case 'p':
-          // 段落之间添加换行
-          result += '\n';
-          break;
-        case 'br':
-          result += '\n';
-          break;
-        case 'strong':
-        case 'b':
-          // 粗体不添加标记，只保留内容
-          break;
-        case 'em':
-        case 'i':
-          // 斜体不添加标记，只保留内容
-          break;
-        case 'code':
-          // 代码块保留反引号
-          if (element.parentElement?.tagName.toLowerCase() !== 'pre') {
-            result += '`';
-          }
-          break;
-        case 'pre':
-          // 代码块前后添加三个反引号
-          result += '```\n';
-          break;
-      }
-
-      // 递归处理子节点
-      for (let i = 0; i < element.childNodes.length; i++) {
-        result += processNode(element.childNodes[i]);
-      }
-
-      // 添加闭合格式
-      switch (tagName) {
-        case 'pre':
-          result += '\n```';
-          break;
-        case 'code':
-          if (element.parentElement?.tagName.toLowerCase() !== 'pre') {
-            result += '`';
-          }
-          break;
-        case 'p':
-          result += '\n';
-          break;
-      }
-    }
-
-    return result;
-  };
-
-  // 处理整个div的内容
-  let plainText = '';
-  for (let i = 0; i < tempDiv.childNodes.length; i++) {
-    plainText += processNode(tempDiv.childNodes[i]);
-  }
-
-  // 清理多余的空白行
-  plainText = plainText.replace(/\n{3,}/g, '\n\n').trim();
-
-  return plainText;
-};
 
 // 删除指定的消息
 const deleteMessage = (index: number) => {
@@ -1729,13 +1792,6 @@ const scrollToBottom = (force = false) => {
   }
 }
 
-// 立即滚动到底部函数（用于强制滚动）
-const scrollToBottomImmediate = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-}
-
 // 监听滚动事件，但现在我们始终自动滚动到底部
 const handleScroll = () => {
   if (messagesContainer.value) {
@@ -1830,6 +1886,9 @@ onUnmounted(() => {
 
 // 在组件挂载时应用主题
 onMounted(() => {
+  // 初始化设置
+  initializeSettings()
+
   checkIsMobile()
 
   if (formData.isDarkTheme) {
@@ -1837,6 +1896,9 @@ onMounted(() => {
   } else {
     document.body.classList.remove('dark-theme')
   }
+
+  // 设置主题监听器
+  setupThemeWatcher()
 
   // 添加滚动事件监听器
   const container = messagesContainer.value
@@ -1952,4 +2014,6 @@ watch(() => formData.isDarkTheme, (newVal) => {
 
 <style scoped>
 @import '@/styles/chat-content.css';
+@import '@/styles/font-size-control.css';
+@import '@/styles/global-font-sizes.css';
 </style>

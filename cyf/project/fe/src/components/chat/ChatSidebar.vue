@@ -1,7 +1,17 @@
 <template>
   <!-- 侧边栏 -->
   <transition name="sidebar-slide">
-    <div v-show="!formData.sidebarCollapsed" class="chat-sidebar" :class="{ 'sidebar-mobile': formData.isMobile }">
+    <div
+      v-show="!formData.sidebarCollapsed"
+      :class="[
+        'chat-sidebar',
+        {
+          'sidebar-mobile': formData.isMobile,
+          'slide-in': !formData.sidebarCollapsed && formData.isMobile,
+          'slide-out': formData.sidebarCollapsed && formData.isMobile
+        }
+      ]"
+    >
       <el-button v-if="formData.isMobile" class="sidebar-close-btn" :icon="Close" circle @click="formData.sidebarCollapsed = true" />
       <!-- 侧边栏导航按钮 -->
       <div class="sidebar-nav">
@@ -1115,15 +1125,9 @@ onMounted(async () => {
     }
   }
 
-  // 注释掉从localStorage恢复对话标题的功能，实现每次刷新页面时标题栏都为空
-  // const savedDialogTitle = localStorage.getItem('dialogTitle')
-  // if (savedDialogTitle) {
-  //   formData.dialogTitle = savedDialogTitle
-  // }
-
   // 从localStorage恢复发送键偏好
   const savedSendPreference = localStorage.getItem('sendPreference')
-  if (savedSendPreference) {
+  if (savedSendPreference && (savedSendPreference === 'enter' || savedSendPreference === 'ctrl_enter')) {
     formData.sendPreference = savedSendPreference
   }
 

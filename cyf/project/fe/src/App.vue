@@ -29,17 +29,19 @@ onMounted(() => {
   background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
 }
 
-/* * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* 基础字体大小变量和Element Plus支持 */
+:root {
+  --message-font-size-small: 13px;
+  --message-font-size-medium: 16px;
+  --message-font-size-large: 20px;
 
-body {
-  margin: 0;
-  padding: 0;
-  height: 100vh;
-  overflow: hidden;
+  /* 为Element Plus组件添加字体大小支持 */
+  --el-font-size-base: var(--message-font-size-medium);
+  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
+  --el-font-size-medium: var(--message-font-size-medium);
+  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
 }
 
 /* 全局深色主题样式 */

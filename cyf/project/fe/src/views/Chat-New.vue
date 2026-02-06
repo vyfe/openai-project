@@ -7,7 +7,7 @@
           <el-button
             class="sidebar-toggle-btn tech-button"
             :icon="formData.sidebarCollapsed ? Expand : Fold"
-            circle size="small"
+            circle size="medium"
             @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
           />
           <h2>{{ t('chat.title') }}</h2>
@@ -85,7 +85,7 @@
           @click="toggleLanguage"
           class="logout-btn tech-button"
           :class="{'rounded-full': true}"
-          size="small"
+          size="medium"
           :icon="SwitchFilled"
         >
           {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
@@ -607,6 +607,20 @@ onUnmounted(() => {
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 @import '@/styles/chat.css';
 
+/* 为截图功能添加备用字体，避免Google Fonts加载问题 */
+.messages-container *,
+.message-text * {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* 仅在非截图模式下应用Google Fonts */
+body:not(.screenshot-mode) .header-title-section h2 {
+  font-family: "Noto Sans SC", sans-serif !important;
+}
+
+body:not(.screenshot-mode) .user-name {
+  font-family: 'Exo 2', sans-serif !important;
+}
 
 /* 科技感动画关键帧 */
 @keyframes techGlow {
@@ -712,7 +726,7 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   font-family: "Noto Sans SC", sans-serif;
-  font-weight: bold;
+  font-weight: 500;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);

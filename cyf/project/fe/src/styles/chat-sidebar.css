@@ -26,6 +26,18 @@
   margin-left: 0.5rem; /* 对应 Tailwind 的 ml-2 */
 }
 
+/* 桌面端侧边栏样式 */
+.chat-sidebar:not(.sidebar-mobile) {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 350px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-right: 1px solid rgba(144, 180, 248, 0.3);
+}
+
 /* 移动端侧边栏样式 */
 .chat-sidebar.sidebar-mobile {
   position: fixed;
@@ -35,41 +47,83 @@
   height: -webkit-fill-available; /* 支持老版本浏览器 */
   height: 100dvh; /* 使用动态视口高度 */
   width: 100%;
-  max-width: 100%;
+  max-width: 100% !important; /* 确保移动端最大宽度为100% */
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(10px);
   box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
   padding: 20px;
+  /* 移动端侧边栏使用滑动动画 */
+  transform: translateX(-200%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* 添加初始透明度变化增强动画效果 */
+  opacity: 0;
 }
 
-/* 暗色主题下的移动端侧边栏 */
-.dark-theme .chat-sidebar.sidebar-mobile {
-  background: rgba(34, 34, 34, 0.95);
-  backdrop-filter: blur(10px);
+body.dark-theme .chat-sidebar.sidebar-mobile {
+  background: rgba(69, 69, 69, 0.5);
 }
 
-/* 在侧边栏展开时的过渡效果 */
-.chat-sidebar {
-  transition: transform 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+/* 移动端侧边栏显示状态 */
+.chat-sidebar.sidebar-mobile.slide-in {
+  transform: translateX(0);
+  opacity: 1;
 }
 
-.sidebar-slide-enter-active,
-.sidebar-slide-leave-active {
-  transition: all 0.3s ease;
-}
-
-.sidebar-slide-enter-from {
+.chat-sidebar.sidebar-mobile.slide-out {
   transform: translateX(-100%);
+  opacity: 0;
 }
 
-.sidebar-slide-leave-to {
-  transform: translateX(-100%);
+/* 确保过渡动画的平滑性 */
+.chat-sidebar.sidebar-mobile:not(.slide-out) {
+  visibility: visible;
+}
+
+.chat-sidebar.sidebar-mobile.slide-out {
+  visibility: hidden;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s 0.3s;
+}
+
+.chat-sidebar.sidebar-mobile.sidebar-slide-enter-active,
+.chat-sidebar.sidebar-mobile.sidebar-slide-leave-active {
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-sidebar.sidebar-mobile.sidebar-slide-enter-from {
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 0;
+  opacity: 0;
+  width: 0;
+}
+
+/* 桌面端折叠/展开过渡效果 */
+@media (min-width: 769px) {
+  .chat-sidebar:not(.sidebar-mobile) {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-slide-enter-active,
+  .sidebar-slide-leave-active {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  .sidebar-slide-enter-from {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 0;
+    opacity: 0;
+    width: 0;
+  }
+
+  .sidebar-slide-leave-to {
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 0;
+    opacity: 0;
+    width: 0;
+  }
 }
 
 /* 侧边栏导航按钮容器 */
@@ -93,7 +147,7 @@
   justify-content: center;
   gap: 6px;
   padding: 8px 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   border: none;
   border-radius: 6px;

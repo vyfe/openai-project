@@ -113,8 +113,6 @@ const imageSizeOptions = [
   { value: '1024x1792', label: '1024x1792 (纵向)' },
   { value: '1792x1024', label: '1792x1024 (横向)' },
   { value: '512x512', label: '512x512 (小)' },
-  { value: '256x256', label: '256x256 (最小)' },
-  { value: '768x768', label: '768x768 (中)' },
   { value: '1280x1280', label: '1280x1280 (较大)' },
   { value: '1536x1536', label: '1536x1536 (大)' },
   { value: '2048x2048', label: '2048x2048 (2k超大)' },

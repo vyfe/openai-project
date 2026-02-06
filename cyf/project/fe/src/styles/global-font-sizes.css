@@ -1,0 +1,371 @@
+/* 消息容器字体大小样式 */
+
+
+/* 在消息容器上应用字体大小类 */
+.messages-container.font-size-small {
+  font-size: var(--message-font-size-small);
+  --el-font-size-base: var(--message-font-size-small);
+  --el-font-size-extra-small: calc(var(--message-font-size-small) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-small) * 0.875);
+  --el-font-size-medium: var(--message-font-size-small);
+  --el-font-size-large: calc(var(--message-font-size-small) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-small) * 1.5);
+}
+
+.messages-container.font-size-medium {
+  font-size: var(--message-font-size-medium);
+  font-weight: 500; /* 为中等字体添加轻微粗体效果 */
+  --el-font-size-base: var(--message-font-size-medium);
+  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
+  --el-font-size-medium: var(--message-font-size-medium);
+  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
+}
+
+.messages-container.font-size-large {
+  font-size: var(--message-font-size-large);
+  --el-font-size-base: var(--message-font-size-large);
+  --el-font-size-extra-small: calc(var(--message-font-size-large) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-large) * 0.875);
+  --el-font-size-medium: var(--message-font-size-large);
+  --el-font-size-large: calc(var(--message-font-size-large) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-large) * 1.5);
+}
+
+/* 为全局文档应用字体大小 */
+body.font-size-small {
+  --el-font-size-base: var(--message-font-size-small);
+  --el-font-size-extra-small: calc(var(--message-font-size-small) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-small) * 0.875);
+  --el-font-size-medium: var(--message-font-size-small);
+  --el-font-size-large: calc(var(--message-font-size-small) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-small) * 1.5);
+}
+
+body.font-size-medium {
+  --el-font-size-base: var(--message-font-size-medium);
+  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
+  --el-font-size-medium: var(--message-font-size-medium);
+  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
+}
+
+body.font-size-large {
+  --el-font-size-base: var(--message-font-size-large);
+  --el-font-size-extra-small: calc(var(--message-font-size-large) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-large) * 0.875);
+  --el-font-size-medium: var(--message-font-size-large);
+  --el-font-size-large: calc(var(--message-font-size-large) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-large) * 1.5);
+}
+
+/* 消息文本字体大小 */
+.messages-container :deep(.message-text) {
+  font-size: var(--message-font-size-medium);
+}
+
+.messages-container.font-size-small :deep(.message-text) {
+  font-size: var(--message-font-size-small);
+}
+
+.messages-container.font-size-medium :deep(.message-text) {
+  font-size: var(--message-font-size-medium);
+  font-weight: 500; /* 为中等消息文本添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) {
+  font-size: var(--message-font-size-large);
+}
+
+/* 消息头像字体大小 */
+.messages-container :deep(.message-avatar) {
+  font-size: calc(var(--message-font-size-medium) * 0.75);
+}
+
+.messages-container.font-size-small :deep(.message-avatar) {
+  font-size: calc(var(--message-font-size-small) * 0.75);
+}
+
+.messages-container.font-size-medium :deep(.message-avatar) {
+  font-size: calc(var(--message-font-size-medium) * 0.75);
+  font-weight: 500; /* 为中等头像文字添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-avatar) {
+  font-size: calc(var(--message-font-size-large) * 0.75);
+}
+
+/* 消息头部信息字体大小 */
+.messages-container :deep(.message-header) {
+  font-size: calc(var(--message-font-size-medium) * 0.9);
+}
+
+.messages-container.font-size-small :deep(.message-header) {
+  font-size: calc(var(--message-font-size-small) * 0.9);
+}
+
+.messages-container.font-size-medium :deep(.message-header) {
+  font-size: calc(var(--message-font-size-medium) * 0.9);
+  font-weight: 500; /* 为中等头部信息添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-header) {
+  font-size: calc(var(--message-font-size-large) * 0.9);
+}
+
+/* 时间戳字体大小 */
+.messages-container :deep(.message-time) {
+  font-size: calc(var(--message-font-size-medium) * 0.8);
+}
+
+.messages-container.font-size-small :deep(.message-time) {
+  font-size: calc(var(--message-font-size-small) * 0.8);
+}
+
+.messages-container.font-size-medium :deep(.message-time) {
+  font-size: calc(var(--message-font-size-medium) * 0.8);
+  font-weight: 500; /* 为中等时间戳添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-time) {
+  font-size: calc(var(--message-font-size-large) * 0.8);
+}
+
+/* 代码块字体大小 */
+.messages-container :deep(.message-text) :deep(code) {
+  font-size: calc(var(--message-font-size-medium) * 0.9);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(code) {
+  font-size: calc(var(--message-font-size-small) * 0.9);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(code) {
+  font-size: calc(var(--message-font-size-medium) * 0.9);
+  font-weight: 500; /* 为中等代码块添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(code) {
+  font-size: calc(var(--message-font-size-large) * 0.9);
+}
+
+/* 预格式化文本字体大小 */
+.messages-container :deep(.message-text) :deep(pre) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(pre) {
+  font-size: calc(var(--message-font-size-small) * 0.85);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(pre) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+  font-weight: 500; /* 为中等预格式化文本添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(pre) {
+  font-size: calc(var(--message-font-size-large) * 0.85);
+}
+
+/* 代码高亮字体大小 */
+.messages-container :deep(.message-text) :deep(.hljs) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(.hljs) {
+  font-size: calc(var(--message-font-size-small) * 0.85);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(.hljs) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+  font-weight: 500; /* 为中等代码高亮添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(.hljs) {
+  font-size: calc(var(--message-font-size-large) * 0.85);
+}
+
+/* 表格字体大小 */
+.messages-container :deep(.message-text) :deep(th),
+.messages-container :deep(.message-text) :deep(td) {
+  font-size: calc(var(--message-font-size-medium) * 0.8);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(th),
+.messages-container.font-size-small :deep(.message-text) :deep(td) {
+  font-size: calc(var(--message-font-size-small) * 0.8);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(th),
+.messages-container.font-size-medium :deep(.message-text) :deep(td) {
+  font-size: calc(var(--message-font-size-medium) * 0.8);
+  font-weight: 500; /* 为中等表格内容添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(th),
+.messages-container.font-size-large :deep(.message-text) :deep(td) {
+  font-size: calc(var(--message-font-size-large) * 0.8);
+}
+
+/* 标题字体大小 */
+.messages-container :deep(.message-text) :deep(h1) {
+  font-size: calc(var(--message-font-size-medium) * 2);
+}
+
+.messages-container :deep(.message-text) :deep(h2) {
+  font-size: calc(var(--message-font-size-medium) * 1.75);
+}
+
+.messages-container :deep(.message-text) :deep(h3) {
+  font-size: calc(var(--message-font-size-medium) * 1.5);
+}
+
+.messages-container :deep(.message-text) :deep(h4) {
+  font-size: calc(var(--message-font-size-medium) * 1.25);
+}
+
+.messages-container :deep(.message-text) :deep(h5) {
+  font-size: calc(var(--message-font-size-medium) * 1.1);
+}
+
+.messages-container :deep(.message-text) :deep(h6) {
+  font-size: var(--message-font-size-medium);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h1) {
+  font-size: calc(var(--message-font-size-small) * 2);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h2) {
+  font-size: calc(var(--message-font-size-small) * 1.75);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h3) {
+  font-size: calc(var(--message-font-size-small) * 1.5);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h4) {
+  font-size: calc(var(--message-font-size-small) * 1.25);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h5) {
+  font-size: calc(var(--message-font-size-small) * 1.1);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(h6) {
+  font-size: var(--message-font-size-small);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h1) {
+  font-size: calc(var(--message-font-size-medium) * 2);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h2) {
+  font-size: calc(var(--message-font-size-medium) * 1.75);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h3) {
+  font-size: calc(var(--message-font-size-medium) * 1.5);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h4) {
+  font-size: calc(var(--message-font-size-medium) * 1.25);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h5) {
+  font-size: calc(var(--message-font-size-medium) * 1.1);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(h6) {
+  font-size: var(--message-font-size-medium);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h1) {
+  font-size: calc(var(--message-font-size-large) * 2);
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h2) {
+  font-size: calc(var(--message-font-size-large) * 1.75);
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h3) {
+  font-size: calc(var(--message-font-size-large) * 1.5);
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h4) {
+  font-size: calc(var(--message-font-size-large) * 1.25);
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h5) {
+  font-size: calc(var(--message-font-size-large) * 1.1);
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(h6) {
+  font-size: var(--message-font-size-large);
+}
+
+/* 列表字体大小 */
+.messages-container :deep(.message-text) :deep(ul),
+.messages-container :deep(.message-text) :deep(ol) {
+  font-size: var(--message-font-size-medium);
+}
+
+.messages-container.font-size-small :deep(.message-text) :deep(ul),
+.messages-container.font-size-small :deep(.message-text) :deep(ol) {
+  font-size: var(--message-font-size-small);
+}
+
+.messages-container.font-size-medium :deep(.message-text) :deep(ul),
+.messages-container.font-size-medium :deep(.message-text) :deep(ol) {
+  font-size: var(--message-font-size-medium);
+  font-weight: 500; /* 为中等列表添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.message-text) :deep(ul),
+.messages-container.font-size-large :deep(.message-text) :deep(ol) {
+  font-size: var(--message-font-size-large);
+}
+
+/* 对话标题字体大小 */
+.messages-container :deep(.conversation-title) {
+  font-size: calc(var(--message-font-size-medium) * 1.5);
+}
+
+.messages-container.font-size-small :deep(.conversation-title) {
+  font-size: calc(var(--message-font-size-small) * 1.5);
+}
+
+.messages-container.font-size-medium :deep(.conversation-title) {
+  font-size: calc(var(--message-font-size-medium) * 1.5);
+  font-weight: 500; /* 为中等标题添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.conversation-title) {
+  font-size: calc(var(--message-font-size-large) * 1.5);
+}
+
+/* 输入占位符字体大小 */
+.messages-container :deep(.typing-placeholder) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+}
+
+.messages-container.font-size-small :deep(.typing-placeholder) {
+  font-size: calc(var(--message-font-size-small) * 0.85);
+}
+
+.messages-container.font-size-medium :deep(.typing-placeholder) {
+  font-size: calc(var(--message-font-size-medium) * 0.85);
+  font-weight: 500; /* 为中等占位符添加轻微粗体效果 */
+}
+
+.messages-container.font-size-large :deep(.typing-placeholder) {
+  font-size: calc(var(--message-font-size-large) * 0.85);
+}
