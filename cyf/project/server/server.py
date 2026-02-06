@@ -552,7 +552,7 @@ def get_models():
 
 # 检查文件扩展名是否允许
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' not in filename or filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 
@@ -626,7 +626,7 @@ def upload():
         return {"content": f':4567/download/{filename}'}, 200
     else:
         # 上传文件并返回url的接口
-        return {"msg": "文件格式问题"}, 200
+        return {"msg": "文件格式不支持，只支持pdf、通用图片等"}, 200
 
 def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
     """从对话中提取标题，优先使用第一条 user 消息"""

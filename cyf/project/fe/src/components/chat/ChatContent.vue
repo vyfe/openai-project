@@ -279,7 +279,7 @@
       </div>
 
       <!-- 回到顶部按钮 -->
-      <div v-if="showBackToTop" class="back-to-top-btn-normal" @click="scrollToTop">
+      <div v-if="showBackToTop && !formData.isMobile" class="back-to-top-btn-normal" @click="scrollToTop">
         <el-icon>
           <Top />
         </el-icon>
@@ -420,8 +420,9 @@ const loadDialogContent = async (dialogId: number) => {
           })
         }
       }
-
-      // ElMessage.success('对话内容已加载')
+      if (dialogId != formData.currentDialogId) {
+        ElMessage.success('对话内容已加载')
+      }
     }
   } catch (error: any) {
     console.error('加载对话内容错误:', error)
@@ -770,13 +771,19 @@ const exportConversationScreenshot = async () => {
       backgroundColor: formData.isDarkTheme ? '#000000' : '#efefef',
       quality: quality, // 根据设备调整质量
       // 排除不需要截图的元素
+      // 排除回到顶部按钮（以及按钮内部的子节点）
       filter: (node: Node) => {
-        if (node instanceof HTMLElement) {
-          // 不排除任何元素，因为我们希望截图完整对话
-          return true;
-        }
-        return true;
-      }
+        if (!(node instanceof HTMLElement)) return true;
+        return !node.closest('.back-to-top-btn-normal');
+      },
+    });
+
+    // 关闭加载提示
+    loadingMessage.close();
+
+    // 恢复隐藏的元素（如果有的话）
+    hiddenElements.forEach(el => {
+      el.style.visibility = 'visible';
     });
 
     // 关闭加载提示
