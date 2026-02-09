@@ -393,10 +393,8 @@ def check_test_user_limit(user: str) -> dict:
     return {"success": True,}
 
 
-def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
+def filter_models(models_data, exclude_keywords=None):
     """过滤模型列表"""
-    if include_prefixes is None:
-        include_prefixes = ['gpt', 'gemini']
     if exclude_keywords is None:
         exclude_keywords = ['instruct', 'realtime', 'audio']
 
@@ -404,8 +402,9 @@ def filter_models(models_data, include_prefixes=None, exclude_keywords=None):
     for model in models_data:
         model_id = model.get('id', '')
 
-        # 检查是否包含指定模型
-        has_include_prefix = any(prefix.lower() in model_id.lower() for prefix in include_prefixes)
+        # 检查是否包含指定模型（不再通过配置过滤）
+        # has_include_prefix = any(prefix.lower() in model_id.lower() for prefix in include_prefixes)
+        has_include_prefix = True
 
         # 检查是否包含排除关键词
         has_exclude_keyword = any(keyword.lower() in model_id.lower() for keyword in exclude_keywords)
@@ -441,15 +440,13 @@ def get_cached_models():
         client = random_client()
         models_response = client.models.list()
 
-        # 解析包含和排除规则
-        include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
+        # 解析排除规则
         exclude_keywords_str = conf.get('model_filter', 'exclude_keywords', fallback='instruct,realtime,audio')
 
-        include_prefixes = [prefix.strip() for prefix in include_prefixes_str.split(',')]
         exclude_keywords = [keyword.strip() for keyword in exclude_keywords_str.split(',')]
 
         # 过滤模型
-        filtered_models = filter_models([model.model_dump() for model in models_response.data], include_prefixes, exclude_keywords)
+        filtered_models = filter_models([model.model_dump() for model in models_response.data], exclude_keywords)
 
         # ========== 新增：集成 ModelMeta 元数据 ==========
         # 获取所有模型的元数据
@@ -474,6 +471,8 @@ def get_cached_models():
             model['model_desc'] = meta.get('model_desc', '') if meta else ''
             # 1-文本 2-图像
             model['model_type'] = meta.get('model_type', '') if meta else 1
+            # 模型分组
+            model['model_grp'] = meta.get('model_grp', '') if meta else ''
             enhanced_models.append(model)
         # ========== 新增结束 ==========
 
@@ -500,29 +499,34 @@ def get_grouped_models():
         models_response = get_cached_models()
 
         # 解析包含和排除规则
-        include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
-        exclude_keywords_str = conf.get('model_filter', 'exclude_keywords', fallback='instruct,realtime,audio')
+        # include_prefixes_str = conf.get('model_filter', 'include_prefixes', fallback='gpt,gemini')
+        # exclude_keywords_str = conf.get('model_filter', 'exclude_keywords', fallback='instruct,realtime,audio')
 
-        include_prefixes = [prefix.strip() for prefix in include_prefixes_str.split(',')]
-        exclude_keywords = [keyword.strip() for keyword in exclude_keywords_str.split(',')]
+        # include_prefixes = [prefix.strip() for prefix in include_prefixes_str.split(',')]
+        # exclude_keywords = [keyword.strip() for keyword in exclude_keywords_str.split(',')]
 
         # 按前缀对模型进行分组
         grouped_models = {}
+        # for prefix in include_prefixes:
+        #     if prefix.strip():  # 确保前缀非空
+        #         prefix_models = []
+        #         for model in models_response:
+        #             model_id = model['id'].lower()
+        #             if prefix.lower() in model_id:
+        #                 # 检查是否包含排除关键词
+        #                 has_exclude_keyword = any(keyword.lower() in model_id for keyword in exclude_keywords)
+        #                 if not has_exclude_keyword:
+        #                     prefix_models.append(model)
 
-        for prefix in include_prefixes:
-            if prefix.strip():  # 确保前缀非空
-                prefix_models = []
-                for model in models_response:
-                    model_id = model['id'].lower()
-                    if prefix.lower() in model_id:
-                        # 检查是否包含排除关键词
-                        has_exclude_keyword = any(keyword.lower() in model_id for keyword in exclude_keywords)
-                        if not has_exclude_keyword:
-                            prefix_models.append(model)
-
-                if prefix_models:  # 只有当该前缀有匹配的模型时才添加到结果中
-                    grouped_models[prefix] = prefix_models
-
+        #         if prefix_models:  # 只有当该前缀有匹配的模型时才添加到结果中
+        #             grouped_models[prefix] = prefix_models
+        other_models = []
+        for model in models_response:
+            if model['model_grp'] == '':
+                other_models.append(model)
+            else:
+                grouped_models.setdefault(model['model_grp'], []).append(model)
+        grouped_models['其他厂商'] = other_models
         return grouped_models
     except Exception as e:
         app.logger.error(f"获取分组模型列表失败: {str(e)}")
@@ -893,7 +897,7 @@ def dialog_pic(user, password):
                     n=1,
                     response_format="url",
                     size=size,
-                    timeout=120
+                    timeout=300
                 )
             else:
                 # 无文件，直接生成图片
@@ -903,7 +907,7 @@ def dialog_pic(user, password):
                     n=1,
                     response_format="url",
                     size=size,
-                    timeout=120
+                    timeout=300
                 )
         except Exception as api_e:
             return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200

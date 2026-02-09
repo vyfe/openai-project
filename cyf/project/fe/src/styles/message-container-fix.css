@@ -1,0 +1,106 @@
+/*
+  专门解决消息容器滚动问题的CSS
+  防止对话内容变长时外侧主界面的上下可滑动范围也随之增长
+*/
+
+/* 主容器应用约束布局 */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* 使用动态视口单位 */
+  min-height: 0;
+  overflow: hidden;
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* 聊天主要内容区域 */
+.chat-main {
+  display: flex;
+  flex: 1;
+  min-height: 0; /* 关键：确保flex项目不会溢出 */
+  overflow: hidden;
+  max-height: calc(100vh - 60px); /* 减去头部高度 */
+}
+
+/* 聊天内容容器 */
+.chat-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* 防止溢出 */
+  overflow: hidden;
+  max-height: 100%;
+}
+
+/* 消息列表容器 - 关键滚动区域 */
+.messages-container {
+  flex: 1;
+  min-height: 0; /* 关键：这是防止容器溢出的核心 */
+  overflow-y: auto;
+  overflow-x: hidden; /* 只允许垂直滚动 */
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 150px); /* 预留头部和输入框的空间 */
+  height: auto;
+  -webkit-overflow-scrolling: touch; /* 确保iOS上平滑滚动 */
+  overscroll-behavior: contain; /* 防止滚动链 */
+}
+
+/* 防止内容溢出的关键设置 */
+.messages-container > div {
+  flex-shrink: 0; /* 防止消息块收缩 */
+}
+
+/*
+  响应式设计：在小屏幕上进一步约束
+*/
+@media (max-width: 768px) {
+  .chat-container {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+
+  .chat-main {
+    max-height: calc(100vh - 70px); /* 调整移动端头部高度预留 */
+  }
+
+  .messages-container {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    max-height: calc(100vh - 180px); /* 调整移动端预留空间 */
+  }
+}
+
+/*
+  针对webkit浏览器的特殊处理
+  确保滚动行为正确
+*/
+.messages-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* 针对软键盘弹出时的调整 */
+@media screen and (max-height: 600px) {
+  .messages-container {
+    max-height: calc(100vh - 200px) !important; /* 增加软键盘弹出时的预留空间 */
+  }
+}

@@ -77,6 +77,12 @@
             <component :is="showMobileInput ? 'View' : 'ChatDotSquare'" />
           </el-icon>
         </div>
+        <el-button type="warning" size="default" @click="clearCurrentSession" class="back-to-top-btn new-session-btn">
+              <el-icon>
+                <CirclePlus />
+              </el-icon>
+              <!-- {{ t('chat.openAnotherSession') }} -->
+            </el-button>
         <el-button icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
       </div>
 
@@ -128,13 +134,6 @@
 
           <!-- 操作按钮 -->
           <div class="action-buttons">
-            <el-button type="warning" size="default" @click="clearCurrentSession" class="drawer-button">
-              <el-icon>
-                <CirclePlus />
-              </el-icon>
-              {{ t('chat.openAnotherSession') }}
-            </el-button>
-
             <!-- 导出对话截屏按钮 -->
             <el-button type="primary" size="default" @click="exportConversationScreenshot" class="drawer-button">
               <el-icon>
@@ -146,6 +145,7 @@
         </div>
       </el-drawer>
     </div>
+    <!-- 消息列表容器 - 关键滚动区域 -->
     <div class="messages-container" :class="'font-size-' + fontSize" ref="messagesContainer">
       <!-- 对话区域内嵌水印（用于长截图） -->
       <div class="message-author">
@@ -255,12 +255,12 @@
               {{ t('chat.continueGenerate') }}
             </el-button>
           </div>
-          <div v-if="message.file" class="message-file">
+          <!-- <div v-if="message.file" class="message-file">
             <el-icon>
               <Document />
             </el-icon>
             <span>{{ message.file.name }}</span>
-          </div>
+          </div> -->
         </div>
       </div>
 
@@ -420,9 +420,7 @@ const loadDialogContent = async (dialogId: number) => {
           })
         }
       }
-      if (dialogId != formData.currentDialogId) {
-        ElMessage.success('对话内容已加载')
-      }
+      ElMessage.success('对话内容已同步')
     }
   } catch (error: any) {
     console.error('加载对话内容错误:', error)
@@ -1791,11 +1789,9 @@ const toggleMobileInput = () => {
 // 智能滚动到底部函数
 const scrollToBottom = (force = false) => {
   if (messagesContainer.value) {
-    // 无论用户当前位置如何，都滚动到底部
-    messagesContainer.value.scrollTo({
-      top: messagesContainer.value.scrollHeight,
-      behavior: 'smooth'
-    });
+    // 使用最大可能的scrollTop值确保滚动到底部
+    const maxScrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight;
+    messagesContainer.value.scrollTop = maxScrollTop;
   }
 }
 
@@ -1806,6 +1802,15 @@ const handleScroll = () => {
 
     // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
     showBackToTop.value = scrollTop > clientHeight;
+
+    // 计算是否接近底部（误差范围内）
+    const threshold = 10; // 10px阈值
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < threshold;
+
+    // 更新父组件的滚动状态
+    if (formData) {
+      formData.isScrolledToBottom = isNearBottom;
+    }
   }
 }
 
@@ -1825,10 +1830,11 @@ const debouncedHandleScroll = debounce(handleScroll, 100);
 const scrollToBottomOnNewMessage = () => {
   // 无论用户当前在何处，只要有新消息就滚动到底部
   if (messagesContainer.value) {
-    // 短时间内立即滚动到底部，给用户更好的体验
-    setTimeout(() => {
-      messagesContainer.value!.scrollTop = messagesContainer.value!.scrollHeight;
-    }, 10); // 短延迟让DOM更新
+    // 确保DOM完全更新后再滚动
+    nextTick(() => {
+      const maxScrollTop = messagesContainer.value!.scrollHeight - messagesContainer.value!.clientHeight;
+      messagesContainer.value!.scrollTop = maxScrollTop;
+    });
   }
 }
 
@@ -1915,7 +1921,16 @@ onMounted(() => {
 
   // 组件挂载后立即滚动到底部
   nextTick(() => {
-    scrollToBottom(true);
+    scrollToBottom();
+    // 确保滚动到底部后更新滚动状态
+    if (messagesContainer.value) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
+      const threshold = 10;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < threshold;
+      if (formData) {
+        formData.isScrolledToBottom = isNearBottom;
+      }
+    }
   });
 })
 
@@ -1933,8 +1948,9 @@ onUnmounted(() => {
 // 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
 watch(messages, () => {
   nextTick(() => {
-    if (formData.isScrolledToBottom) {
-      scrollToBottom();
+    // 检查是否当前在底部，或者是否有新消息
+    if (formData.isScrolledToBottom || messages.length > 0) {
+      scrollToBottomOnNewMessage();
     }
   });
 }, { deep: true });
@@ -2023,4 +2039,5 @@ watch(() => formData.isDarkTheme, (newVal) => {
 @import '@/styles/chat-content.css';
 @import '@/styles/font-size-control.css';
 @import '@/styles/global-font-sizes.css';
+@import '@/styles/message-container-fix.css';
 </style>

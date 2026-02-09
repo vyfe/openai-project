@@ -607,6 +607,9 @@ onUnmounted(() => {
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 @import '@/styles/chat.css';
 
+/* 修复消息容器滚动问题 */
+@import '@/styles/message-container-fix.css';
+
 /* 为截图功能添加备用字体，避免Google Fonts加载问题 */
 .messages-container *,
 .message-text * {

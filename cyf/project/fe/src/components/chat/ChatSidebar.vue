@@ -866,17 +866,23 @@ const loadDialogContent = async (dialogId: number) => {
     ElMessage.warning('请先登录')
     return
   }
+
+  // 在移动端点击对话历史项时，先收起侧边栏，然后再加载对话内容
+  if (formData.isMobile) {
+    formData.sidebarCollapsed = true
+  }
+
   const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
   if (dialogItem) {
     formData.dialogTitle = dialogItem.dialog_name
-    
+
     // 根据历史对话的模型信息更新当前模型选择
     if (dialogItem.modelname) {
       const targetModel = formData.models.find(model =>
         model.value === dialogItem.modelname ||
         model.label === dialogItem.modelname
       )
-      
+
       if (targetModel) {
         // 更新供应商选择
         formData.providerValue = targetModel.group

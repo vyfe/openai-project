@@ -7,6 +7,7 @@
   background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
   /* 修复移动端视口高度问题 */
   height: -webkit-fill-available;
+  min-height: 0; /* 关键：防止内容撑破容器 */
 }
 
 .chat-header {
@@ -202,6 +203,7 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0; /* 防止内容撑破容器 */
 }
 
 .chat-sidebar {
@@ -242,10 +244,6 @@
   .model-selector :deep(.el-select) {
     width: 100%;
   }
-}
-
-.dialog-history-section {
-  margin-bottom: 30px;
 }
 
 .dialog-history-section h3 {
@@ -389,6 +387,7 @@
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.7);
+  max-height: 100%; /* 添加最大高度限制 */
 }
 
 .chat-toolbar {
@@ -768,13 +767,6 @@
   margin-top: 10px;
 }
 
-/* 侧边栏动画 */
-.sidebar-slide-enter-active, .sidebar-slide-leave-active {
-  transition: transform 0.3s ease, opacity 0.3s ease;
-}
-.sidebar-slide-enter-from, .sidebar-slide-leave-to {
-  transform: translateX(-100%); opacity: 0;
-}
 
 /* 移动端侧边栏 */
 .sidebar-mobile {
@@ -787,6 +779,7 @@
 }
 .sidebar-overlay {
   /* position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 999; */
+  display: none; /* 修复空规则集问题 */
 }
 
 /* 响应式断点 */
@@ -877,8 +870,8 @@
 
 .sidebar-close-btn {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 10px;
+  right: 10px;
   z-index: 1001;
 }
 
@@ -1881,6 +1874,10 @@ body.dark-theme .messages-container-temp {
   background: rgba(70, 205, 36, 0.8);
 }
 
+.back-to-top-btn.new-session-btn {
+  background: rgba(205, 146, 36, 0.8);
+}
+
 .back-to-top-btn:hover {
   background: rgba(90, 123, 193, 1);
   transform: translateY(-2px);
@@ -1889,6 +1886,12 @@ body.dark-theme .messages-container-temp {
 
 .back-to-top-btn.input-btn:hover {
   background: rgba(70, 210, 35, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.back-to-top-btn.new-session-btn:hover {
+  background: rgba(230, 147, 38, 0.8);
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
@@ -2559,12 +2562,20 @@ body.dark-theme .back-to-top-btn.input-btn {
   background: rgba(70, 205, 36, 0.8);
 }
 
+body.dark-theme .back-to-top-btn.new-session-btn {
+  background: rgba(225, 151, 41, 0.8);
+}
+
 body.dark-theme .back-to-top-btn:hover {
   background: rgba(90, 123, 193, 1);
 }
 
 body.dark-theme .back-to-top-btn.input-btn:hover {
   background: rgb(77, 223, 40);
+}
+
+body.dark-theme .back-to-top-btn.new-session-btn:hover {
+  background: rgb(239, 186, 39);
 }
 
 body.dark-theme .message-attachments {
@@ -2882,6 +2893,7 @@ body.dark-theme .custom-dark-tooltip {
   background-color: rgba(0, 0, 0, 0.5);
   z-index: 999;
   display: block; */
+  display: none; /* 空规则集会导致CSS解析问题，添加一个简单的声明 */
 }
 
 .sidebar-overlay {
@@ -2893,6 +2905,7 @@ body.dark-theme .custom-dark-tooltip {
   background-color: rgba(0, 0, 0, 0.069);
   z-index: 999;
   display: block; */
+  display: none; /* 空规则集会导致CSS解析问题，添加一个简单的声明 */
 }
 
 /* 通知弹窗样式 */

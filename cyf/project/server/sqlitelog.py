@@ -41,11 +41,12 @@ class ModelMeta(Model):
     model_type = IntegerField(default=1) # 模型的模态,1-文本，2-图像
     recommend = BooleanField()  # 是否推荐
     status_valid = BooleanField()  # 是否对外开放
+    model_grp = CharField(default='')  # 模型分组
 
     class Meta:
         database = db  # 指定数据库
         indexes = (
-            (('model_name',), True),  # 定义唯一索引，确保模型名称不重复
+            (('model_name', ), True),  # 定义唯一索引，确保模型名称不重复
         )
 
     def to_dict(self):
@@ -56,7 +57,8 @@ class ModelMeta(Model):
             'model_desc': self.model_desc,
             'model_type': self.model_type,
             'recommend': self.recommend,
-            'status_valid': self.status_valid
+            'status_valid': self.status_valid,
+            'model_grp': self.model_grp
         }
 # system高级预设
 class SystemPrompt(Model):
