@@ -27,6 +27,7 @@ export interface FormData {
     rolePresets: Array<{ id: string, name: string, prompt: string }>;
     activeRoleId: string;
     fontSize: string;
+    systemPromptId?: number;  // 新增：选中的系统提示词 ID
     // 添加状态跟踪用户是否手动滚动离开了底部
     isScrolledToBottom: boolean;
   }

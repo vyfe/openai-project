@@ -85,6 +85,7 @@ export interface Props {
   isScrolledToBottom?: boolean
   isMobile?: boolean
   fontSize?: string
+  systemPromptId?: number  // 新增：选中的系统提示词 ID
 }
 
 // 定义文件上传响应的类型

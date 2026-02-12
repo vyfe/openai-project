@@ -691,6 +691,22 @@ def dialog(user, password):
         if dialogvo is None:
             return {"msg": title}, 200
 
+        # 获取 system_prompt_id 参数
+        system_prompt_id = data.get('system_prompt_id')
+
+        # 如果有 system_prompt_id，获取提示词内容并添加到对话最前面
+        if system_prompt_id:
+            system_prompt = sqlitelog.get_system_prompt_by_id(int(system_prompt_id))
+            if system_prompt:
+                # 移除原有的 system 消息（如果有）
+                dialogvo = [msg for msg in dialogvo if msg.get('role') != 'system']
+                # 将系统提示词作为 role=system 添加到最前面
+                dialogvo.insert(0, {
+                    'role': 'system',
+                    'content': system_prompt['role_content']
+                })
+                logging.info(f"已添加系统提示词 ID: {system_prompt_id}")
+
         # 构建API调用参数
         api_params = {
             "model": model,
@@ -785,6 +801,22 @@ def dialog_stream(user, password):
                 }
             )
 
+        # 获取 system_prompt_id 参数
+        system_prompt_id = data.get('system_prompt_id')
+
+        # 如果有 system_prompt_id，获取提示词内容并添加到对话最前面
+        if system_prompt_id:
+            system_prompt = sqlitelog.get_system_prompt_by_id(int(system_prompt_id))
+            if system_prompt:
+                # 移除原有的 system 消息（如果有）
+                dialogvo = [msg for msg in dialogvo if msg.get('role') != 'system']
+                # 将系统提示词作为 role=system 添加到最前面
+                dialogvo.insert(0, {
+                    'role': 'system',
+                    'content': system_prompt['role_content']
+                })
+                logging.info(f"已添加系统提示词 ID: {system_prompt_id} (流式)")
+
         def generate():
             full_content = ""
             try:
@@ -872,6 +904,7 @@ def dialog_pic(user, password):
         dialogs = data.get('dialog')
         dialog_mode = data.get('dialog_mode', 'single')
         dialog_id = data.get('dialogId') or None
+        system_prompt_id = data.get('system_prompt_id')  # 新增
         
         if dialog_mode == 'single':
             dialogvo = []  # 使用原始内容保存历史记录
@@ -879,11 +912,25 @@ def dialog_pic(user, password):
             processed_data = process_pic_dialog_with_urls(dialogs, dialog_mode)
             title = dialog_title or processed_data['original_content']
         elif dialog_mode == 'multi':
-            # 多轮对话优化：根据前端编辑后的历史记录来保存
+            # 获取前端编辑后的历史记录
             dialogvo = json.loads(dialogs)
             title = dialog_title or extract_title_from_dialog(dialogvo)
-            # 使用最新一条作为入参
-            processed_data = process_pic_dialog_with_urls(json.dumps(dialogvo[-1]), dialog_mode)
+            # 优先使用 system_prompt_id 获取，其次从 dialogvo 中提取
+            if system_prompt_id:
+                # 通过 ID 获取系统提示词
+                system_prompt = sqlitelog.get_system_prompt_by_id(int(system_prompt_id))
+                if system_prompt:
+                    sys_content = system_prompt['role_content']
+                    logging.info(f"已添加系统提示词 ID: {system_prompt_id} (图片生成)")
+                else:
+                    sys_content = ""
+            else:
+                # 降级：从 dialogvo 中提取 role=system 的消息（向后兼容）
+                sys_content = next((msg['content'] for msg in dialogvo if msg['role'] == 'system'), "")
+
+            full_content = f"{sys_content}\n{dialogvo[-1]['content']}" if sys_content else dialogvo[-1]['content']
+
+            processed_data = process_pic_dialog_with_urls(full_content, dialog_mode)
 
                 
         try:

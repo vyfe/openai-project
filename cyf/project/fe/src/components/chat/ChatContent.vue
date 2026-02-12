@@ -678,18 +678,31 @@ const clearCurrentSession = () => {
 
 // 导出对话截屏（长截图）
 const exportConversationScreenshot = async () => {
-  // 检查页面中是否存在图片，如果有则弹出警告
-  const messagesContainer = document.querySelector('.messages-container') as HTMLElement;
-  if (messagesContainer) {
-    const images = messagesContainer.querySelectorAll('img.attachment-preview');
-    if (images.length > 0) {
-      ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
-        confirmButtonText: '确定',
-        type: 'warning'
-      });
-      return;
-    }
+  // 先通过 DOM 查询获取容器，确保在任何情况下都能获取到
+  let messagesContainerEl = document.querySelector('.messages-container') as HTMLElement;
+
+  // 如果 DOM 查询失败，尝试使用 ref
+  if (!messagesContainerEl && messagesContainer.value) {
+    messagesContainerEl = messagesContainer.value;
   }
+
+  if (!messagesContainerEl) {
+    ElMessage.error('无法找到对话容器');
+    return;
+  }
+
+  // 检查页面中是否存在图片，如果有则弹出警告
+  const images = messagesContainerEl.querySelectorAll('img.attachment-preview');
+  if (images.length > 0) {
+    ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
+      confirmButtonText: '确定',
+      type: 'warning'
+    });
+    return;
+  }
+
+  // 用于存储需要隐藏的元素，以便在截图后恢复
+  const hiddenElements: HTMLElement[] = [];
 
   try {
     // 检测是否为移动设备，如果是则应用更快的导出设置
@@ -699,16 +712,10 @@ const exportConversationScreenshot = async () => {
     const htmlToImageModule = await import('html-to-image');
     const { toJpeg } = htmlToImageModule;
 
-    if (!messagesContainer) {
-      ElMessage.error('无法找到对话容器');
-      return;
-    }
-
     // 添加截图模式类，以应用备用字体样式
     document.body.classList.add('screenshot-mode');
 
     // 为了优化性能，在移动设备上先隐藏一些不必要的元素
-    let hiddenElements: HTMLElement[] = [];
     if (isMobileDevice) {
       // 隐藏一些在截图时不必要的元素，减少渲染负担
       const elementsToHide = document.querySelectorAll('.message-actions, .typing, .streaming-indicator, .back-to-top-btn, .github-link-inline');
@@ -722,21 +729,37 @@ const exportConversationScreenshot = async () => {
 
     // 保存原始样式
     const originalStyles = {
-      overflow: messagesContainer.style.overflow,
-      maxHeight: messagesContainer.style.maxHeight,
-      height: messagesContainer.style.height,
-      position: messagesContainer.style.position,
+      overflow: messagesContainerEl.style.overflow,
+      maxHeight: messagesContainerEl.style.maxHeight,
+      height: messagesContainerEl.style.height,
+      position: messagesContainerEl.style.position,
+      flex: messagesContainerEl.style.flex,
     };
 
     // 临时修改样式以显示全部内容
-    messagesContainer.style.overflow = 'visible';
-    messagesContainer.style.maxHeight = 'none';
-    messagesContainer.style.height = 'auto';
+    // 获取容器的完整高度（包括滚动部分）
+    const scrollHeight = messagesContainerEl.scrollHeight;
 
-    messagesContainer.style.position = 'relative';
+    // 设置父容器样式，确保子元素完全展开
+    const parent = messagesContainerEl.parentElement;
+    const parentOriginalStyles: any = {};
+    if (parent) {
+      parentOriginalStyles.overflow = parent.style.overflow;
+      parentOriginalStyles.height = parent.style.height;
+      parentOriginalStyles.maxHeight = parent.style.maxHeight;
+      parent.style.overflow = 'visible';
+      parent.style.height = 'auto';
+      parent.style.maxHeight = 'none';
+    }
+
+    messagesContainerEl.style.overflow = 'visible';
+    messagesContainerEl.style.maxHeight = 'none';
+    messagesContainerEl.style.height = `${scrollHeight}px`;
+    messagesContainerEl.style.flex = 'none';
+    messagesContainerEl.style.position = 'relative';
 
     // 根据设备类型设置不同的等待时间，移动端使用较短的等待时间
-    const waitTime = isMobileDevice ? 200 : 500; // 移动端进一步减少等待时间以提高性能
+    const waitTime = isMobileDevice ? 300 : 600; // 增加等待时间以确保DOM更新
 
     // 等待内容渲染
     await new Promise(resolve => setTimeout(resolve, waitTime));
@@ -752,16 +775,21 @@ const exportConversationScreenshot = async () => {
       duration: 0 // 不自动关闭
     });
 
-    // 使用html-to-image直接生成图像，不需要克隆节点
-    const dataUrl = await toJpeg(messagesContainer, {
+    // 使用html-to-image生成图像
+    // 首先尝试获取完整的 scrollHeight 作为截图高度
+    const fullHeight = Math.max(messagesContainerEl.scrollHeight, messagesContainerEl.offsetHeight);
+    console.log('容器高度:', fullHeight, 'scrollHeight:', messagesContainerEl.scrollHeight);
+
+    const dataUrl = await toJpeg(messagesContainerEl, {
       cacheBust: true, // 防止缓存问题
       pixelRatio: pixelRatio, // 根据设备调整清晰度
-      skipFonts: true, // 移动端跳过字体加载以提高性能
+      skipFonts: false, // 不跳过字体，确保正确渲染
       style: {
         // 确保元素在截图中显示完整内容
         overflow: 'visible',
         maxHeight: 'none',
-        height: 'auto',
+        height: `${fullHeight}px`, // 使用明确的高度值
+        width: `${messagesContainerEl.offsetWidth}px`, // 使用明确的宽度值
         filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
         // 临时覆盖字体以避免Google Fonts加载问题
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
@@ -769,10 +797,10 @@ const exportConversationScreenshot = async () => {
       backgroundColor: formData.isDarkTheme ? '#000000' : '#efefef',
       quality: quality, // 根据设备调整质量
       // 排除不需要截图的元素
-      // 排除回到顶部按钮（以及按钮内部的子节点）
+      // 排除回到顶部按钮（桌面端 .back-to-top-btn-normal，移动端 .back-to-top-btn）
       filter: (node: Node) => {
         if (!(node instanceof HTMLElement)) return true;
-        return !node.closest('.back-to-top-btn-normal');
+        return !node.closest('.back-to-top-btn-normal') && !node.closest('.back-to-top-btn');
       },
     });
 
@@ -784,19 +812,19 @@ const exportConversationScreenshot = async () => {
       el.style.visibility = 'visible';
     });
 
-    // 关闭加载提示
-    loadingMessage.close();
-
-    // 恢复隐藏的元素（如果有的话）
-    hiddenElements.forEach(el => {
-      el.style.visibility = 'visible';
-    });
+    // 恢复父容器样式
+    if (parent) {
+      parent.style.overflow = parentOriginalStyles.overflow;
+      parent.style.height = parentOriginalStyles.height;
+      parent.style.maxHeight = parentOriginalStyles.maxHeight;
+    }
 
     // 恢复原始样式
-    messagesContainer.style.overflow = originalStyles.overflow;
-    messagesContainer.style.maxHeight = originalStyles.maxHeight;
-    messagesContainer.style.height = originalStyles.height;
-    messagesContainer.style.position = originalStyles.position;
+    messagesContainerEl.style.overflow = originalStyles.overflow;
+    messagesContainerEl.style.maxHeight = originalStyles.maxHeight;
+    messagesContainerEl.style.height = originalStyles.height;
+    messagesContainerEl.style.position = originalStyles.position;
+    messagesContainerEl.style.flex = originalStyles.flex;
 
     // 移除截图模式类
     document.body.classList.remove('screenshot-mode');
@@ -810,14 +838,25 @@ const exportConversationScreenshot = async () => {
     ElMessage.success('对话截图已导出');
   } catch (error) {
     console.error('导出截图失败:', error);
+    console.error('错误详情:', JSON.stringify(error, null, 2));
+
     // 关闭可能存在的加载提示
     try {
       // 即使出现错误也要确保移除截图模式类
       document.body.classList.remove('screenshot-mode');
+      // 恢复隐藏的元素
+      hiddenElements.forEach(el => {
+        el.style.visibility = 'visible';
+      });
     } catch(e) {
-      console.error('移除截图模式类时出错:', e);
+      console.error('清理截图状态时出错:', e);
     }
-    ElMessage.error('导出截图失败，请稍后重试');
+
+    let errorMessage = '导出截图失败，请稍后重试';
+    if (error instanceof Error) {
+      errorMessage = `导出截图失败: ${error.message}`;
+    }
+    ElMessage.error(errorMessage);
   }
 }
 
@@ -1169,7 +1208,8 @@ const callApi = async (
         buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content),
         formData.dialogTitle,
         imageSize,  // 添加图片尺寸参数
-        formData.currentDialogId || 0
+        formData.currentDialogId || 0,
+        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
       );
 
       // 处理响应 - 简化逻辑，只关注URL字段
@@ -1305,7 +1345,8 @@ const callApi = async (
           formData.contextCount > 0 ? 'multi' : 'single',
           dialogArray,
           formData.dialogTitle,  // 添加dialogTitle参数
-          Math.round(formData.maxResponseChars * 1.2 + 30) // 添加最大回复tokens参数（字数×2）
+          Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
+          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
         );
       } else {
         // 使用非流式API
@@ -1338,7 +1379,8 @@ const callApi = async (
           formData.contextCount > 0 ? 'multi' : 'single',
           dialogArray,
           formData.dialogTitle,
-          Math.round(formData.maxResponseChars * 1.2 + 30) // 添加最大回复tokens参数（字数×2）
+          Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
+          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
         );
 
         // 更新AI消息内容
@@ -1526,7 +1568,8 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
         buildDialogArrayFromSnapshot(contextSnapshot, processedMessage),
         formData.dialogTitle,
         finalImageSize,  // 传递图片尺寸参数
-        formData.currentDialogId || 0  // 传递对话ID参数
+        formData.currentDialogId || 0,  // 传递对话ID参数
+        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
       );
 
       // 处理响应
@@ -1708,29 +1751,18 @@ const continueGeneration = async (index: number) => {
   });
 }
 
-const currentEnhancedRoleContent = computed(() => {
-  if (formData.activeEnhancedGroup && formData.selectedEnhancedRole) {
-    const group = formData.enhancedRoleGroups[formData.activeEnhancedGroup]
-    if (group) {
-      const role = group.find(r => r.role_name === formData.selectedEnhancedRole)
-      return role ? role.role_content : ''
-    }
-  }
-  return ''
-})
-
 // 从消息快照构建对话数组函数
 const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): Array<{role: string, content: string}> => {
   const dialogArray: Array<{role: string, content: string, url?: string}> = []
 
-  // 如果有角色设定，添加到最前面
-  // 根据enhancedRoleEnabled状态决定使用systemPrompt还是currentEnhancedRoleContent作为system角色的内容
-  const systemContent = formData.enhancedRoleEnabled ? currentEnhancedRoleContent.value : formData.systemPrompt
-  if (systemContent && systemContent.trim()) {
-    dialogArray.push({ role: 'system', content: systemContent.trim() })
+  // 注意：不再在这里拼装 system 消息
+  // system 消息现在由后端根据 system_prompt_id 来获取并添加
+  // 只有在不启用增强角色时，才使用用户输入的 systemPrompt
+  if (!formData.enhancedRoleEnabled && formData.systemPrompt && formData.systemPrompt.trim()) {
+    dialogArray.push({ role: 'system', content: formData.systemPrompt.trim() })
   }
 
-  // 如果上下文数量为 0，只发送当前消息（但仍需包含 system 消息）
+  // 如果上下文数量为 0，只发送当前消息
   if (formData.contextCount === 0) {
     dialogArray.push({ role: 'user', content: currentMessage })
     return dialogArray

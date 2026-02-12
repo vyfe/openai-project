@@ -117,7 +117,7 @@ export const fileAPI = {
 // 聊天API - 适配后端实际API
 export const chatAPI = {
   // 普通聊天接口
-  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number) => {
+  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number) => {
     const data: any = {
       model,
       dialog: message
@@ -132,6 +132,9 @@ export const chatAPI = {
     if (maxResponseTokens) {
       data.max_response_tokens = maxResponseTokens
     }
+    if (systemPromptId) {
+      data.system_prompt_id = systemPromptId
+    }
     return api.post('/never_guess_my_usage/split', data)
   },
 
@@ -143,7 +146,8 @@ export const chatAPI = {
     dialogMode: string = 'single',
     dialog?: any,
     dialogTitle?: string,
-    maxResponseTokens?: number
+    maxResponseTokens?: number,
+    systemPromptId?: number
   ): Promise<void> => {
     const data: any = {
       model,
@@ -158,6 +162,9 @@ export const chatAPI = {
     }
     if (maxResponseTokens) {
       data.max_response_tokens = maxResponseTokens
+    }
+    if (systemPromptId) {
+      data.system_prompt_id = systemPromptId
     }
 
     // 添加认证信息到数据中
@@ -233,7 +240,7 @@ export const chatAPI = {
   },
 
   // 图片生成接口
-  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number) => {
+  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number) => {
     const data: any = {
       model,
       dialog: prompt
@@ -250,6 +257,9 @@ export const chatAPI = {
     }
     if (dialogId) {
       data.dialogId = dialogId
+    }
+    if (systemPromptId) {
+      data.system_prompt_id = systemPromptId
     }
     return api.post('/never_guess_my_usage/split_pic', data)
   },

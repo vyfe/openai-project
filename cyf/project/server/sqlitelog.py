@@ -277,7 +277,8 @@ def get_system_prompt_list(status_valid: bool = None):
 def get_system_prompts_by_group():
     """
     按role_group分类聚合系统提示词
-    返回格式: { "group_name": [{"role_name": ..., "role_desc": ..., "role_content": ...}, ...] }
+    返回格式: { "group_name": [{"id": ..., "role_name": ..., "role_desc": ...}, ...] }
+    注意：不再返回 role_content，由前端通过 ID 请求获取
     """
     query = SystemPrompt.select().where(SystemPrompt.status_valid == True)
 
@@ -287,14 +288,37 @@ def get_system_prompts_by_group():
         if group not in grouped_prompts:
             grouped_prompts[group] = []
 
-        # 只返回需要的字段
+        # 只返回需要的字段，移除 role_content 以增强安全性
         grouped_prompts[group].append({
+            'id': prompt['id'],  # 新增 id 字段
             'role_name': prompt['role_name'],
-            'role_desc': prompt['role_desc'],
-            'role_content': prompt['role_content']
+            'role_desc': prompt['role_desc']
         })
 
     return grouped_prompts
+
+
+def get_system_prompt_by_id(prompt_id: int) -> dict:
+    """
+    根据 ID 获取系统提示词内容
+    返回: {'id': ..., 'role_name': ..., 'role_desc': ..., 'role_content': ...}
+    如果提示词不存在或不可用，返回 None
+    """
+    try:
+        prompt = SystemPrompt.get_by_id(prompt_id)
+        if not prompt or not prompt.status_valid:
+            return None
+        return {
+            'id': prompt.id,
+            'role_name': prompt.role_name,
+            'role_desc': prompt.role_desc,
+            'role_content': prompt.role_content
+        }
+    except DoesNotExist:
+        return None
+    except Exception as e:
+        app.logger.error(f"获取系统提示词失败: {str(e)}")
+        return None
 
 
 def message_query(sql: str, params=None):

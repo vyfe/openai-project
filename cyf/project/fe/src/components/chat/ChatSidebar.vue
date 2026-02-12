@@ -366,17 +366,13 @@ const loadEnhancedRoles = async () => {
     if (response && response.success && response.groups) {
       formData.enhancedRoleGroups = response.groups
 
-      // 如果还没有激活的分组或角色，自动选择第一个
-      if (!formData.activeEnhancedGroup && Object.keys(formData.enhancedRoleGroups).length > 0) {
-        const firstGroup = Object.keys(formData.enhancedRoleGroups)[0]
-        formData.activeEnhancedGroup = firstGroup
-
-        // 选择该分组的第一个角色
-        if (formData.enhancedRoleGroups[firstGroup] && formData.enhancedRoleGroups[firstGroup].length > 0) {
-          formData.selectedEnhancedRole = formData.enhancedRoleGroups[firstGroup][0].role_name
-
-          // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
-          // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
+      // 如果还没有 systemPromptId，自动选择第一个角色
+      if (!formData.systemPromptId && Object.keys(response.groups).length > 0) {
+        const firstGroup = Object.keys(response.groups)[0]
+        if (response.groups[firstGroup] && response.groups[firstGroup].length > 0) {
+          formData.systemPromptId = response.groups[firstGroup][0].id
+          formData.selectedEnhancedRole = response.groups[firstGroup][0].role_name
+          formData.activeEnhancedGroup = firstGroup
         }
       }
     } else {
@@ -413,9 +409,7 @@ const handleGroupChange = (groupName: string) => {
   // 选择该分组的第一个角色
   if (formData.enhancedRoleGroups[groupName] && formData.enhancedRoleGroups[groupName].length > 0) {
     formData.selectedEnhancedRole = formData.enhancedRoleGroups[groupName][0].role_name
-
-    // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
-    // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
+    formData.systemPromptId = formData.enhancedRoleGroups[groupName][0].id
 
     // 保存到localStorage
     localStorage.setItem('selectedEnhancedRole', formData.selectedEnhancedRole)
@@ -427,8 +421,13 @@ const handleEnhancedRoleSelect = (roleName: string) => {
   formData.selectedEnhancedRole = roleName
   localStorage.setItem('selectedEnhancedRole', roleName)
 
-  // 不再应用所选角色的内容到systemPrompt，因为会在发送请求时根据enhancedRoleEnabled状态来决定使用哪个内容
-  // 现在只需更新选择状态，具体的内容使用延迟到请求构建时
+  // 找到对应的角色 ID 并保存
+  if (formData.activeEnhancedGroup && formData.enhancedRoleGroups[formData.activeEnhancedGroup]) {
+    const role = formData.enhancedRoleGroups[formData.activeEnhancedGroup].find(r => r.role_name === roleName)
+    if (role) {
+      formData.systemPromptId = role.id
+    }
+  }
 }
 
 // 重命名角色函数
