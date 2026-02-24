@@ -274,14 +274,17 @@ clients=[OpenAI(api_key=conf['api']['api_key'], base_url=url) for url in  url_li
 
 def verify_credentials(user, password):
     if USE_DB_AUTH:
-        success, error_msg, _ = sqlitelog.verify_user_password(user, password)
-        return success, error_msg
+        # 登录时不检查角色，传递 None 避免角色过滤
+        success, error_msg, user_obj = sqlitelog.verify_user_password(user, password, None)
+        if success and user_obj:
+            return success, error_msg, {'username': user_obj.username, 'role': user_obj.role}
+        return success, error_msg, None
     else:
         if not user or user not in user_credentials:
-            return False, "用户不存在或未授权"
+            return False, "用户不存在或未授权", None
         if user_credentials[user] != password:
-            return False, "密码错误"
-        return True, None
+            return False, "密码错误", None
+        return True, None, {'username': user, 'role': 'admin'}  # 配置文件用户默认为admin
 
 def get_request_data():
     """
@@ -329,7 +332,7 @@ def require_auth(f):
             password = request.values.get('password', '').strip()
 
         # 验证用户凭据
-        is_valid, error_msg = verify_credentials(user, password)
+        is_valid, error_msg, _ = verify_credentials(user, password)
         if not is_valid:
             return {"msg": error_msg}, 200
 
@@ -600,11 +603,11 @@ def login():
         return {"success": False, "msg": "用户名不能为空"}, 200
 
     # 使用统一的验证函数
-    is_valid, error_msg = verify_credentials(user, password)
+    is_valid, error_msg, user_info = verify_credentials(user, password)
     if not is_valid:
         return {"success": False, "msg": error_msg}, 200
 
-    return {"success": True, "msg": "登录成功", "user": user}, 200
+    return {"success": True, "msg": "登录成功", "data": user_info}, 200
 
 
 @app.route('/never_guess_my_usage/register', methods=['POST'])

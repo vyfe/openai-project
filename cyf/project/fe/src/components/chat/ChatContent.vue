@@ -778,7 +778,6 @@ const exportConversationScreenshot = async () => {
     // 使用html-to-image生成图像
     // 首先尝试获取完整的 scrollHeight 作为截图高度
     const fullHeight = Math.max(messagesContainerEl.scrollHeight, messagesContainerEl.offsetHeight);
-    console.log('容器高度:', fullHeight, 'scrollHeight:', messagesContainerEl.scrollHeight);
 
     const dataUrl = await toJpeg(messagesContainerEl, {
       cacheBust: true, // 防止缓存问题
@@ -1465,7 +1464,6 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
     ElMessage.warning('请先选择一个模型')
     return
   }
-  console.log('发送消息数组:', messages)
   // 检查是否是图像生成模型
   const isImageModel = formData.selectedModelType === 2;
 
@@ -1489,13 +1487,11 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
 
   if (lastAiMessageIndex !== -1) {
     const lastAiMessage = messages[lastAiMessageIndex];
-    console.log('找到的上一条AI消息:', lastAiMessage);
-    
+
     // 检查上一条AI消息是否有url字段（AI返回的图片保存在message.url中）
     if (lastAiMessage.url) {
       // 将url字段转化为[FILE_URL]格式并追加到本次入参后面
       processedMessage = processedMessage + '\n[FILE_URL:' + lastAiMessage.url + ']';
-      console.log('添加图片URL到消息:', lastAiMessage.url);
     } else {
       // 兼容旧逻辑：检查上一条AI消息的内容中是否包含[FILE_URL]
       const fileUrls = extractFileUrls(lastAiMessage.content);
@@ -1505,12 +1501,9 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
         if (fileUrlMatches) {
           // 将上一条消息中的[FILE_URL]文本追加到本次入参后面
           processedMessage = processedMessage + '\n' + fileUrlMatches.join('\n');
-          console.log('添加内容中的图片URL到消息:', fileUrlMatches);
         }
       }
     }
-  } else {
-    console.log('未找到上一条AI消息');
   }
 
   if (isImageModel) {

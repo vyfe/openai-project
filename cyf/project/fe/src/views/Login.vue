@@ -302,10 +302,12 @@ const handleLogin = async () => {
 
         // 现在我们可以确保response是一个对象，包含success和msg属性
         if (response && typeof response === 'object' && response.success) {
-          // 登录成功
+          // 登录成功，获取用户信息（包含角色）
+          const userData = response.data || { username: loginForm.username, role: 'user' }
           authStore.login({
-            username: loginForm.username,
-            password: loginForm.password
+            username: userData.username || loginForm.username,
+            password: loginForm.password,
+            role: userData.role || 'user'
           })
 
           ElMessage.success(response.msg || t('login.successMessage'))

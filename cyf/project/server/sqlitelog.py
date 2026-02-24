@@ -322,7 +322,13 @@ def get_system_prompt_by_id(prompt_id: int) -> dict:
 
 
 def message_query(sql: str, params=None):
-    return json.dumps(db.execute_sql(sql, params).fetchall())
+    """执行SQL查询，返回结果列表"""
+    cursor = db.execute_sql(sql, params)
+    # 获取列名
+    columns = [desc[0] for desc in cursor.description] if cursor.description else []
+    # 将结果转换为字典列表
+    results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+    return results
 
 def get_user_by_username(username: str, role: str = None):
     try:

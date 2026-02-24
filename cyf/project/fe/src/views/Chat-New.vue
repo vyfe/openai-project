@@ -103,6 +103,9 @@
           </el-button>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item v-if="authStore.isAdmin()" @click="goToAdmin" :icon="Setting">
+                {{ t('chat.adminPanel') }}
+              </el-dropdown-item>
               <el-dropdown-item @click="showUserSettings = true" :icon="Setting">
                 {{ t('chat.userSettings') }}
               </el-dropdown-item>
@@ -416,8 +419,6 @@ const themeManager = {
     const autoTheme = themeManager.isNightTime();
     const currentManualTheme = JSON.parse(localStorage.getItem('isDarkTheme') || 'false');
 
-    console.log('autoTheme:', autoTheme, 'currentManualTheme:', currentManualTheme, 'isCurrentlyManual:', isCurrentlyManual);
-
     if (isCurrentlyManual) {
       // 检查用户当前的手动选择是否与自动模式一致
       if (currentManualTheme === autoTheme) {
@@ -497,6 +498,11 @@ const logout = () => {
   authStore.logout()
   router.push('/login')
   ElMessage.success(t('chat.logoutSuccess'))
+}
+
+// 跳转到管理面板
+const goToAdmin = () => {
+  router.push('/admin')
 }
 
 // 处理密码更新后的行为

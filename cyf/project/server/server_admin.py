@@ -4,6 +4,7 @@ from flask_cors import CORS
 from functools import wraps
 from datetime import datetime
 from peewee import DoesNotExist, IntegrityError
+import configparser
 import sqlitelog
 from sqlitelog import ModelMeta, SystemPrompt, TestLimit, User, Notification
 
@@ -45,6 +46,17 @@ def user_to_dict(user):
         'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else None,
         'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
     }
+
+def to_bool(value):
+    """
+    将值转换为布尔类型
+    支持: 布尔值(True/False)、字符串('true'/'false'/'1'/'0'/'yes'/'no')
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).lower() in ('true', '1', 'yes')
 
 def get_request_data():
     """
@@ -91,9 +103,9 @@ def model_meta_list():
         
         # 转换布尔值
         if recommend is not None:
-            recommend = recommend.lower() in ('true', '1', 'yes')
+            recommend = to_bool(recommend)
         if status_valid is not None:
-            status_valid = status_valid.lower() in ('true', '1', 'yes')
+            status_valid = to_bool(status_valid)
         
         # 查询数据
         models = sqlitelog.get_model_meta_list(recommend=recommend, status_valid=status_valid)
@@ -126,8 +138,8 @@ def model_meta_create():
             return error_response("模型名称不能为空")
 
         # 转换布尔值
-        recommend = data.get('recommend', 'false').lower() in ('true', '1', 'yes')
-        status_valid = data.get('status_valid', 'true').lower() in ('true', '1', 'yes')
+        recommend = to_bool(data.get('recommend', 'false'))
+        status_valid = to_bool(data.get('status_valid', 'true'))
 
         model = ModelMeta.create(
             model_name=model_name,
@@ -160,9 +172,9 @@ def model_meta_update():
         if 'model_desc' in data:
             model.model_desc = data['model_desc']
         if 'recommend' in data:
-            model.recommend = data['recommend'].lower() in ('true', '1', 'yes')
+            model.recommend = to_bool(data['recommend'])
         if 'status_valid' in data:
-            model.status_valid = data['status_valid'].lower() in ('true', '1', 'yes')
+            model.status_valid = to_bool(data['status_valid'])
 
         model.save()
         return success_response(data=model.to_dict(), msg="模型更新成功")
@@ -197,23 +209,24 @@ def model_meta_delete():
 def system_prompt_list():
     """获取系统提示词列表"""
     try:
-        # 获取过滤参数
-        role_group = request.args.get('role_group')
-        status_valid = request.args.get('status_valid')
-        
+        # 获取过滤参数（从POST请求体中获取）
+        data = get_request_data()
+        role_group = data.get('role_group')
+        status_valid = data.get('status_valid')
+
         # 转换布尔值
         if status_valid is not None:
-            status_valid = status_valid.lower() in ('true', '1', 'yes')
-        
+            status_valid = to_bool(status_valid)
+
         # 构建查询
         query = SystemPrompt.select()
         if role_group:
             query = query.where(SystemPrompt.role_group == role_group)
         if status_valid is not None:
             query = query.where(SystemPrompt.status_valid == status_valid)
-        
-        # 返回字典格式的结果列表
-        prompts = [prompt.to_dict() for prompt in query.dicts().iterator()]
+
+        # 返回字典格式的结果列表（query.dicts() 已经返回字典，不需要调用 to_dict）
+        prompts = list(query.dicts().iterator())
         return success_response(data=prompts)
     except Exception as e:
         return error_response(f"获取系统提示词列表失败: {str(e)}")
@@ -243,7 +256,7 @@ def system_prompt_create():
             return error_response("角色名称和角色分组不能为空")
         
         # 转换布尔值
-        status_valid = data.get('status_valid', 'true').lower() in ('true', '1', 'yes')
+        status_valid = to_bool(data.get('status_valid', 'true'))
         
         prompt = SystemPrompt.create(
             role_name=role_name,
@@ -280,7 +293,7 @@ def system_prompt_update():
         if 'role_content' in data:
             prompt.role_content = data['role_content']
         if 'status_valid' in data:
-            prompt.status_valid = data['status_valid'].lower() in ('true', '1', 'yes')
+            prompt.status_valid = to_bool(data['status_valid'])
 
         prompt.save()
         return success_response(data=prompt.to_dict(), msg="系统提示词更新成功")
@@ -421,7 +434,7 @@ def test_limit_reset():
         data = get_request_data()
         limit_id = data.get('id')
         user_ip = data.get('user_ip')
-        reset_all = data.get('reset_all', 'false').lower() in ('true', '1', 'yes')
+        reset_all = to_bool(data.get('reset_all', 'false'))
         
         if reset_all:
             # 重置所有记录
@@ -497,7 +510,7 @@ def user_create():
         if 'role' in data:
             user.role = data['role']
         if 'is_active' in data:
-            user.is_active = data['is_active'].lower() in ('true', '1', 'yes')
+            user.is_active = to_bool(data['is_active'])
         
         user.save()
         return success_response(data=user_to_dict(user), msg="用户创建成功")
@@ -528,7 +541,7 @@ def user_update():
             user.role = data['role']
         
         if 'is_active' in data:
-            user.is_active = data['is_active'].lower() in ('true', '1', 'yes')
+            user.is_active = to_bool(data['is_active'])
         
         if 'api_key' in data:
             user.api_key = data['api_key'].strip() or None
@@ -558,7 +571,12 @@ def user_delete():
         if not user_id:
             return error_response("用户ID不能为空")
         
-        hard_delete = data.get('hard_delete', 'false').lower() in ('true', '1', 'yes')
+        hard_delete_value = data.get('hard_delete', 'false')
+        # 处理布尔值和字符串两种情况
+        if isinstance(hard_delete_value, bool):
+            hard_delete = hard_delete_value
+        else:
+            hard_delete = str(hard_delete_value).lower() in ('true', '1', 'yes')
         
         if hard_delete:
             # 硬删除
@@ -721,6 +739,36 @@ def notification_delete():
             return error_response("通知不存在")
     except Exception as e:
         return error_response(f"删除通知失败: {str(e)}")
+
+# ==================== SQL 执行接口 ====================
+@app.route('/sql_execute', methods=['POST'])
+@require_admin_auth
+def sql_execute():
+    """执行SQL查询（仅当配置启用时）"""
+    # 检查配置开关
+    config = configparser.ConfigParser()
+    config.read('conf/conf.ini', encoding='utf-8')
+    if not config.getboolean('admin', 'enable_sql_execute', fallback=False):
+        return error_response("SQL执行功能已禁用")
+
+    try:
+        data = get_request_data()
+        sql = data.get('sql', '').strip()
+        params = data.get('params', [])
+
+        if not sql:
+            return error_response("SQL语句不能为空")
+
+        # 记录SQL执行日志
+        app.logger.info(f"Admin SQL execute: {sql[:100]}...")
+
+        # 执行SQL
+        results = sqlitelog.message_query(sql, params if params else None)
+
+        return success_response(data=results, msg="SQL执行成功")
+    except Exception as e:
+        app.logger.error(f"SQL execute error: {str(e)}")
+        return error_response(f"SQL执行失败: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=39998, debug=True)

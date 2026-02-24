@@ -1,0 +1,180 @@
+/* Admin页面样式 */
+
+.admin-tabs {
+  --el-color-primary: #4f46e5;
+}
+
+:deep(.el-tabs__nav) {
+  border-bottom: 2px solid #e5e7eb;
+}
+
+:deep(.el-tabs__item) {
+  font-weight: 500;
+  font-size: 14px;
+  padding: 0 20px;
+  height: 48px;
+  line-height: 48px;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+
+/* 深色主题适配 */
+.dark .admin-tabs {
+  --el-color-primary: #6366f1;
+}
+
+.dark :deep(.el-tabs__nav) {
+  border-bottom-color: #374151;
+}
+
+.dark :deep(.el-tabs__item) {
+  color: #9ca3af;
+}
+
+.dark :deep(.el-tabs__item.is-active) {
+  color: #6366f1;
+  border-bottom-color: #6366f1;
+}
+
+/* 表格样式优化 */
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-table__header-wrapper) {
+  background-color: #f9fafb;
+}
+
+.dark :deep(.el-table__header-wrapper) {
+  background-color: #1f2937;
+}
+
+:deep(.el-table__body tr:hover > td) {
+  background-color: #f3f4f6 !important;
+}
+
+.dark :deep(.el-table__body tr:hover > td) {
+  background-color: #374151 !important;
+}
+
+/* 弹窗样式优化 */
+:deep(.el-dialog) {
+  border-radius: 12px;
+}
+
+:deep(.el-dialog__header) {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dark :deep(.el-dialog__header) {
+  border-bottom-color: #374151;
+}
+
+:deep(.el-dialog__body) {
+  padding: 24px;
+}
+
+:deep(.el-dialog__footer) {
+  padding: 16px 24px 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.dark :deep(.el-dialog__footer) {
+  border-top-color: #374151;
+}
+
+/* 表单样式优化 */
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #374151;
+}
+
+.dark :deep(.el-form-item__label) {
+  color: #d1d5db;
+}
+
+:deep(.el-input__wrapper) {
+  border-radius: 6px;
+}
+
+:deep(.el-textarea__inner) {
+  border-radius: 6px;
+  resize: vertical;
+}
+
+/* 按钮样式优化 */
+:deep(.el-button--primary) {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  border: none;
+  font-weight: 500;
+}
+
+:deep(.el-button--primary:hover) {
+  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+:deep(.el-button--danger) {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  border: none;
+}
+
+:deep(.el-button--danger:hover) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+/* 标签样式 */
+:deep(.el-tag) {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+:deep(.el-tag--success) {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+:deep(.el-tag--info) {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+:deep(.el-tag--warning) {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+:deep(.el-tag--danger) {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+  :deep(.el-tabs__nav) {
+    flex-wrap: wrap;
+  }
+
+  :deep(.el-tabs__item) {
+    font-size: 12px;
+    padding: 0 12px;
+  }
+
+  :deep(.el-dialog) {
+    width: 95% !important;
+    margin-top: 5vh !important;
+  }
+}
+
+@media (max-width: 480px) {
+  :deep(.el-tabs__item) {
+    font-size: 11px;
+    padding: 0 8px;
+  }
+}

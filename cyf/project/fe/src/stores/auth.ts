@@ -36,29 +36,36 @@ export const useAuthStore = defineStore('auth', () => {
 
   const user = ref<string | null>(getStoredValue('user'))
   const password = ref<string | null>(getStoredValue('password'))
+  const role = ref<string | null>(getStoredValue('role'))
 
-  const login = (userData: { username: string; password: string }) => {
+  const login = (userData: { username: string; password: string; role?: string }) => {
     user.value = userData.username
     password.value = userData.password
+    role.value = userData.role || 'user'
     setStoredValue('user', userData.username)
     setStoredValue('password', userData.password)
+    setStoredValue('role', role.value)
   }
 
   const logout = () => {
     user.value = null
     password.value = null
+    role.value = null
     localStorage.removeItem('user')
     localStorage.removeItem('password')
+    localStorage.removeItem('role')
   }
 
   const isAuthenticated = () => {
     // 检查是否已过期，如果过期则更新ref值
     const storedUser = getStoredValue('user')
     const storedPassword = getStoredValue('password')
+    const storedRole = getStoredValue('role')
 
     if (!storedUser || !storedPassword) {
       user.value = null
       password.value = null
+      role.value = null
       return false
     }
 
@@ -69,36 +76,49 @@ export const useAuthStore = defineStore('auth', () => {
     if (password.value !== storedPassword) {
       password.value = storedPassword
     }
+    if (role.value !== storedRole) {
+      role.value = storedRole
+    }
 
     return !!user.value && !!password.value
+  }
+
+  const isAdmin = () => {
+    return role.value === 'admin'
   }
 
   const getCredentials = () => {
     // 确保返回的数据没有过期
     const storedUser = getStoredValue('user')
     const storedPassword = getStoredValue('password')
+    const storedRole = getStoredValue('role')
 
     if (!storedUser || !storedPassword) {
       user.value = null
       password.value = null
+      role.value = null
       return {
         user: null,
-        password: null
+        password: null,
+        role: null
       }
     }
 
     return {
       user: storedUser,
-      password: storedPassword
+      password: storedPassword,
+      role: storedRole
     }
   }
 
   return {
     user,
     password,
+    role,
     login,
     logout,
     isAuthenticated,
+    isAdmin,
     getCredentials
   }
 })
