@@ -165,7 +165,10 @@ const messages = {
       configImportExport: '配置导入导出',
       exportConfig: '导出配置',
       importConfig: '导入配置',
-      importExportHint: '导出当前浏览器配置，或导入他人分享的配置'
+      importExportHint: '导出当前浏览器配置，或导入他人分享的配置',
+      apiKey: 'API 密钥（可选）',
+      apiKeyPlaceholder: '不填则使用当前密钥',
+      apiKeyHint: '如不填写，将保持当前 API 密钥不变'
     },
     login: {
       title: '慧聊 - 智能对话',
@@ -178,13 +181,31 @@ const messages = {
       githubLink: '开源项目 GitHub',
       contactInfo: 'vx:pata_data_studio',
       failedMessage: '登录失败，请检查用户名和密码',
-      successMessage: '登录成功！'
+      successMessage: '登录成功！',
+      registerTitle: '注册新账户',
+      registerButton: '注册',
+      goToLogin: '已有账户？立即登录',
+      goToRegister: '还没有账户？立即注册',
+      registerSuccess: '注册成功！请登录',
+      registerFailed: '注册失败',
+      usernameTooShort: '用户名长度必须在3-20个字符之间',
+      usernameInvalid: '用户名只能包含字母、数字和下划线',
+      usernameExists: '用户名已存在',
+      apiKey: 'API 密钥（可选）',
+      apiKeyPlaceholder: '不填则使用默认密钥（有使用次数限制）',
+      apiKeyHint: '如不填写，将使用系统默认的测试密钥（有限流限制）'
     },
     validation: {
       usernameRequired: '请输入用户名',
       usernameNotEmpty: '用户名不能为空',
       passwordRequired: '请输入密码',
-      passwordNotEmpty: '密码不能为空'
+      passwordNotEmpty: '密码不能为空',
+      passwordMinLength: '密码长度至少为6位',
+      usernameMinLength: '用户名长度必须在3-20个字符之间',
+      usernameFormat: '用户名只能包含字母、数字和下划线',
+      confirmPassword: '确认密码',
+      confirmPasswordRequired: '请确认密码',
+      passwordsNotMatch: '两次输入的密码不一致'
     }
   },
   en: {
@@ -350,7 +371,10 @@ const messages = {
       configImportExport: 'Config Import/Export',
       exportConfig: 'Export Config',
       importConfig: 'Import Config',
-      importExportHint: 'Export current browser config, or import shared config from others'
+      importExportHint: 'Export current browser config, or import shared config from others',
+      apiKey: 'API Key (Optional)',
+      apiKeyPlaceholder: 'Leave blank to keep current',
+      apiKeyHint: 'If left blank, the current API key will remain unchanged'
     },
     login: {
       title: 'Smart Conversation System',
@@ -363,13 +387,31 @@ const messages = {
       githubLink: 'Open Source Project GitHub',
       contactInfo: 'wx:pata_data_studio',
       failedMessage: 'Login failed, please check username and password',
-      successMessage: 'Login successful!'
+      successMessage: 'Login successful!',
+      registerTitle: 'Register New Account',
+      registerButton: 'Register',
+      goToLogin: 'Already have an account? Login now',
+      goToRegister: 'Don\'t have an account? Register now',
+      registerSuccess: 'Registration successful! Please login',
+      registerFailed: 'Registration failed',
+      usernameTooShort: 'Username must be 3-20 characters',
+      usernameInvalid: 'Username can only contain letters, numbers and underscores',
+      usernameExists: 'Username already exists',
+      apiKey: 'API Key (Optional)',
+      apiKeyPlaceholder: 'Leave blank to use test key',
+      apiKeyHint: 'If left blank, the default test key with rate limiting will be used'
     },
     validation: {
       usernameRequired: 'Please enter username',
       usernameNotEmpty: 'Username cannot be empty',
       passwordRequired: 'Please enter password',
-      passwordNotEmpty: 'Password cannot be empty'
+      passwordNotEmpty: 'Password cannot be empty',
+      passwordMinLength: 'Password must be at least 6 characters',
+      usernameMinLength: 'Username must be 3-20 characters',
+      usernameFormat: 'Username can only contain letters, numbers and underscores',
+      confirmPassword: 'Confirm Password',
+      confirmPasswordRequired: 'Please confirm password',
+      passwordsNotMatch: 'Passwords do not match'
     }
   }
 }

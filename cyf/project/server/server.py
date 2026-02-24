@@ -372,11 +372,22 @@ def get_client_ip() -> str:
 
 def check_test_user_limit(user: str) -> dict:
     """
-    检查测试用户是否超过请求限制
-    返回 None 表示未超限或非测试用户，否则返回错误响应
+    检查使用测试 key 的用户是否超过请求限制
+    返回 {"success": True} 表示未超限或非测试key用户
+    返回 {"success": False, ...} 表示超限
     """
-    if not test_user_name or user != test_user_name:
-        return {"success": True,}
+    # 获取配置的默认 API key（测试 key）
+    DEFAULT_TEST_API_KEY = conf.get('api', 'api_key', fallback='')
+
+    # 获取用户的 API key
+    user_api_key = sqlitelog.get_user_api_key(user)
+
+    # 如果用户没有专属 API key，或者其 API key 与默认测试 key 相同，则进行限流
+    is_test_key_user = (not user_api_key) or (user_api_key == DEFAULT_TEST_API_KEY)
+
+    if not is_test_key_user:
+        # 用户使用自己的专属 API key，不限流
+        return {"success": True}
 
     client_ip = get_client_ip()
 
@@ -390,7 +401,7 @@ def check_test_user_limit(user: str) -> dict:
 
     # 增加计数
     sqlitelog.increment_test_limit(client_ip, test_ip_default_limit)
-    return {"success": True,}
+    return {"success": True}
 
 
 def filter_models(models_data, exclude_keywords=None):
@@ -594,6 +605,57 @@ def login():
         return {"success": False, "msg": error_msg}, 200
 
     return {"success": True, "msg": "登录成功", "user": user}, 200
+
+
+@app.route('/never_guess_my_usage/register', methods=['POST'])
+def register():
+    """用户注册接口（公开，无需认证）"""
+    try:
+        data = get_request_data()
+        username = data.get('username', '').strip()
+        password = data.get('password', '').strip()
+        api_key = data.get('api_key', '').strip()
+
+        # 验证用户名
+        if not username:
+            return jsonify({"success": False, "msg": "用户名不能为空"}), 200
+
+        if len(username) < 3 or len(username) > 20:
+            return jsonify({"success": False, "msg": "用户名长度必须在3-20个字符之间"}), 200
+
+        # 验证用户名格式（只允许字母、数字、下划线）
+        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+            return jsonify({"success": False, "msg": "用户名只能包含字母、数字和下划线"}), 200
+
+        # 验证密码
+        if not password:
+            return jsonify({"success": False, "msg": "密码不能为空"}), 200
+
+        if len(password) < 6:
+            return jsonify({"success": False, "msg": "密码长度至少为6位"}), 200
+
+        # 检查用户名是否已存在
+        if sqlitelog.User.select().where(sqlitelog.User.username == username).exists():
+            return jsonify({"success": False, "msg": "用户名已存在"}), 200
+
+        # 如果未提供 API key，使用配置文件中的默认 key
+        if not api_key:
+            api_key = conf.get('api', 'api_key', fallback='')
+
+        # 创建用户（使用现有的 create_user 函数）
+        user = sqlitelog.create_user(username, password, api_key if api_key else None)
+
+        return jsonify({
+            "success": True,
+            "msg": "注册成功",
+            "data": {
+                "username": user.username
+            }
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"注册失败: {str(e)}")
+        return jsonify({"success": False, "msg": f"注册失败: {str(e)}"}), 200
 
 @app.route('/never_guess_my_usage/set_info', )
 def data_check():
@@ -1286,25 +1348,34 @@ def get_notifications():
 @app.route('/never_guess_my_usage/del_password', methods=['POST'])
 @require_auth
 def user_reset_password(user, password):
-    """重置用户密码"""
+    """重置用户密码，同时可更新 API key"""
     try:
         data = get_request_data()
         new_password = data.get('new_password', '').strip()
+        new_api_key = data.get('new_api_key', '').strip()
+
         if not new_password:
             return jsonify({"success": False, "msg": "新密码不能为空"})
 
         # 由于使用了require_auth装饰器，我们已经有了经过验证的用户信息
-        # 只允许用户重置自己的密码
         current_user = user  # 从装饰器获得的用户名
 
         # 调用sqlitelog中的重置密码函数
         from sqlitelog import reset_user_password
         success, msg = reset_user_password(current_user, new_password)
 
-        if success:
-            return jsonify({"success": True, "msg": msg})
-        else:
+        if not success:
             return jsonify({"success": False, "msg": msg})
+
+        # 如果提供了新的 API key，则更新
+        if new_api_key:
+            user_obj = sqlitelog.get_user_by_username(current_user)
+            if user_obj:
+                user_obj.api_key = new_api_key
+                user_obj.updated_at = datetime.now()
+                user_obj.save()
+
+        return jsonify({"success": True, "msg": "密码更新成功"})
 
     except Exception as e:
         app.logger.error(f"重置密码失败: {str(e)}")

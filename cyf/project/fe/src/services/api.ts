@@ -97,6 +97,16 @@ export const authAPI = {
       user: username,
       password: password
     })
+  },
+  register: (username: string, password: string, apiKey?: string) => {
+    const data: any = {
+      username: username,
+      password: password
+    }
+    if (apiKey !== undefined) {
+      data.api_key = apiKey
+    }
+    return api.post('/never_guess_my_usage/register', data)
   }
 }
 
@@ -313,11 +323,15 @@ export const chatAPI = {
     })
   },
 
-  // 重置密码
-  resetPassword: (newPassword: string) => {
-    return api.post('/never_guess_my_usage/del_password', {
+  // 重置密码（支持更新 API key）
+  resetPassword: (newPassword: string, newApiKey?: string) => {
+    const data: any = {
       new_password: newPassword
-    })
+    }
+    if (newApiKey !== undefined) {
+      data.new_api_key = newApiKey
+    }
+    return api.post('/never_guess_my_usage/del_password', data)
   },
 
   // 获取通知列表

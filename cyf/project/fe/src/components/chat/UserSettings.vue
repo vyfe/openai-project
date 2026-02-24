@@ -40,6 +40,22 @@
           :placeholder="$t('chat.confirmNewPassword')"
         />
       </el-form-item>
+
+      <!-- API key 输入框 -->
+      <el-form-item :label="$t('chat.apiKey')">
+        <el-input
+          v-model="form.apiKey"
+          type="password"
+          show-password
+          :placeholder="$t('chat.apiKeyPlaceholder')"
+        />
+      </el-form-item>
+
+      <!-- API key 提示信息 -->
+      <div class="text-xs text-gray-500 mb-4 flex items-start gap-1">
+        <el-icon><InfoFilled /></el-icon>
+        <span>{{ $t('chat.apiKeyHint') }}</span>
+      </div>
     </el-form>
 
     <template #footer>
@@ -63,6 +79,7 @@ import { ElMessage, FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
 import { chatAPI, authAPI } from '../../services/api'
+import { InfoFilled } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -87,7 +104,8 @@ const loading = ref(false)
 const form = reactive({
   currentPassword: '',
   newPassword: '',
-  confirmNewPassword: ''
+  confirmNewPassword: '',
+  apiKey: ''
 })
 
 const validatePassword = (rule: any, value: string, callback: Function) => {
@@ -137,8 +155,12 @@ const handleSubmit = async () => {
       return
     }
 
-    // 重置密码
-    const resetResult = await chatAPI.resetPassword(form.newPassword)
+    // 重置密码（可选择更新 API key）
+    const resetResult = await chatAPI.resetPassword(
+      form.newPassword,
+      form.apiKey || undefined
+    )
+
     if (resetResult.success) {
       ElMessage.success(resetResult.msg || t('chat.passwordUpdatedSuccessfully'))
       emit('passwordUpdated')
@@ -147,6 +169,7 @@ const handleSubmit = async () => {
       form.currentPassword = ''
       form.newPassword = ''
       form.confirmNewPassword = ''
+      form.apiKey = ''
     } else {
       ElMessage.error(resetResult.msg || t('chat.updatePasswordFailed'))
     }
@@ -164,7 +187,8 @@ const handleClose = () => {
   Object.assign(form, {
     currentPassword: '',
     newPassword: '',
-    confirmNewPassword: ''
+    confirmNewPassword: '',
+    apiKey: ''
   })
   if (formRef.value) {
     formRef.value.clearValidate()
