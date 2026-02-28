@@ -146,7 +146,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.actions')" width="150" fixed="right">
+      <el-table-column class-name="action-column" :label="t('admin.actions')" width="150" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="openEditDialog(row)">
             {{ t('admin.edit') }}

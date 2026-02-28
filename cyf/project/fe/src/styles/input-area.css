@@ -7,8 +7,9 @@
 
 .input-container {
   display: flex;
-  gap: 12px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
 }
 
 .message-input {
@@ -369,4 +370,168 @@
 .input-area-mobile.always-fixed-bottom .button-group .el-button {
   width: 42.5%;
   margin-left: 5%;
+}
+
+/* 文件预览区域 */
+.file-preview-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+/* 文件预览标签（类似微信） */
+.file-preview-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(232, 240, 255, 0.5);
+  border: 1px solid rgba(144, 180, 248, 0.4);
+  border-radius: 18px;
+  font-size: 13px;
+  color: #334155;
+  transition: all 0.2s ease;
+  max-width: 160px;
+  height: 36px;
+}
+
+.file-preview-tag:hover {
+  background: rgba(144, 180, 248, 0.3);
+  border-color: rgba(144, 180, 248, 0.6);
+}
+
+/* 图片缩略图 */
+.file-preview-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* 非图片文件图标 */
+.file-preview-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(100, 116, 139, 0.7);
+  flex-shrink: 0;
+}
+
+/* 文件名 */
+.file-preview-name {
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  max-width: 80px;
+}
+
+/* 删除按钮（右上角 X） */
+.file-delete-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  opacity: 0.9;
+  transition: all 0.2s ease;
+}
+
+.file-delete-btn:hover {
+  background: rgba(220, 38, 38, 0.95);
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* 暗色主题样式 */
+.dark-theme .file-preview-tag {
+  background: rgba(51, 65, 85, 0.5);
+  border-color: rgba(71, 85, 105, 0.6);
+  color: #cbd5e1;
+}
+
+.dark-theme .file-preview-tag:hover {
+  background: rgba(71, 85, 105, 0.6);
+  border-color: rgba(100, 116, 139, 0.7);
+}
+
+.dark-theme .file-preview-name {
+  color: #cbd5e1;
+}
+
+.dark-theme .file-preview-icon {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.dark-theme .file-delete-btn {
+  border-color: rgba(30, 41, 59, 0.9);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .input-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .file-preview-tag {
+    max-width: 140px;
+    height: 32px;
+    padding: 4px 10px;
+    gap: 6px;
+  }
+
+  .file-preview-thumb,
+  .file-preview-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .file-preview-name {
+    font-size: 12px;
+    max-width: 60px;
+  }
+
+  .file-delete-btn {
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    top: -7px;
+    right: -7px;
+  }
+}
+
+/* 小屏幕适配 */
+@media (max-width: 480px) {
+  .file-preview-area {
+    gap: 6px;
+    padding: 2px 0;
+  }
+
+  .file-preview-tag {
+    max-width: 120px;
+    padding: 4px 8px;
+  }
+
+  .file-preview-name {
+    max-width: 50px;
+  }
 }

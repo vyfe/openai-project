@@ -1,42 +1,84 @@
 /* Admin页面样式 */
 
-.admin-tabs {
-  --el-color-primary: #4f46e5;
+/* 使用CSS变量配合Tailwind的暗色模式 */
+.admin-tabs :deep(.el-tabs__nav) {
+  border-bottom-color: var(--tab-border-color, #e5e7eb);
 }
 
-:deep(.el-tabs__nav) {
-  border-bottom: 2px solid #e5e7eb;
-}
-
-:deep(.el-tabs__item) {
+.admin-tabs :deep(.el-tabs__item) {
   font-weight: 500;
   font-size: 14px;
   padding: 0 20px;
   height: 48px;
   line-height: 48px;
+  color: var(--text-color, #374151);
 }
 
-:deep(.el-tabs__item.is-active) {
-  color: #4f46e5;
-  border-bottom-color: #4f46e5;
+.admin-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--primary-color, #4f46e5);
+  border-bottom-color: var(--primary-color, #4f46e5);
 }
 
-/* 深色主题适配 */
-.dark .admin-tabs {
-  --el-color-primary: #6366f1;
+/* 深色主题适配 - 使用Tailwind的dark:类 */
+.dark .admin-tabs :deep(.el-tabs__nav) {
+  --tab-border-color: #374151;
+  --text-color: #9ca3af;
 }
 
-.dark :deep(.el-tabs__nav) {
-  border-bottom-color: #374151;
+.dark .admin-tabs :deep(.el-tabs__item.is-active) {
+  --primary-color: #6366f1;
 }
 
-.dark :deep(.el-tabs__item) {
-  color: #9ca3af;
+/* 深色主题下的非激活标签 */
+.dark .admin-tabs :deep(.el-tabs__item:not(.is-active)) {
+  --text-color: #9ca3af;
 }
 
-.dark :deep(.el-tabs__item.is-active) {
-  color: #6366f1;
-  border-bottom-color: #6366f1;
+/* 移动端横向滚动标签 */
+@media (max-width: 768px) {
+  .admin-tabs :deep(.el-tabs__nav-scroll) {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .admin-tabs :deep(.el-tabs__nav) {
+    display: flex;
+    flex-wrap: nowrap;
+    width: max-content;
+    padding-bottom: 4px;
+  }
+
+  .admin-tabs :deep(.el-tabs__item) {
+    font-size: 13px;
+    padding: 0 16px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* 自定义滚动条样式 */
+  .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar) {
+    height: 4px;
+  }
+
+  .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-thumb) {
+    background: var(--scrollbar-thumb, #d1d5db);
+    border-radius: 2px;
+  }
+
+  .dark .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-thumb) {
+    --scrollbar-thumb: #4b5563;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-tabs :deep(.el-tabs__item) {
+    font-size: 12px;
+    padding: 0 12px;
+  }
 }
 
 /* 表格样式优化 */
@@ -46,19 +88,81 @@
 }
 
 :deep(.el-table__header-wrapper) {
-  background-color: #f9fafb;
+  background-color: var(--table-header-bg, #f9fafb);
 }
 
 .dark :deep(.el-table__header-wrapper) {
-  background-color: #1f2937;
+  --table-header-bg: #1f2937;
 }
 
 :deep(.el-table__body tr:hover > td) {
-  background-color: #f3f4f6 !important;
+  background-color: var(--table-hover-bg, #f3f4f6) !important;
 }
 
 .dark :deep(.el-table__body tr:hover > td) {
-  background-color: #374151 !important;
+  --table-hover-bg: #374151;
+}
+
+/* 表格文字颜色 */
+:deep(.el-table td) {
+  color: var(--table-text-color, #1f2937);
+}
+
+.dark :deep(.el-table td) {
+  --table-text-color: #e5e7eb;
+}
+
+:deep(.el-table th) {
+  color: var(--table-header-text-color, #6b7280);
+}
+
+.dark :deep(.el-table th) {
+  --table-header-text-color: #9ca3af;
+}
+
+/* 表格边框 */
+:deep(.el-table--border td),
+:deep(.el-table--border th) {
+  border-color: var(--table-border-color, #e5e7eb);
+}
+
+.dark :deep(.el-table--border td),
+.dark :deep(.el-table--border th) {
+  --table-border-color: #374151;
+}
+
+/* 操作列响应式宽度 */
+@media (max-width: 768px) {
+  :deep(.el-table .action-column) {
+    width: 90px !important;
+    min-width: 90px !important;
+  }
+
+  :deep(.el-table .action-column.wide) {
+    width: 160px !important;
+    min-width: 160px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  :deep(.el-table .action-column) {
+    width: 70px !important;
+    min-width: 70px !important;
+  }
+
+  :deep(.el-table .action-column.wide) {
+    width: 140px !important;
+    min-width: 140px !important;
+  }
+
+  :deep(.el-table .el-button--small) {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  :deep(.el-table .action-column .el-button) {
+    margin: 2px;
+  }
 }
 
 /* 弹窗样式优化 */
@@ -68,11 +172,11 @@
 
 :deep(.el-dialog__header) {
   padding: 20px 24px 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom-color: var(--dialog-border-color, #e5e7eb);
 }
 
 .dark :deep(.el-dialog__header) {
-  border-bottom-color: #374151;
+  --dialog-border-color: #374151;
 }
 
 :deep(.el-dialog__body) {
@@ -80,31 +184,63 @@
 }
 
 :deep(.el-dialog__footer) {
-  padding: 16px 24px 20px;
-  border-top: 1px solid #e5e7eb;
+  border-top-color: var(--dialog-border-color, #e5e7eb);
 }
 
 .dark :deep(.el-dialog__footer) {
-  border-top-color: #374151;
+  --dialog-border-color: #374151;
+}
+
+:deep(.el-dialog__title) {
+  color: var(--dialog-title-color, #1f2937);
+}
+
+.dark :deep(.el-dialog__title) {
+  --dialog-title-color: #f3f4f6;
 }
 
 /* 表单样式优化 */
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #374151;
+  color: var(--form-label-color, #374151);
 }
 
 .dark :deep(.el-form-item__label) {
-  color: #d1d5db;
+  --form-label-color: #d1d5db;
 }
 
 :deep(.el-input__wrapper) {
   border-radius: 6px;
 }
 
+:deep(.el-input__inner) {
+  color: var(--input-text-color, #1f2937);
+}
+
+.dark :deep(.el-input__inner) {
+  --input-text-color: #e5e7eb;
+}
+
+:deep(.el-input__wrapper) {
+  background-color: var(--input-bg, #ffffff);
+  border-color: var(--input-border, #d1d5db);
+}
+
+.dark :deep(.el-input__wrapper) {
+  --input-bg: #1f2937;
+  --input-border: #4b5563;
+}
+
 :deep(.el-textarea__inner) {
   border-radius: 6px;
   resize: vertical;
+  background-color: var(--input-bg, #ffffff);
+  color: var(--input-text-color, #1f2937);
+}
+
+.dark :deep(.el-textarea__inner) {
+  --input-bg: #1f2937;
+  --input-text-color: #e5e7eb;
 }
 
 /* 按钮样式优化 */
@@ -127,6 +263,25 @@
 
 :deep(.el-button--danger:hover) {
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+/* 普通按钮 */
+:deep(.el-button--default) {
+  border-color: var(--btn-default-border, #d1d5db);
+  color: var(--btn-default-color, #374151);
+}
+
+.dark :deep(.el-button--default) {
+  --btn-default-border: #4b5563;
+  --btn-default-color: #e5e7eb;
+}
+
+:deep(.el-button--default:hover) {
+  background-color: var(--btn-default-hover, #f3f4f6);
+}
+
+.dark :deep(.el-button--default:hover) {
+  --btn-default-hover: #374151;
 }
 
 /* 标签样式 */
@@ -155,26 +310,118 @@
   color: #991b1b;
 }
 
-/* 响应式适配 */
+:deep(.el-tag--primary) {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* 深色模式下的标签 */
+.dark :deep(.el-tag--success) {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.dark :deep(.el-tag--info) {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.dark :deep(.el-tag--warning) {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.dark :deep(.el-tag--danger) {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.dark :deep(.el-tag--primary) {
+  background-color: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
+}
+
+/* 弹窗响应式 */
 @media (max-width: 768px) {
-  :deep(.el-tabs__nav) {
-    flex-wrap: wrap;
-  }
-
-  :deep(.el-tabs__item) {
-    font-size: 12px;
-    padding: 0 12px;
-  }
-
   :deep(.el-dialog) {
     width: 95% !important;
     margin-top: 5vh !important;
   }
+
+  :deep(.el-dialog__body) {
+    padding: 16px;
+  }
+
+  :deep(.el-form-item__label) {
+    font-size: 14px;
+  }
 }
 
 @media (max-width: 480px) {
-  :deep(.el-tabs__item) {
-    font-size: 11px;
-    padding: 0 8px;
+  :deep(.el-dialog__body) {
+    padding: 12px;
   }
+
+  :deep(.el-dialog__footer) {
+    padding: 12px 16px;
+  }
+}
+
+/* 按钮响应式 */
+@media (max-width: 480px) {
+  :deep(.el-button) {
+    font-size: 13px;
+  }
+}
+
+/* 移动端表格优化 */
+@media (max-width: 640px) {
+  :deep(.el-table) {
+    font-size: 13px;
+  }
+
+  :deep(.el-table th),
+  :deep(.el-table td) {
+    padding: 8px 6px;
+  }
+}
+
+/* 分页器样式 */
+:deep(.el-pagination) {
+  justify-content: center;
+}
+
+:deep(.el-pagination button) {
+  background-color: var(--pagination-bg, #ffffff);
+  color: var(--pagination-color, #374151);
+}
+
+.dark :deep(.el-pagination button) {
+  --pagination-bg: #1f2937;
+  --pagination-color: #e5e7eb;
+}
+
+:deep(.el-pagination button:disabled) {
+  color: var(--pagination-disabled, #9ca3af);
+}
+
+.dark :deep(.el-pagination button:disabled) {
+  --pagination-disabled: #6b7280;
+}
+
+/* 开关组件 */
+:deep(.el-switch__core) {
+  background-color: var(--switch-off-bg, #d1d5db);
+}
+
+.dark :deep(.el-switch__core) {
+  --switch-off-bg: #4b5563;
+}
+
+:deep(.el-switch.is-checked .el-switch__core) {
+  background-color: var(--switch-on-bg, #4f46e5);
+}
+
+.dark :deep(.el-switch.is-checked .el-switch__core) {
+  --switch-on-bg: #6366f1;
 }

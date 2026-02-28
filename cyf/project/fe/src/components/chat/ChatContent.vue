@@ -175,7 +175,7 @@
             </div>
           </div>
           <div class="message-text" v-html="message.type === 'user' ? renderLatexOnly(getTextContent(message.content)) : renderMarkdown(getTextContent(message.content))"></div>
-          <!-- TODO(human): 添加响应式表格和代码块的移动端优化，确保在小屏幕上能够良好显示 -->
+          <!-- TODO(human): 验证中文引号粗体修复 - 测试包含中文引号的**"文本"**是否能正确显示为粗体 -->
           <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
           <!-- 图片预览 - 支持从消息url字段和内容中提取，避免重复显示 -->
           <div v-if="message.url || extractFileUrls(message.content).length > 0" class="message-attachments">
@@ -357,6 +357,13 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { marked } from 'marked'
 import { highlightCode } from '@/utils/highlight.js'
+
+// 配置 marked 启用 GFM（GitHub Flavored Markdown）支持
+// 确保 **粗体** 和 *斜体* 语法能正确解析
+marked.use({
+  gfm: true,          // 启用 GitHub Flavored Markdown
+  breaks: true,        // 启用换行符
+})
 
 // 定义 props 和 emits
 const props = defineProps<{
@@ -953,20 +960,35 @@ const renderLatexOnly = (content: string) => {
 
 // 解析包含数学公式的Markdown内容
 const renderMarkdownWithMath = (content: string) => {
+  // 预处理：处理包含中文引号的粗体标记
+  // marked在解析**"文本"**这种模式时会失败，需要预处理
+  let preprocessedContent = content;
+
+  // 调试：输出原始内容，检查**标记
+  console.log('[Markdown Debug] Original content:', content);
+
+  // 预处理：将 **“文本”** 转换为 **中文文本**
+  // 这是一个临时解决方案，因为marked无法正确解析包含中文引号的粗体
+  preprocessedContent = preprocessedContent.replace(/\*\*“([^”]*?)”\*\*/g, '**$1**');
+  console.log('[Markdown Debug] Preprocessed content:', preprocessedContent);
+
   // 首先解析 Markdown，这样代码块会被正确识别和处理
   let result: string;
   try {
     // marked.parse 应该是同步函数，但如果它返回Promise，我们处理这种情况
-    const parsedContent = marked.parse(content || '');
+    const parsedContent = marked.parse(preprocessedContent || '');
     if (parsedContent instanceof Promise) {
       // 如果是Promise，我们无法在此同步上下文中处理它，使用原始内容
-      result = content || '';
+      result = preprocessedContent || '';
     } else {
       result = typeof parsedContent === 'string' ? parsedContent.trim() : String(parsedContent);
     }
+
+    // 调试：输出解析后的内容
+    console.log('[Markdown Debug] Parsed content:', result);
   } catch (error) {
     console.error('Markdown parsing error:', error);
-    result = content || '';
+    result = preprocessedContent || '';
   }
 
   // 保存代码块内容（pre标签和code标签），防止其中的数学公式被错误处理

@@ -56,7 +56,7 @@ const goBack = () => {
     <!-- Content -->
     <main class="flex-1 p-4 sm:p-6 lg:p-8">
       <div class="max-w-7xl mx-auto">
-        <el-tabs v-model="activeTab" type="card" class="admin-tabs">
+        <el-tabs v-model="activeTab" class="admin-tabs">
           <el-tab-pane v-for="tab in tabs" :key="tab.name" :name="tab.name" :label="tab.label">
             <ModelMetaTable v-if="tab.name === 'models'" />
             <SystemPromptTable v-if="tab.name === 'prompts'" />

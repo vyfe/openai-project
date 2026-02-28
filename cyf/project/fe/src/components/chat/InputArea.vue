@@ -1,6 +1,22 @@
 <template>
   <div :class="['input-area', {'input-area-mobile': props.isMobile, 'always-fixed-bottom': props.isMobile}]">
     <div class="input-container">
+      <!-- 文件预览区域 -->
+      <div v-if="uploadedFiles.length > 0" class="file-preview-area">
+        <div v-for="file in uploadedFiles" :key="file.url" class="file-preview-tag">
+          <!-- 图片预览 -->
+          <img v-if="file.isImage" :src="file.url" class="file-preview-thumb" alt="preview" />
+          <!-- 非图片文件图标 -->
+          <div v-else class="file-preview-icon">
+            <el-icon><Document /></el-icon>
+          </div>
+          <!-- 文件名 -->
+          <span class="file-preview-name">{{ file.name }}</span>
+          <!-- 删除按钮 -->
+          <el-button class="file-delete-btn" :icon="Close" size="small" circle @click="removeFile(file)" />
+        </div>
+      </div>
+
       <el-input
         v-model="inputMessage"
         type="textarea"
@@ -51,7 +67,7 @@
             <el-button
               type="primary"
               :icon="Position"
-              :disabled="!inputMessage.trim() || isLoading"
+              :disabled="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
               @click="sendMessage"
             >
               {{ t('chat.send') }}
@@ -71,9 +87,18 @@ import {
   UploadFilled,
   Position,
   Plus,
+  Document,
+  Close,
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
 import { Props, FileUploadResponse } from '@/components/chat/types'
+
+// 提取的文件接口
+interface ExtractedFile {
+  url: string
+  name: string
+  isImage: boolean
+}
 
 const props = withDefaults(defineProps<Props>(), {
   sendPreference: 'enter',
@@ -130,6 +155,9 @@ const showUploadPopover = ref(false)
 const uploadRef = ref()
 const selectedImageSize = ref('1024x1024') // 默认尺寸
 
+// 已上传的文件列表
+const uploadedFiles = ref<ExtractedFile[]>([])
+
 // 计算属性：判断是否为图片模型
 const isImageModel = computed(() => {
   return props.selectedModelType === 2
@@ -174,24 +202,33 @@ onUnmounted(() => {
 
 // 方法
 const sendMessage = () => {
-  if (!inputMessage.value.trim()) return
+  if (!inputMessage.value.trim() && uploadedFiles.value.length === 0) return
 
   if (!props.selectedModel) {
     ElMessage.warning('请先选择一个模型')
     return
   }
 
-  // 如果是图片模型，添加尺寸信息到消息中
+  // 构建要发送的消息
   let messageToSend = inputMessage.value
+
+  // 如果有已上传的文件，将文件URL转换为标记并追加到消息
+  if (uploadedFiles.value.length > 0) {
+    const fileMarkers = uploadedFiles.value.map(file => `\n[FILE_URL:${file.url}]`)
+    messageToSend = messageToSend + fileMarkers.join('')
+  }
+
+  // 如果是图片模型，添加尺寸信息到消息中
   if (isImageModel.value) {
     // 在消息末尾添加图片尺寸信息
-    messageToSend = `${inputMessage.value}\n[IMAGE_SIZE:${selectedImageSize.value}]`
+    messageToSend = `${messageToSend}\n[IMAGE_SIZE:${selectedImageSize.value}]`
   }
 
   emit('send-message', messageToSend, uploadedFile.value || undefined)
 
   // 清空输入框和文件
   inputMessage.value = ''
+  uploadedFiles.value = []
   if (uploadedFile.value) {
     uploadedFile.value = null
     emit('clear-file')
@@ -255,7 +292,7 @@ const handleFileChange = async (file: any) => {
     const response: FileUploadResponse = await fileAPI.upload(fileToUpload)
     // 类型检查以处理可能未定义的content字段
     if (response && typeof response === 'object' && 'content' in response && response.content) {
-      // 文件上传成功，将URL添加到当前消息中
+      // 文件上传成功，将URL添加到已上传文件列表
       uploadedFile.value = fileToUpload
       // 如果后端返回的content是相对路径或缺少host，则补充完整URL
       let fullUrl = response.content
@@ -266,8 +303,12 @@ const handleFileChange = async (file: any) => {
         // 如果返回以斜杠开头（如 /download/xxx.png），则添加当前页面的protocol和host
         fullUrl = window.location.protocol + '//' + window.location.host + response.content
       }
-      // 在输入框中插入文件URL，使用特殊格式以支持Gemini模型
-      inputMessage.value += `\n[FILE_URL:${fullUrl}]`
+      // 添加到已上传文件列表（不在输入框中插入标记）
+      uploadedFiles.value.push({
+        url: fullUrl,
+        name: fileToUpload.name || fileName,
+        isImage: isImageUrl(fullUrl)
+      })
       ElMessage.success(`文件 "${fileToUpload.name || fileName}" 已上传`)
 
       emit('file-change', fileToUpload)
@@ -298,9 +339,23 @@ const handleFileChange = async (file: any) => {
 
 const clearFile = () => {
   uploadedFile.value = null
+  uploadedFiles.value = []
   emit('clear-file')
   if (uploadRef.value) {
     uploadRef.value.clearFiles()
+  }
+}
+
+// 判断是否为图片
+const isImageUrl = (url: string): boolean => {
+  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/i.test(url)
+}
+
+// 删除文件
+const removeFile = (fileToRemove: ExtractedFile) => {
+  const index = uploadedFiles.value.findIndex(f => f.url === fileToRemove.url)
+  if (index !== -1) {
+    uploadedFiles.value.splice(index, 1)
   }
 }
 </script>

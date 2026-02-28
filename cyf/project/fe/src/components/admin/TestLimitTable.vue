@@ -189,7 +189,7 @@ onMounted(() => {
         </template>
       </el-table-column>
       <el-table-column prop="limit" :label="t('admin.limit')" width="100" />
-      <el-table-column :label="t('admin.actions')" width="250" fixed="right">
+      <el-table-column class-name="action-column wide" :label="t('admin.actions')" width="250" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="openEditDialog(row)">
             {{ t('admin.edit') }}

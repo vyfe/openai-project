@@ -145,6 +145,7 @@ def model_meta_create():
             model_name=model_name,
             model_desc=data.get('model_desc', ''),
             model_type=model_type,
+            model_grp=data.get('model_grp', '').strip(),
             recommend=recommend,
             status_valid=status_valid
         )
@@ -171,6 +172,13 @@ def model_meta_update():
             model.model_name = data['model_name'].strip()
         if 'model_desc' in data:
             model.model_desc = data['model_desc']
+        if 'model_type' in data:
+            try:
+                model.model_type = int(data['model_type'])
+            except (ValueError, TypeError):
+                return error_response("模型类型必须是数字(1-文本,2-图像)")
+        if 'model_grp' in data:
+            model.model_grp = data['model_grp'].strip()
         if 'recommend' in data:
             model.recommend = to_bool(data['recommend'])
         if 'status_valid' in data:

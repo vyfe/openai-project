@@ -11,6 +11,7 @@ interface ModelMeta {
   model_name: string
   model_desc: string
   model_type: number
+  model_grp: string
   recommend: boolean
   status_valid: boolean
 }
@@ -24,6 +25,7 @@ const formData = ref({
   model_name: '',
   model_desc: '',
   model_type: 1,
+  model_grp: '',
   recommend: false,
   status_valid: true
 })
@@ -49,6 +51,7 @@ const openCreateDialog = () => {
     model_name: '',
     model_desc: '',
     model_type: 1,
+    model_grp: '',
     recommend: false,
     status_valid: true
   }
@@ -144,6 +147,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column prop="model_grp" :label="t('admin.modelGroup')" min-width="120" />
       <el-table-column prop="recommend" :label="t('admin.recommend')" width="100">
         <template #default="{ row }">
           <el-tag :type="row.recommend ? 'warning' : 'info'" size="small">
@@ -158,7 +162,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('admin.actions')" width="150" fixed="right">
+      <el-table-column class-name="action-column" :label="t('admin.actions')" width="150" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="openEditDialog(row)">
             {{ t('admin.edit') }}
@@ -187,6 +191,9 @@ onMounted(() => {
             <el-option :label="t('admin.text')" :value="1" />
             <el-option :label="t('admin.image')" :value="2" />
           </el-select>
+        </el-form-item>
+        <el-form-item :label="t('admin.modelGroup')">
+          <el-input v-model="formData.model_grp" :placeholder="t('admin.modelGroupPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('admin.recommend')">
           <el-switch v-model="formData.recommend" />
