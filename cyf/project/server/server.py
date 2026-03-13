@@ -363,15 +363,6 @@ def get_client_for_user(username: str) -> OpenAI:
         return random_client()
 
 
-def get_client_ip() -> str:
-    """获取客户端真实 IP（支持反向代理）"""
-    # 优先从 X-Forwarded-For 获取（通过代理时）
-    forwarded = request.headers.get('X-Forwarded-For')
-    if forwarded:
-        # 取第一个 IP（最原始的客户端 IP）
-        return forwarded.split(',')[0].strip()
-    return request.remote_addr or '127.0.0.1'
-
 
 def check_test_user_limit(user: str) -> dict:
     """
@@ -391,11 +382,11 @@ def check_test_user_limit(user: str) -> dict:
     if not is_test_key_user:
         # 用户使用自己的专属 API key，不限流
         return {"success": True}
-
-    client_ip = get_client_ip()
+    # 因为IP不准，将限流改为账号级
+    limit_user = user
 
     # 先检查是否已超限
-    if sqlitelog.check_test_limit_exceeded(client_ip, test_ip_default_limit):
+    if sqlitelog.check_test_limit_exceeded(limit_user, test_ip_default_limit):
         return {
             "success": False,
             "msg": test_exceed_msg,
@@ -403,7 +394,7 @@ def check_test_user_limit(user: str) -> dict:
         }
 
     # 增加计数
-    sqlitelog.increment_test_limit(client_ip, test_ip_default_limit)
+    sqlitelog.increment_test_limit(limit_user, test_ip_default_limit)
     return {"success": True}
 
 

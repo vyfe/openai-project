@@ -101,6 +101,7 @@ const messages = {
       large: '大',
       openAnotherSession: '开启另一个会话',
       exportScreenshot: '导出对话截图',
+      exportHint: '默认导出全部，勾选后仅导出选中内容',
       dialogTitle: '对话标题',
       deleteMessageConfirmation: '确定要删除这条消息吗？',
       retry: '重试',
@@ -169,7 +170,11 @@ const messages = {
       apiKey: 'API 密钥（可选）',
       apiKeyPlaceholder: '不填则使用当前密钥',
       apiKeyHint: '如不填写，将保持当前 API 密钥不变',
-      adminPanel: '管理后台'
+      adminPanel: '管理后台',
+      selectAll: '全选',
+      deselectAll: '取消全选',
+      exportSelected: '导出选中对话内容',
+      noMessagesSelected: '请先选择要导出的消息'
     },
     admin: {
       title: '管理后台',
@@ -385,6 +390,7 @@ const messages = {
       large: 'Large',
       openAnotherSession: 'Open Another Session',
       exportScreenshot: 'Export Screenshot',
+      exportHint: 'Defaults to all; select messages to export only those.',
       dialogTitle: 'Dialog Title',
       deleteMessageConfirmation: 'Are you sure to delete this message?',
       retry: 'Retry',
@@ -452,7 +458,12 @@ const messages = {
       importExportHint: 'Export current browser config, or import shared config from others',
       apiKey: 'API Key (Optional)',
       apiKeyPlaceholder: 'Leave blank to keep current',
-      apiKeyHint: 'If left blank, the current API key will remain unchanged'
+      apiKeyHint: 'If left blank, the current API key will remain unchanged',
+      adminPanel: 'Admin Panel',
+      selectAll: 'Select All',
+      deselectAll: 'Deselect All',
+      exportSelected: 'Export Selected',
+      noMessagesSelected: 'Please select messages to export'
     },
     login: {
       title: 'Smart Conversation System',

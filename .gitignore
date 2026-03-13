@@ -8,5 +8,6 @@
 **/dist/
 .DS_STORE
 .claude/
+.codex/
 .idea/
 .joycode/

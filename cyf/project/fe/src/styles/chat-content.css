@@ -72,6 +72,13 @@
   gap: 8px;
 }
 
+.export-hint {
+  font-size: 12px;
+  color: rgba(120, 120, 120, 0.9);
+  line-height: 1.4;
+  max-width: 360px;
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -689,6 +696,10 @@ body.dark-theme .chat-toolbar {
   border-bottom-color: rgba(80, 120, 180, 0.3);
 }
 
+body.dark-theme .export-hint {
+  color: rgba(200, 200, 200, 0.75);
+}
+
 body.dark-theme .message-avatar {
   background: linear-gradient(135deg, #4a5568, #2d3748);
 }
@@ -812,4 +823,27 @@ body.dark-theme .message-text pre::-webkit-scrollbar-thumb:hover,
 body.dark-theme .message-text code::-webkit-scrollbar-thumb:hover,
 body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
   background-color: rgba(150, 150, 150, 0.7); /* 暗色主题下的滚动条滑块悬停颜色 */
+}
+
+/* 消息复选框样式 */
+.message-checkbox {
+  margin-right: 4px;
+}
+
+.message-checkbox :deep(.el-checkbox__inner) {
+  border-radius: 4px;
+}
+
+.message-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+.message-checkbox :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+.message-checkbox :deep(.el-checkbox__inner::after) {
+  border-color: #fff;
 }

@@ -53,14 +53,20 @@
             {{ t('chat.openAnotherSession') }}
           </el-button>
 
-          <!-- 新增：导出对话截屏按钮 -->
-          <el-button type="primary" size="small" @click="exportConversationScreenshot">
+          <!-- 导出选中消息的按钮 -->
+          <el-button
+            type="primary"
+            size="small"
+            @click="exportSelectedMessages"
+            :disabled="messages.length === 0"
+          >
             <el-icon>
               <Download />
             </el-icon>
-            {{ t('chat.exportScreenshot') }}
+            {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
           </el-button>
         </div>
+        <div class="export-hint">{{ t('chat.exportHint') }}</div>
       </div>
 
       <!-- 移动端：显示抽屉切换按钮 -->
@@ -134,14 +140,21 @@
 
           <!-- 操作按钮 -->
           <div class="action-buttons">
-            <!-- 导出对话截屏按钮 -->
-            <el-button type="primary" size="default" @click="exportConversationScreenshot" class="drawer-button">
+            <!-- 导出选中消息的按钮 -->
+            <el-button
+              type="primary"
+              size="default"
+              @click="exportSelectedMessages"
+              :disabled="messages.length === 0"
+              class="drawer-button"
+            >
               <el-icon>
                 <Download />
               </el-icon>
-              {{ t('chat.exportScreenshot') }}
+              {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
             </el-button>
           </div>
+          <div class="export-hint">{{ t('chat.exportHint') }}</div>
         </div>
       </el-drawer>
     </div>
@@ -165,6 +178,11 @@
             <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') + formData.modelValue}}</span>
             <span class="message-time">{{ message.time }}</span>
             <div class="message-actions">
+              <el-checkbox
+                :model-value="message.selected || false"
+                @change="(val: boolean) => toggleMessageSelection(index, val)"
+                class="message-checkbox"
+              />
               <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(message.content)" />
               <el-popconfirm :title="t('chat.deleteMessageConfirmation')" :confirm-button-text="t('chat.confirm')" :cancel-button-text="t('chat.cancel')"
                 @confirm="deleteMessage(index)">
@@ -491,6 +509,7 @@ const messages = reactive<Array<{
   isError?: boolean  // 添加错误状态
   finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls'  // 新增
   isTruncated?: boolean  // 新增
+  selected?: boolean  // 新增：选中状态
 }>>([
   {
     type: 'ai',
@@ -683,8 +702,47 @@ const clearCurrentSession = () => {
   ElMessage.success('已开启新会话')
 }
 
+// 切换单条消息的选中状态
+const toggleMessageSelection = (index: number, selected: boolean) => {
+  if (index >= 0 && index < messages.length) {
+    messages[index].selected = selected
+  }
+}
+
+// 获取当前选中的消息数量
+const selectedCount = computed(() => {
+  return messages.filter(msg => msg.selected).length
+})
+
+const enableExportDebug = true
+
+const logExportStep = (step: string, details?: Record<string, any>) => {
+  if (!enableExportDebug) return
+  const payload = details ? ` ${JSON.stringify(details)}` : ''
+  console.info(`[export] ${step}${payload}`)
+}
+
+const openPreview = (url: string) => {
+  const previewWindow = window.open(url, '_blank', 'noopener')
+  if (!previewWindow) {
+    const link = document.createElement('a')
+    link.href = url
+    link.target = '_blank'
+    link.rel = 'noopener'
+    link.click()
+  }
+  setTimeout(() => {
+    if (url.startsWith('blob:')) {
+      URL.revokeObjectURL(url)
+    }
+  }, 120000)
+}
+
 // 导出对话截屏（长截图）
-const exportConversationScreenshot = async () => {
+const exportConversationScreenshot = async (options: { skipImageCheck?: boolean } = {}) => {
+  const exportStart = performance.now()
+  logExportStep('start', { t: exportStart })
+  const downloadFilename = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpeg`
   // 先通过 DOM 查询获取容器，确保在任何情况下都能获取到
   let messagesContainerEl = document.querySelector('.messages-container') as HTMLElement;
 
@@ -699,13 +757,15 @@ const exportConversationScreenshot = async () => {
   }
 
   // 检查页面中是否存在图片，如果有则弹出警告
-  const images = messagesContainerEl.querySelectorAll('img.attachment-preview');
-  if (images.length > 0) {
-    ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
-      confirmButtonText: '确定',
-      type: 'warning'
-    });
-    return;
+  if (!options.skipImageCheck) {
+    const images = messagesContainerEl.querySelectorAll('img.attachment-preview');
+    if (images.length > 0) {
+      ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
+        confirmButtonText: '确定',
+        type: 'warning'
+      });
+      return;
+    }
   }
 
   // 用于存储需要隐藏的元素，以便在截图后恢复
@@ -718,21 +778,22 @@ const exportConversationScreenshot = async () => {
     // 动态导入html-to-image库
     const htmlToImageModule = await import('html-to-image');
     const { toJpeg } = htmlToImageModule;
+    logExportStep('lib_ready', { t: performance.now() })
 
     // 添加截图模式类，以应用备用字体样式
     document.body.classList.add('screenshot-mode');
 
     // 为了优化性能，在移动设备上先隐藏一些不必要的元素
-    if (isMobileDevice) {
-      // 隐藏一些在截图时不必要的元素，减少渲染负担
-      const elementsToHide = document.querySelectorAll('.message-actions, .typing, .streaming-indicator, .back-to-top-btn, .github-link-inline');
-      elementsToHide.forEach(el => {
-        if (el instanceof HTMLElement) {
-          el.style.visibility = 'hidden';
-          hiddenElements.push(el);
-        }
-      });
-    }
+    // if (isMobileDevice) {
+    //   // 隐藏一些在截图时不必要的元素，减少渲染负担
+    //   const elementsToHide = document.querySelectorAll('.message-actions, .typing, .streaming-indicator, .back-to-top-btn, .github-link-inline');
+    //   elementsToHide.forEach(el => {
+    //     if (el instanceof HTMLElement) {
+    //       el.style.visibility = 'hidden';
+    //       hiddenElements.push(el);
+    //     }
+    //   });
+    // }
 
     // 保存原始样式
     const originalStyles = {
@@ -766,14 +827,15 @@ const exportConversationScreenshot = async () => {
     messagesContainerEl.style.position = 'relative';
 
     // 根据设备类型设置不同的等待时间，移动端使用较短的等待时间
-    const waitTime = isMobileDevice ? 300 : 600; // 增加等待时间以确保DOM更新
+    const waitTime = 100; // 增加等待时间以确保DOM更新
 
     // 等待内容渲染
     await new Promise(resolve => setTimeout(resolve, waitTime));
+    logExportStep('dom_ready', { t: performance.now(), waitTime })
 
     // 根据设备性能调整参数
-    const pixelRatio = 2.0;
-    const quality = 1.1;
+    const pixelRatio = 1.5;
+    const quality = 1.2;
 
     // 显示导出提示
     const loadingMessage = ElMessage({
@@ -786,7 +848,7 @@ const exportConversationScreenshot = async () => {
     // 首先尝试获取完整的 scrollHeight 作为截图高度
     const fullHeight = Math.max(messagesContainerEl.scrollHeight, messagesContainerEl.offsetHeight);
 
-    const dataUrl = await toJpeg(messagesContainerEl, {
+    const captureOptions = {
       cacheBust: true, // 防止缓存问题
       pixelRatio: pixelRatio, // 根据设备调整清晰度
       skipFonts: false, // 不跳过字体，确保正确渲染
@@ -808,7 +870,24 @@ const exportConversationScreenshot = async () => {
         if (!(node instanceof HTMLElement)) return true;
         return !node.closest('.back-to-top-btn-normal') && !node.closest('.back-to-top-btn');
       },
-    });
+    };
+
+    const { toBlob } = htmlToImageModule as typeof htmlToImageModule & { toBlob?: Function };
+    let downloadUrl = '';
+
+    if (toBlob) {
+      const blob = await toBlob(messagesContainerEl, captureOptions);
+      if (blob) {
+        downloadUrl = URL.createObjectURL(blob);
+        logExportStep('blob_ready', { t: performance.now(), size: blob.size })
+      }
+    }
+
+    if (!downloadUrl) {
+      const dataUrl = await toJpeg(messagesContainerEl, captureOptions);
+      downloadUrl = dataUrl;
+      logExportStep('dataurl_ready', { t: performance.now(), length: dataUrl.length })
+    }
 
     // 关闭加载提示
     loadingMessage.close();
@@ -835,13 +914,25 @@ const exportConversationScreenshot = async () => {
     // 移除截图模式类
     document.body.classList.remove('screenshot-mode');
 
-    // 创建下载链接
-    const link = document.createElement('a');
-    link.download = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpeg`;
-    link.href = dataUrl;
-    link.click();
-
-    ElMessage.success('对话截图已导出');
+    logExportStep('preview_prompt', { t: performance.now() })
+    try {
+      await ElMessageBox.confirm('截图已生成，点击“预览”在新标签页打开，可右键另存为。', '截图已生成', {
+        confirmButtonText: '预览',
+        cancelButtonText: '取消',
+        type: 'success',
+        closeOnClickModal: false,
+      })
+      logExportStep('preview_confirm', { t: performance.now() })
+      openPreview(downloadUrl)
+      logExportStep('preview_opened', { t: performance.now() })
+      ElMessage.success('已打开预览，可右键保存')
+      logExportStep('toast_shown', { t: performance.now(), cost: Math.round(performance.now() - exportStart) })
+    } catch {
+      logExportStep('preview_cancel', { t: performance.now() })
+      if (downloadUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(downloadUrl as string);
+      }
+    }
   } catch (error) {
     console.error('导出截图失败:', error);
     console.error('错误详情:', JSON.stringify(error, null, 2));
@@ -863,6 +954,86 @@ const exportConversationScreenshot = async () => {
       errorMessage = `导出截图失败: ${error.message}`;
     }
     ElMessage.error(errorMessage);
+  }
+}
+
+// 导出选中的消息
+const exportSelectedMessages = async () => {
+  const selectedMessages = messages.filter(msg => msg.selected)
+
+  if (selectedMessages.length === 0) {
+    await exportConversationScreenshot()
+    return
+  }
+
+  // 检查选中的消息中是否包含图片
+  const hasImages = selectedMessages.some(msg => {
+    if (msg.url && isImageUrl(msg.url)) return true
+    const fileUrls = extractFileUrls(msg.content)
+    return fileUrls.some(url => isImageUrl(url))
+  })
+
+  if (hasImages) {
+    ElMessageBox.alert('选中的消息中包含图片，暂不支持导出含图片的消息。请取消选择包含图片的消息后再尝试导出。', '提示', {
+      confirmButtonText: '确定',
+      type: 'warning'
+    })
+    return
+  }
+
+  // 使用现有容器，临时隐藏未选中的消息和复选框
+  const messagesContainerEl = messagesContainer.value
+  if (!messagesContainerEl) {
+    ElMessage.error('无法找到对话容器')
+    return
+  }
+
+  // 获取所有消息元素
+  const messageElements = messagesContainerEl.querySelectorAll('.message')
+
+  // 保存需要恢复的显示状态
+  const hiddenElements: { el: HTMLElement, originalDisplay: string }[] = []
+
+  try {
+    // 隐藏未选中的消息
+    messageElements.forEach((el, index) => {
+      const msg = messages[index]
+      if (msg && !msg.selected) {
+        const htmlEl = el as HTMLElement
+        hiddenElements.push({ el: htmlEl, originalDisplay: htmlEl.style.display || '' })
+        htmlEl.style.display = 'none'
+      }
+    })
+
+    // 隐藏所有复选框
+    const checkboxes = messagesContainerEl.querySelectorAll('.message-checkbox')
+    checkboxes.forEach(cb => {
+      const htmlEl = cb as HTMLElement
+      hiddenElements.push({ el: htmlEl, originalDisplay: htmlEl.style.display || '' })
+      htmlEl.style.visibility = 'hidden'
+    })
+
+    // 隐藏回到顶部按钮
+    const backToTopBtns = messagesContainerEl.querySelectorAll('.back-to-top-btn-normal')
+    backToTopBtns.forEach(btn => {
+      hiddenElements.push({ el: btn as HTMLElement, originalDisplay: (btn as HTMLElement).style.display || '' })
+      ;(btn as HTMLElement).style.display = 'none'
+    })
+
+    // 调用原有的导出函数，但传递一个标志表示这是选中的消息导出
+    await exportConversationScreenshot({ skipImageCheck: true })
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败，请稍后重试')
+  } finally {
+    // 恢复所有隐藏的元素
+    hiddenElements.forEach(({ el, originalDisplay }) => {
+      if (el.style.visibility === 'hidden') {
+        el.style.visibility = ''
+      } else {
+        el.style.display = originalDisplay
+      }
+    })
   }
 }
 
@@ -1993,14 +2164,15 @@ onUnmounted(() => {
 })
 
 // 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
-watch(messages, () => {
+// 使用 getter 监听器，只在消息数量变化时触发，避免选中状态变化导致滚动
+watch(() => messages.length, (newLength, oldLength) => {
   nextTick(() => {
     // 检查是否当前在底部，或者是否有新消息
-    if (formData.isScrolledToBottom || messages.length > 0) {
+    if (formData.isScrolledToBottom || newLength !== oldLength) {
       scrollToBottomOnNewMessage();
     }
   });
-}, { deep: true });
+});
 
 // 从消息内容中提取文件URL列表（兼容新旧格式）
 const extractFileUrls = (content: string): string[] => {
