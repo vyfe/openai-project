@@ -250,7 +250,7 @@
           <el-button type="primary" size="small" @click="exportConfig">
             {{ t('chat.exportConfig') }}
           </el-button>
-          <el-button type="success" size="small" @click="showImportDialog">
+          <el-button type="success" size="small" @click="loadCloudConfig">
             {{ t('chat.importConfig') }}
           </el-button>
         </div>
@@ -446,78 +446,56 @@ const renameRole = (roleId: string) => {
   }
 }
 
-// 导出配置函数
-const exportConfig = () => {
-  try {
-    // 获取所有localStorage项
-    const localStorageData: Record<string, string> = {}
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key) {
-        localStorageData[key] = localStorage.getItem(key) || ''
-      }
+const buildBrowserConfPayload = () => {
+  const localStorageData: Record<string, string> = {}
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key) {
+      localStorageData[key] = localStorage.getItem(key) || ''
     }
+  }
+  return JSON.stringify(localStorageData)
+}
 
-    // 将数据转换为JSON字符串并进行Base64编码
-    const jsonString = JSON.stringify(localStorageData)
-    const base64String = btoa(encodeURIComponent(jsonString))
-
-    // 复制到剪贴板
-    navigator.clipboard.writeText(base64String).then(() => {
-      ElMessage.success('配置已导出并复制到剪贴板！')
-    }).catch(err => {
-      console.error('复制到剪贴板失败:', err)
-      // 如果复制失败，显示弹窗让用户手动复制
-      ElMessageBox.alert(
-        `<div style="word-break: break-all; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px;">
-          ${base64String}
-        </div>`,
-        '配置导出成功',
-        {
-          confirmButtonText: '确定',
-          dangerouslyUseHTMLString: true,
-          customClass: 'copy-config-dialog'
-        }
-      )
-    })
+// 导出配置函数（保存到云端）
+const exportConfig = async () => {
+  try {
+    const jsonString = buildBrowserConfPayload()
+    const response: any = await chatAPI.saveBrowserConf(jsonString)
+    if (response?.success) {
+      ElMessage.success('配置已保存到云端')
+    } else {
+      ElMessage.error(response?.msg || '保存配置失败')
+    }
   } catch (error) {
     console.error('导出配置失败:', error)
-    ElMessage.error('导出配置失败')
+    ElMessage.error('保存配置失败')
   }
 }
 
-// 显示导入配置对话框
-const showImportDialog = () => {
-  ElMessageBox.prompt('请输入导出的配置字符串（Base64编码）', '导入配置', {
-    confirmButtonText: '导入',
-    cancelButtonText: '取消',
-    inputType: 'textarea',
-    inputPlaceholder: '在此粘贴配置字符串...',
-    inputValidator: (value) => {
-      if (!value) return false
-      try {
-        // 尝试解码Base64并解析JSON
-        const decoded = decodeURIComponent(atob(value))
-        JSON.parse(decoded)
-        return true
-      } catch (e) {
-        return '配置字符串格式不正确，请检查是否为有效的Base64编码'
-      }
-    },
-    inputErrorMessage: '配置字符串格式不正确'
-  }).then(({ value }) => {
-    importConfig(value)
-  }).catch(() => {
-    // 用户取消导入
-  })
+// 从云端导入配置
+const loadCloudConfig = async () => {
+  try {
+    const response: any = await chatAPI.getBrowserConf()
+    if (!response?.success) {
+      ElMessage.error(response?.msg || '获取云端配置失败')
+      return
+    }
+    const configString = response?.data || ''
+    if (!configString) {
+      ElMessage.info('云端暂无可用配置')
+      return
+    }
+    applyConfig(configString)
+  } catch (error) {
+    console.error('导入配置失败:', error)
+    ElMessage.error('导入配置失败')
+  }
 }
 
-// 导入配置函数
-const importConfig = (base64String: string) => {
+const applyConfig = (configString: string) => {
   try {
-    // 解码Base64字符串
-    const decoded = decodeURIComponent(atob(base64String))
-    const localStorageData = JSON.parse(decoded)
+    const localStorageData = JSON.parse(configString)
 
     // 验证数据格式
     if (typeof localStorageData !== 'object' || localStorageData === null) {
@@ -548,7 +526,7 @@ const importConfig = (base64String: string) => {
     })
   } catch (error) {
     console.error('导入配置失败:', error)
-    ElMessage.error('导入配置失败，请检查配置字符串是否有效')
+    ElMessage.error('导入配置失败，请检查云端配置是否有效')
   }
 }
 

@@ -4,8 +4,10 @@ import json
 from datetime import datetime, date
 import hashlib
 import secrets
+from typing import Optional
 
 from peewee import *
+from playhouse.migrate import SqliteMigrator, migrate
 
 conf = configparser.ConfigParser()
 conf.read('conf/conf.ini')
@@ -101,6 +103,7 @@ class User(Model):
     password_hash = CharField()            # 密码哈希值
     salt = CharField()                     # 密码盐值
     api_key = CharField(null=True)         # 用户专属API密钥
+    browser_conf = TextField(null=True)    # 浏览器配置（云端保存）
     role = CharField(default='user') # 账户是否激活
     is_active = BooleanField(default=True) # 账户是否激活
     created_at = DateTimeField(default=datetime.now)
@@ -153,8 +156,27 @@ class Notification(Model):
 
 def init_db():
     # 创建表
-    db.connect()
+    db.connect(reuse_if_open=True)
     db.create_tables([Log, Dialog, ModelMeta, SystemPrompt, TestLimit, User, Notification], safe=True)
+    ensure_schema()
+
+
+def ensure_schema():
+    """在启动时补齐缺失字段（仅增量列，不做破坏性变更）"""
+    try:
+        table_name = User._meta.table_name
+        columns = {col.name for col in db.get_columns(table_name)}
+        missing = []
+        if 'browser_conf' not in columns:
+            missing.append(('browser_conf', TextField(null=True)))
+
+        if missing:
+            migrator = SqliteMigrator(db)
+            for column_name, field in missing:
+                migrate(migrator.add_column(table_name, column_name, field))
+            print(f"[db] 已补齐字段: {', '.join(name for name, _ in missing)}")
+    except Exception as e:
+        print(f"[db] 自动更新表结构失败: {e}")
 
 
 def get_or_create_test_limit(user_ip: str, default_limit: int) -> TestLimit:
@@ -375,6 +397,22 @@ def get_user_api_key(username: str) -> str:
     user = get_user_by_username(username)
     return user.api_key if user else None
 
+def get_user_browser_conf(username: str) -> Optional[str]:
+    user = get_user_by_username(username)
+    return user.browser_conf if user else None
+
+def set_user_browser_conf(username: str, browser_conf: str) -> tuple[bool, str]:
+    user = get_user_by_username(username)
+    if not user:
+        return False, "用户不存在"
+    try:
+        user.browser_conf = browser_conf
+        user.updated_at = datetime.now()
+        user.save()
+        return True, "保存成功"
+    except Exception as e:
+        return False, f"保存失败: {str(e)}"
+
 def get_all_active_users() -> list:
     return [u.username for u in User.select().where(User.is_active == True)]
 
@@ -485,6 +523,3 @@ def delete_notification(notification_id: int) -> bool:
         return True
     except DoesNotExist:
         return False
-
-
-

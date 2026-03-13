@@ -337,6 +337,16 @@ export const chatAPI = {
   // 获取通知列表
   getNotifications: () => {
     return api.get('/never_guess_my_usage/notifications')
+  },
+
+  saveBrowserConf: (browserConf: string) => {
+    return api.post('/never_guess_my_usage/browser_conf/save', {
+      browser_conf: browserConf
+    })
+  },
+
+  getBrowserConf: () => {
+    return api.post('/never_guess_my_usage/browser_conf/get', {})
   }
 }
 

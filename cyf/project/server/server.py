@@ -1238,9 +1238,32 @@ def get_usage(user, password):
     except requests.exceptions.RequestException as e:
         app.logger.error(f"获取用量API请求异常: {str(e)}")
         return {"success": False, "msg": f"API请求失败: {str(e)}"}, 200
+
+
+@app.route('/never_guess_my_usage/browser_conf/get', methods=['GET', 'POST'])
+@require_auth
+def get_browser_conf(user, password):
+    try:
+        browser_conf = sqlitelog.get_user_browser_conf(user) or ''
+        return {"success": True, "data": browser_conf}, 200
     except Exception as e:
-        app.logger.error(f"获取用量异常: {str(e)}")
-        return {"success": False, "msg": f"获取用量失败: {str(e)}"}, 200
+        app.logger.error(f"获取浏览器配置失败: {str(e)}")
+        return {"success": False, "msg": f"获取配置失败: {str(e)}"}, 200
+
+
+@app.route('/never_guess_my_usage/browser_conf/save', methods=['POST'])
+@require_auth
+def save_browser_conf(user, password):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not data:
+            data = request.values or {}
+        browser_conf = data.get('browser_conf', '')
+        success, msg = sqlitelog.set_user_browser_conf(user, browser_conf)
+        return {"success": success, "msg": msg}, 200
+    except Exception as e:
+        app.logger.error(f"保存浏览器配置失败: {str(e)}")
+        return {"success": False, "msg": f"保存配置失败: {str(e)}"}, 200
 
 
 @app.route('/never_guess_my_usage/split_his_delete', methods=['POST'])

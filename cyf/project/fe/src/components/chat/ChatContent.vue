@@ -722,18 +722,64 @@ const logExportStep = (step: string, details?: Record<string, any>) => {
   console.info(`[export] ${step}${payload}`)
 }
 
-const openPreview = (url: string) => {
-  const previewWindow = window.open(url, '_blank', 'noopener')
+const buildPreviewHtml = (imageUrl: string, filename: string) => {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>对话截图预览</title>
+    <style>
+      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #0f1115; color: #e5e7eb; }
+      .bar { position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: center; padding: 12px 16px; background: rgba(15, 17, 21, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .title { font-size: 14px; opacity: 0.9; flex: 1; }
+      .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; background: #2563eb; color: #fff; text-decoration: none; font-size: 14px; }
+      .btn.secondary { background: #374151; }
+      .container { padding: 16px; display: flex; justify-content: center; }
+      img { max-width: 100%; height: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.4); border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <div class="title">截图已生成，可直接下载或右键保存</div>
+      <a class="btn" href="${imageUrl}" download="${filename}">下载图片</a>
+      <a class="btn secondary" href="${imageUrl}" target="_blank" rel="noopener">新标签打开</a>
+    </div>
+    <div class="container">
+      <img src="${imageUrl}" alt="截图预览" />
+    </div>
+  </body>
+</html>`
+}
+
+const openPreview = async (imageUrl: string, filename: string) => {
+  const previewHtml = buildPreviewHtml(imageUrl, filename)
+  const previewBlob = new Blob([previewHtml], { type: 'text/html' })
+  const previewUrl = URL.createObjectURL(previewBlob)
+  const previewWindow = window.open(previewUrl, '_blank', 'noopener')
   if (!previewWindow) {
-    const link = document.createElement('a')
-    link.href = url
-    link.target = '_blank'
-    link.rel = 'noopener'
-    link.click()
+    URL.revokeObjectURL(previewUrl)
+    try {
+      await ElMessageBox.confirm('浏览器拦截了预览弹窗，请允许此站点弹窗后重试。', '弹窗被拦截', {
+        confirmButtonText: '我已允许，重试',
+        cancelButtonText: '取消',
+        type: 'warning',
+        closeOnClickModal: false,
+      })
+      const retryWindow = window.open(previewUrl, '_blank', 'noopener')
+      if (!retryWindow) {
+        ElMessage.warning('仍然无法打开预览窗口，请检查浏览器弹窗设置')
+      }
+    } catch {
+      // User cancelled.
+    }
+    return
   }
+
   setTimeout(() => {
-    if (url.startsWith('blob:')) {
-      URL.revokeObjectURL(url)
+    URL.revokeObjectURL(previewUrl)
+    if (imageUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(imageUrl)
     }
   }, 120000)
 }
@@ -834,8 +880,8 @@ const exportConversationScreenshot = async (options: { skipImageCheck?: boolean 
     logExportStep('dom_ready', { t: performance.now(), waitTime })
 
     // 根据设备性能调整参数
-    const pixelRatio = 1.5;
-    const quality = 1.2;
+    const pixelRatio = 2;
+    const quality = 1.5;
 
     // 显示导出提示
     const loadingMessage = ElMessage({
@@ -923,7 +969,7 @@ const exportConversationScreenshot = async (options: { skipImageCheck?: boolean 
         closeOnClickModal: false,
       })
       logExportStep('preview_confirm', { t: performance.now() })
-      openPreview(downloadUrl)
+      await openPreview(downloadUrl, downloadFilename)
       logExportStep('preview_opened', { t: performance.now() })
       ElMessage.success('已打开预览，可右键保存')
       logExportStep('toast_shown', { t: performance.now(), cost: Math.round(performance.now() - exportStart) })
