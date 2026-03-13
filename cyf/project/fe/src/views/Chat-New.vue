@@ -72,7 +72,7 @@
             <el-button
               :icon="Bell"
               size="small"
-              @click="showNotificationPanel = true"
+              @click="openNotifications"
               class="notification-btn tech-button"
             >
               {{ formData.isMobile ? '' : t('chat.notifications') }}
@@ -204,7 +204,7 @@
             isModal
             :notifications="notifications"
             :loading="notificationsLoading"
-            @close="showNotificationPanel = false"
+            @close="closeNotifications"
           />
         </div>
       </div>
@@ -288,7 +288,16 @@ const showUsagePopover = ref(false)
 const showNotificationPanel = ref(false)
 const showUserSettings = ref(false)
 
-const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications } = useNotifications()
+const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
+
+const openNotifications = () => {
+  showNotificationPanel.value = true
+}
+
+const closeNotifications = () => {
+  showNotificationPanel.value = false
+  markNotificationsRead()
+}
 
 // 用量查询相关
 const loadingUsage = ref(false)
@@ -523,7 +532,7 @@ const handlePasswordUpdated = () => {
 
 // 处理点击通知面板外部区域关闭面板
 const handleNotificationBackdropClick = () => {
-  showNotificationPanel.value = false
+  closeNotifications()
 }
 
 // 切换语言

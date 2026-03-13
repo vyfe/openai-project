@@ -44,6 +44,7 @@ export const useNotifications = () => {
   const notifications = ref<Notification[]>([])
   const notificationsLoading = ref(false)
   const hasNewNotifications = ref(false)
+  const latestNotificationId = ref(0)
 
   const fetchNotifications = async () => {
     notificationsLoading.value = true
@@ -53,12 +54,9 @@ export const useNotifications = () => {
       notifications.value = list
 
       const latestId = getLatestNotificationId(list)
+      latestNotificationId.value = latestId
       const storedId = getStoredLatestNotificationId()
       hasNewNotifications.value = latestId > storedId
-
-      if (latestId > 0) {
-        localStorage.setItem(NOTIFICATION_LATEST_ID_KEY, latestId.toString())
-      }
     } catch (error) {
       console.error('Error fetching notifications:', error)
       notifications.value = []
@@ -68,10 +66,18 @@ export const useNotifications = () => {
     }
   }
 
+  const markNotificationsRead = () => {
+    if (latestNotificationId.value > 0) {
+      localStorage.setItem(NOTIFICATION_LATEST_ID_KEY, latestNotificationId.value.toString())
+      hasNewNotifications.value = false
+    }
+  }
+
   return {
     notifications,
     notificationsLoading,
     hasNewNotifications,
-    fetchNotifications
+    fetchNotifications,
+    markNotificationsRead
   }
 }

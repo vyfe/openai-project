@@ -71,15 +71,15 @@
         <!-- 通知按钮 -->
         <div class="mt-4 flex justify-end">
           <div class="notification-button-wrapper">
-            <el-button
-              type="info"
-              plain
-              size="small"
-              @click="showNotificationModal = true"
-              :icon="Bell"
-            >
-              {{ t('login.viewNotifications') }}
-            </el-button>
+          <el-button
+            type="info"
+            plain
+            size="small"
+            @click="openNotifications"
+            :icon="Bell"
+          >
+            {{ t('login.viewNotifications') }}
+          </el-button>
             <span v-if="hasNewNotifications" class="notification-dot" />
           </div>
         </div>
@@ -104,7 +104,7 @@
             isModal
             :notifications="notifications"
             :loading="notificationsLoading"
-            @close="showNotificationModal = false"
+            @close="closeNotifications"
           />
         </div>
       </div>
@@ -269,7 +269,16 @@ const registerForm = reactive({
   apiKey: ''
 })
 
-const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications } = useNotifications()
+const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
+
+const openNotifications = () => {
+  showNotificationModal.value = true
+}
+
+const closeNotifications = () => {
+  showNotificationModal.value = false
+  markNotificationsRead()
+}
 
 const registerRules: FormRules = {
   username: [
