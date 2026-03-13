@@ -68,14 +68,17 @@
           </el-button>
 
           <!-- 通知按钮 -->
-          <el-button
-            :icon="Bell"
-            size="small"
-            @click="showNotificationPanel = true"
-            class="notification-btn tech-button"
-          >
-            {{ formData.isMobile ? '' : t('chat.notifications') }}
-          </el-button>
+          <div class="notification-button-wrapper">
+            <el-button
+              :icon="Bell"
+              size="small"
+              @click="showNotificationPanel = true"
+              class="notification-btn tech-button"
+            >
+              {{ formData.isMobile ? '' : t('chat.notifications') }}
+            </el-button>
+            <span v-if="hasNewNotifications" class="notification-dot" />
+          </div>
           <!-- TODO(human): 优化移动端按钮的布局和样式，考虑添加更多针对移动设备的适配样式 -->
         </div>
       </div>
@@ -199,6 +202,8 @@
           <NotificationPanel
             :isDarkTheme="formData.isDarkTheme"
             isModal
+            :notifications="notifications"
+            :loading="notificationsLoading"
             @close="showNotificationPanel = false"
           />
         </div>
@@ -225,6 +230,7 @@ import UserSettings from '../components/chat/UserSettings.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
 import NotificationPanel from '../components/NotificationPanel.vue'
+import { useNotifications } from '@/composables/useNotifications'
 
 // 国际化和认证
 const { t, locale } = useI18n()
@@ -281,6 +287,8 @@ const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
 const showNotificationPanel = ref(false)
 const showUserSettings = ref(false)
+
+const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications } = useNotifications()
 
 // 用量查询相关
 const loadingUsage = ref(false)
@@ -599,6 +607,8 @@ onMounted(() => {
       formData.systemPrompt = activeRole.prompt
     }
   }
+
+  fetchNotifications()
 })
 
 // 组件卸载

@@ -65,6 +65,14 @@
             </el-popover>
 
             <el-button
+              v-if="props.isLoading && props.streamEnabled"
+              type="danger"
+              :icon="CircleClose"
+              @click="emit('stop-stream')"
+            >
+              {{ t('chat.stopStream') }}
+            </el-button>
+            <el-button
               type="primary"
               :icon="Position"
               :disabled="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
@@ -89,6 +97,7 @@ import {
   Plus,
   Document,
   Close,
+  CircleClose
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
 import { Props, FileUploadResponse } from '@/components/chat/types'
@@ -125,6 +134,7 @@ interface Emits {
   'send-message': [message: string, file?: File, imageSize?: string]  // 添加图片尺寸参数
   'file-change': [file: any]
   'clear-file': []
+  'stop-stream': []
 }
 
 const emit = defineEmits<Emits>()

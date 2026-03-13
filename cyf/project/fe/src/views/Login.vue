@@ -70,15 +70,18 @@
 
         <!-- 通知按钮 -->
         <div class="mt-4 flex justify-end">
-          <el-button
-            type="info"
-            plain
-            size="small"
-            @click="showNotificationModal = true"
-            :icon="Bell"
-          >
-            {{ t('login.viewNotifications') }}
-          </el-button>
+          <div class="notification-button-wrapper">
+            <el-button
+              type="info"
+              plain
+              size="small"
+              @click="showNotificationModal = true"
+              :icon="Bell"
+            >
+              {{ t('login.viewNotifications') }}
+            </el-button>
+            <span v-if="hasNewNotifications" class="notification-dot" />
+          </div>
         </div>
       </div>
     </div>
@@ -99,6 +102,8 @@
         <div class="relative">
           <NotificationPanel
             isModal
+            :notifications="notifications"
+            :loading="notificationsLoading"
             @close="showNotificationModal = false"
           />
         </div>
@@ -221,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
@@ -229,6 +234,7 @@ import { User, Lock, Link, Bell, CirclePlus, Close, InfoFilled } from '@element-
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 import NotificationPanel from '@/components/NotificationPanel.vue'
+import { useNotifications } from '@/composables/useNotifications'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -263,6 +269,8 @@ const registerForm = reactive({
   apiKey: ''
 })
 
+const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications } = useNotifications()
+
 const registerRules: FormRules = {
   username: [
     { required: true, message: t('validation.usernameRequired'), trigger: 'blur' },
@@ -288,6 +296,10 @@ const registerRules: FormRules = {
   ],
   apiKey: []
 }
+
+onMounted(() => {
+  fetchNotifications()
+})
 
 const handleLogin = async () => {
   if (!loginFormRef.value) return
@@ -484,6 +496,23 @@ const handleRegister = async () => {
 .el-textarea__inner {
   background-color: #e4e4e4;
   color: #4b4b4b;
+}
+
+.notification-button-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
 }
 
 /* 确保 el-form-item 内容居中 */

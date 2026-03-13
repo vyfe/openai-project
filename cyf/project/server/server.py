@@ -6,6 +6,8 @@ import random
 import sys
 import time
 import re
+import threading
+import uuid
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from urllib.parse import urlparse
@@ -40,6 +42,43 @@ app.config['MAX_CONTENT_LENGTH'] = 52428800
 CORS(app, supports_credentials=True, origins=["*"],
      allow_headers=["Content-Type", "Authorization", "X-Requested-With", "User-Agent", "Cache-Control"],
      methods=["GET", "PUT", "POST", "DELETE", "OPTIONS"])
+
+# 流式请求取消控制
+stream_cancel_lock = threading.Lock()
+stream_cancel_registry = {}
+
+def register_stream_request(request_id: str):
+    with stream_cancel_lock:
+        stream_cancel_registry[request_id] = {"cancelled": False, "stream": None}
+
+def set_stream_object(request_id: str, stream_obj):
+    with stream_cancel_lock:
+        if request_id in stream_cancel_registry:
+            stream_cancel_registry[request_id]["stream"] = stream_obj
+
+def is_stream_cancelled(request_id: str) -> bool:
+    with stream_cancel_lock:
+        entry = stream_cancel_registry.get(request_id)
+        return bool(entry and entry.get("cancelled"))
+
+def cancel_stream_request(request_id: str) -> bool:
+    stream_obj = None
+    with stream_cancel_lock:
+        entry = stream_cancel_registry.get(request_id)
+        if not entry:
+            return False
+        entry["cancelled"] = True
+        stream_obj = entry.get("stream")
+    if stream_obj is not None:
+        try:
+            stream_obj.close()
+        except Exception:
+            pass
+    return True
+
+def cleanup_stream_request(request_id: str):
+    with stream_cancel_lock:
+        stream_cancel_registry.pop(request_id, None)
 
 # 为所有响应添加CORS头的函数
 @app.after_request
@@ -805,6 +844,7 @@ def dialog_stream(user, password):
     data = get_request_data()
     app.logger.info(data)
     try:
+        request_id = data.get('request_id') or uuid.uuid4().hex
         model = data.get('model', '')
         app.logger.info(model)
         # 获取前端传入的对话标题
@@ -873,9 +913,14 @@ def dialog_stream(user, password):
                 })
                 logging.info(f"已添加系统提示词 ID: {system_prompt_id} (流式)")
 
+        register_stream_request(request_id)
+
         def generate():
             full_content = ""
+            was_cancelled = False
             try:
+                if is_stream_cancelled(request_id):
+                    return
                 # 构建API调用参数
                 api_params = {
                     "model": model,
@@ -886,9 +931,17 @@ def dialog_stream(user, password):
                 }
 
                 stream = get_client_for_user(user).chat.completions.create(**api_params)
+                set_stream_object(request_id, stream)
 
                 finish_reason = None
                 for chunk in stream:
+                    if is_stream_cancelled(request_id):
+                        was_cancelled = True
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                        break
                     if chunk.choices:
                         delta = chunk.choices[0].delta
                         if delta.content:
@@ -897,6 +950,9 @@ def dialog_stream(user, password):
                             yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
                         if chunk.choices[0].finish_reason:
                             finish_reason = chunk.choices[0].finish_reason
+
+                if was_cancelled:
+                    return
 
                 # 记录日志 - 获取实际使用的token数
                 # 在流式响应中无法获取usage，所以使用估算的方式
@@ -914,6 +970,8 @@ def dialog_stream(user, password):
                 app.logger.error(f"流式API请求异常处理: {error_response}")
                 # 发送错误信息，标记为已完成，带有错误详情
                 yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"
+            finally:
+                cleanup_stream_request(request_id)
 
         return Response(
             generate(),
@@ -937,6 +995,17 @@ def dialog_stream(user, password):
                 'Connection': 'close',
             }
         )
+
+
+@app.route('/never_guess_my_usage/split_stream_cancel', methods=['POST'])
+@require_auth
+def dialog_stream_cancel(user, password):
+    data = get_request_data()
+    request_id = data.get('request_id')
+    if not request_id:
+        return {"success": False, "msg": "missing request_id"}, 200
+    cancelled = cancel_stream_request(request_id)
+    return {"success": cancelled, "msg": "cancelled" if cancelled else "not_found"}, 200
 
 @app.route('/never_guess_my_usage/split_pic', methods=['POST'])
 @require_auth

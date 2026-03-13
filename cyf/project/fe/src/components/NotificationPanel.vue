@@ -161,8 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { chatAPI } from '@/services/api'
+import { computed } from 'vue'
 
 interface Notification {
   id: number;
@@ -178,12 +177,14 @@ interface Notification {
 const props = defineProps<{
   isModal?: boolean;
   isDarkTheme?: boolean;
+  notifications?: Notification[];
+  loading?: boolean;
 }>()
 
 const emit = defineEmits(['close'])
 
-const notifications = ref<Notification[]>([])
-const loading = ref(true)
+const notifications = computed(() => props.notifications ?? [])
+const loading = computed(() => props.loading ?? false)
 
 const formatDate = (dateString: string) => {
   try {
@@ -194,40 +195,7 @@ const formatDate = (dateString: string) => {
   }
 }
 
-const fetchNotifications = async () => {
-  try {
-    loading.value = true
-
-    const response = await chatAPI.getNotifications()
-
-    // 由于API响应类型未定义success属性，我们假设返回的数据是正确的格式
-    // 检查是否有数据返回
-    if (response && response.data && Array.isArray(response.data.list)) {
-      // 将后端返回的字段映射到组件使用的字段
-      notifications.value = response.data.list.map((item: any) => ({
-        id: item.id,
-        title: item.title,
-        content: item.content,
-        publish_time: item.publish_time, // 使用后端实际的时间字段
-        status: item.status,
-        priority: item.priority,
-        created_at: item.created_at,
-        updated_at: item.updated_at
-      }))
-    } else {
-      notifications.value = []
-    }
-  } catch (error) {
-    console.error('Error fetching notifications:', error)
-    notifications.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  fetchNotifications()
-})
+// 通知数据由父组件加载后传入
 </script>
 
 <style>

@@ -334,6 +334,7 @@
       @send-message="handleSendMessage"
       @file-change="handleFileChange"
       @clear-file="clearFile"
+      @stop-stream="handleStopStream"
     />
 
     <!-- TODO(human): 实现移动端输入框按钮的状态指示器，例如添加一个小标签显示当前状态（如"隐藏输入框"或"显示输入框"） -->
@@ -554,6 +555,11 @@ const inputMessage = ref('')
 const uploadRef = ref()
 const isLoading = ref(false)
 const uploadedFile = ref<File | null>(null)
+const activeStreamAbortController = ref<AbortController | null>(null)
+const activeRequestId = ref<string | null>(null)
+const activeAiMessageIndex = ref<number | null>(null)
+const waitingChoiceTimeoutId = ref<number | null>(null)
+const hasShownWaitingChoice = ref(false)
 
 // 添加字体大小控制 对话框
 const fontSize = computed({
@@ -1417,6 +1423,76 @@ const deleteMessage = (index: number) => {
   }
 }
 
+const generateRequestId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+const clearWaitingChoiceTimer = () => {
+  if (waitingChoiceTimeoutId.value) {
+    clearTimeout(waitingChoiceTimeoutId.value)
+    waitingChoiceTimeoutId.value = null
+  }
+}
+
+const startWaitingChoiceTimer = () => {
+  clearWaitingChoiceTimer()
+  hasShownWaitingChoice.value = false
+  waitingChoiceTimeoutId.value = window.setTimeout(async () => {
+    if (!isLoading.value || hasShownWaitingChoice.value) return
+    hasShownWaitingChoice.value = true
+    try {
+      await ElMessageBox.confirm(
+        t('chat.streamWaitTimeoutMessage'),
+        t('chat.streamWaitTimeoutTitle'),
+        {
+          confirmButtonText: t('chat.continueWait'),
+          cancelButtonText: t('chat.stopStream'),
+          type: 'warning',
+          closeOnClickModal: false
+        }
+      )
+    } catch {
+      await handleStopStream('timeout')
+    }
+  }, 30000)
+}
+
+const handleStopStream = async (reason: 'user' | 'timeout' = 'user') => {
+  if (!activeStreamAbortController.value) {
+    return
+  }
+  const requestId = activeRequestId.value
+  activeStreamAbortController.value.abort()
+  activeStreamAbortController.value = null
+  activeRequestId.value = null
+  clearWaitingChoiceTimer()
+
+  try {
+    if (requestId) {
+      await chatAPI.cancelChatStream(requestId)
+    }
+  } catch (error) {
+    console.error('终止流式请求失败:', error)
+  }
+
+  if (activeAiMessageIndex.value !== null && messages[activeAiMessageIndex.value]) {
+    const message = messages[activeAiMessageIndex.value]
+    message.isError = true
+    if (!message.content) {
+      message.content = t('chat.streamStopped')
+    }
+  }
+
+  isLoading.value = false
+
+  if (reason === 'user') {
+    ElMessage.info(t('chat.streamStopped'))
+  }
+}
+
 // 通用API调用函数
 const callApi = async (
   userMessage: any,
@@ -1429,6 +1505,7 @@ const callApi = async (
   } = {}
 ) => {
   const { isRetry = false, originalIndex, isContinue = false, imageSize = '1024x1024' } = options;
+  let wasUserAborted = false;
 
   isLoading.value = true;
 
@@ -1547,6 +1624,13 @@ const callApi = async (
           });
         }
 
+        const requestId = generateRequestId()
+        const abortController = new AbortController()
+        activeStreamAbortController.value = abortController
+        activeRequestId.value = requestId
+        activeAiMessageIndex.value = aiMessageIndex
+        startWaitingChoiceTimer()
+
         // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
         const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content);
 
@@ -1557,6 +1641,10 @@ const callApi = async (
             messages[aiMessageIndex].content += content;
             if (done) {
               isLoading.value = false;
+              clearWaitingChoiceTimer()
+              activeStreamAbortController.value = null
+              activeRequestId.value = null
+              activeAiMessageIndex.value = null
               if (finishReason === 'length') {
                 messages[aiMessageIndex].finishReason = 'length';
                 messages[aiMessageIndex].isTruncated = true;
@@ -1576,15 +1664,19 @@ const callApi = async (
               }
             }
             // 在每次更新内容后滚动到底部
-            nextTick(() => {
-              scrollToBottom();
-            });
+            if (formData.isScrolledToBottom) {
+              nextTick(() => {
+                scrollToBottom();
+              });
+            }
           },
           formData.contextCount > 0 ? 'multi' : 'single',
           dialogArray,
           formData.dialogTitle,  // 添加dialogTitle参数
           Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
-          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
+          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
+          requestId,
+          abortController.signal
         );
       } else {
         // 使用非流式API
@@ -1647,6 +1739,11 @@ const callApi = async (
   } catch (error: any) {
     console.error(isRetry ? '重试API Error:' : 'API Error:', error);
 
+    if (error?.name === 'AbortError') {
+      wasUserAborted = true;
+      return;
+    }
+
     let errorMessage = isRetry ? '重试失败，请稍后再次重试' : '获取AI回复失败，请重试';
     if (error.response) {
       errorMessage = isRetry
@@ -1686,10 +1783,14 @@ const callApi = async (
     }
   } finally {
     isLoading.value = false;
+    clearWaitingChoiceTimer()
+    activeStreamAbortController.value = null
+    activeRequestId.value = null
+    activeAiMessageIndex.value = null
     await nextTick();
     scrollToBottomOnNewMessage();
 
-    if (!isRetry && !isContinue) {
+    if (!isRetry && !isContinue && !wasUserAborted) {
       // 刷新对话历史记录（仅新消息发送时）
       emit('refresh-history');
     }
@@ -2052,11 +2153,11 @@ const toggleMobileInput = () => {
 
 // 智能滚动到底部函数
 const scrollToBottom = (force = false) => {
-  if (messagesContainer.value) {
-    // 使用最大可能的scrollTop值确保滚动到底部
-    const maxScrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight;
-    messagesContainer.value.scrollTop = maxScrollTop;
-  }
+  if (!messagesContainer.value) return
+  if (!force && !formData.isScrolledToBottom) return
+  // 使用最大可能的scrollTop值确保滚动到底部
+  const maxScrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight;
+  messagesContainer.value.scrollTop = maxScrollTop;
 }
 
 // 监听滚动事件，但现在我们始终自动滚动到底部
@@ -2092,14 +2193,13 @@ const debouncedHandleScroll = debounce(handleScroll, 100);
 
 // 添加一个专门用于新消息的滚动函数
 const scrollToBottomOnNewMessage = () => {
-  // 无论用户当前在何处，只要有新消息就滚动到底部
-  if (messagesContainer.value) {
-    // 确保DOM完全更新后再滚动
-    nextTick(() => {
-      const maxScrollTop = messagesContainer.value!.scrollHeight - messagesContainer.value!.clientHeight;
-      messagesContainer.value!.scrollTop = maxScrollTop;
-    });
-  }
+  if (!messagesContainer.value) return
+  if (!formData.isScrolledToBottom) return
+  // 确保DOM完全更新后再滚动
+  nextTick(() => {
+    const maxScrollTop = messagesContainer.value!.scrollHeight - messagesContainer.value!.clientHeight;
+    messagesContainer.value!.scrollTop = maxScrollTop;
+  });
 }
 
 // 文件相关处理 - 这里只处理从InputArea传来的文件上传成功后的UI更新
@@ -2211,10 +2311,9 @@ onUnmounted(() => {
 
 // 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
 // 使用 getter 监听器，只在消息数量变化时触发，避免选中状态变化导致滚动
-watch(() => messages.length, (newLength, oldLength) => {
+watch(() => messages.length, () => {
   nextTick(() => {
-    // 检查是否当前在底部，或者是否有新消息
-    if (formData.isScrolledToBottom || newLength !== oldLength) {
+    if (formData.isScrolledToBottom) {
       scrollToBottomOnNewMessage();
     }
   });

@@ -157,7 +157,9 @@ export const chatAPI = {
     dialog?: any,
     dialogTitle?: string,
     maxResponseTokens?: number,
-    systemPromptId?: number
+    systemPromptId?: number,
+    requestId?: string,
+    signal?: AbortSignal
   ): Promise<void> => {
     const data: any = {
       model,
@@ -176,6 +178,9 @@ export const chatAPI = {
     if (systemPromptId) {
       data.system_prompt_id = systemPromptId
     }
+    if (requestId) {
+      data.request_id = requestId
+    }
 
     // 添加认证信息到数据中
     data.user = useAuthStore().user || '';
@@ -189,7 +194,8 @@ export const chatAPI = {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      signal
     });
 
     if (!response.ok) {
@@ -247,6 +253,13 @@ export const chatAPI = {
     } finally {
       reader.releaseLock();
     }
+  },
+
+  // 终止流式对话
+  cancelChatStream: (requestId: string) => {
+    return api.post('/never_guess_my_usage/split_stream_cancel', {
+      request_id: requestId
+    })
   },
 
   // 图片生成接口

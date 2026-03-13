@@ -2996,3 +2996,21 @@ body.dark-theme .custom-dark-tooltip {
 :deep(.clean-dialog .el-dialog__body) {
   display: block; /* 恢复 body 显示 */
 }
+
+/* 通知按钮红点提示 */
+.notification-button-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
