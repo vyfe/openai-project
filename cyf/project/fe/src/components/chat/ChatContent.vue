@@ -65,8 +65,29 @@
             </el-icon>
             {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
           </el-button>
+
+          <!-- 批量删除按钮（复用选中消息） -->
+          <el-button
+            type="danger"
+            size="small"
+            @click="deleteSelectedMessages"
+            :disabled="selectedCount === 0"
+          >
+            <el-icon>
+              <Delete />
+            </el-icon>
+            {{ selectedCount > 0 ? `${t('chat.batchDelete')} (${selectedCount})` : t('chat.batchDelete') }}
+          </el-button>
+
+          <!-- 导出提示：桌面端收进圆形提示按钮 -->
+          <el-tooltip :content="t('chat.exportHint')" placement="top">
+            <el-button class="export-hint-btn" circle text size="small">
+              <el-icon>
+                <InfoFilled />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
         </div>
-        <div class="export-hint">{{ t('chat.exportHint') }}</div>
       </div>
 
       <!-- 移动端：显示抽屉切换按钮 -->
@@ -152,6 +173,18 @@
                 <Download />
               </el-icon>
               {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
+            </el-button>
+            <el-button
+              type="danger"
+              size="default"
+              @click="deleteSelectedMessages"
+              :disabled="selectedCount === 0"
+              class="drawer-button"
+            >
+              <el-icon>
+                <Delete />
+              </el-icon>
+              {{ selectedCount > 0 ? `${t('chat.batchDelete')} (${selectedCount})` : t('chat.batchDelete') }}
             </el-button>
           </div>
           <div class="export-hint">{{ t('chat.exportHint') }}</div>
@@ -366,6 +399,7 @@ import {
   Top,
   Link,
   CaretRight,
+  InfoFilled,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
@@ -1420,6 +1454,58 @@ const deleteMessage = (index: number) => {
 
     messages.splice(index, 1);
     ElMessage.success('消息已删除');
+  }
+}
+
+// 批量删除选中的消息
+const deleteSelectedMessages = async () => {
+  const totalSelected = selectedCount.value
+  if (totalSelected === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      t('chat.batchDeleteConfirm', { count: totalSelected }),
+      t('chat.batchDelete'),
+      {
+        confirmButtonText: t('chat.confirm'),
+        cancelButtonText: t('chat.cancel'),
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  const welcomeMessage = t('chat.aiWelcomeMessage')
+  const selectedIndexes = messages
+    .map((msg, idx) => (msg.selected ? idx : -1))
+    .filter(idx => idx >= 0)
+    .sort((a, b) => b - a)
+
+  let deletedCount = 0
+  let skippedWelcome = false
+
+  selectedIndexes.forEach(idx => {
+    const msg = messages[idx]
+    if (!msg) return
+    if (msg.type === 'ai' && msg.content === welcomeMessage) {
+      skippedWelcome = true
+      msg.selected = false
+      return
+    }
+    messages.splice(idx, 1)
+    deletedCount += 1
+  })
+
+  messages.forEach(msg => {
+    if (msg.selected) msg.selected = false
+  })
+
+  if (deletedCount > 0) {
+    ElMessage.success(t('chat.batchDeleteSuccess', { count: deletedCount }))
+  }
+  if (skippedWelcome) {
+    ElMessage.warning(t('chat.cannotDeleteWelcomeMessage'))
   }
 }
 

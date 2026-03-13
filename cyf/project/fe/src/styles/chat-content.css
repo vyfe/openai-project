@@ -70,6 +70,7 @@
 .action-buttons {
   display: flex;
   gap: 8px;
+  align-items: center;
 }
 
 .export-hint {
@@ -77,6 +78,18 @@
   color: rgba(120, 120, 120, 0.9);
   line-height: 1.4;
   max-width: 360px;
+}
+
+.export-hint-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: #7a9ccc;
+}
+
+.export-hint-btn:hover {
+  background: rgba(122, 156, 204, 0.12);
 }
 
 .messages-container {
@@ -109,13 +122,39 @@
   width: 30px; /* 从36px减少到30px */
   height: 30px; /* 从36px减少到30px */
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #6d7cf0, #8a5acb);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   flex-shrink: 0;
   font-size: 12px; /* 添加字体大小，使其更适合缩小的头像 */
+  box-shadow: 0 6px 14px rgba(90, 123, 193, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.message-avatar::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+.message.user .message-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #5ec5ff, #3a7bd5);
+  box-shadow: 0 6px 14px rgba(58, 123, 213, 0.25);
+}
+
+.message.ai .message-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #7ad87a, #36b37e);
+  box-shadow: 0 6px 14px rgba(54, 179, 126, 0.25);
 }
 
 .message-content {
@@ -146,6 +185,21 @@
 .message-actions {
   display: flex;
   gap: 4px;
+  align-items: center;
+}
+
+.message-actions > * {
+  display: inline-flex;
+  align-items: center;
+}
+
+.message-actions .el-button {
+  margin: 0 !important;
+}
+
+.message-actions .el-popconfirm {
+  display: inline-flex;
+  align-items: center;
 }
 
 .message-text {
@@ -701,7 +755,30 @@ body.dark-theme .export-hint {
 }
 
 body.dark-theme .message-avatar {
-  background: linear-gradient(135deg, #4a5568, #2d3748);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #3f4a9a, #3c2f63);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-theme .message.user .message-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #2a8bd1, #1f5d91);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+body.dark-theme .message.ai .message-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+    linear-gradient(135deg, #2f8f6a, #1f6b52);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+body.dark-theme .export-hint-btn {
+  color: rgba(220, 230, 255, 0.85);
+}
+
+body.dark-theme .export-hint-btn:hover {
+  background: rgba(220, 230, 255, 0.12);
 }
 
 body.dark-theme .message-text blockquote {
@@ -827,11 +904,25 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
 
 /* 消息复选框样式 */
 .message-checkbox {
-  margin-right: 4px;
+  margin-right: 0;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease 2s, visibility 0s linear 2s;
+}
+
+.messages-container:hover .message-checkbox,
+.messages-container:focus-within .message-checkbox {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
 }
 
 .message-checkbox :deep(.el-checkbox__inner) {
   border-radius: 4px;
+  width: 18px;
+  height: 18px;
 }
 
 .message-checkbox :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
