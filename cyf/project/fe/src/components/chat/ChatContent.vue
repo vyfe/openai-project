@@ -216,6 +216,16 @@
                 @change="(val: boolean) => toggleMessageSelection(index, val)"
                 class="message-checkbox"
               />
+              <el-tooltip v-if="message.type === 'ai' && isLatestAiMessage(index)" :content="t('chat.retry')" placement="top">
+                <el-button
+                  :icon="RefreshLeft"
+                  circle
+                  size="small"
+                  text
+                  :disabled="!canRetryLastExchange()"
+                  @click="retryLastExchange"
+                />
+              </el-tooltip>
               <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(message.content)" />
               <el-popconfirm :title="t('chat.deleteMessageConfirmation')" :confirm-button-text="t('chat.confirm')" :cancel-button-text="t('chat.cancel')"
                 @confirm="deleteMessage(index)">
@@ -1507,6 +1517,36 @@ const deleteSelectedMessages = async () => {
   if (skippedWelcome) {
     ElMessage.warning(t('chat.cannotDeleteWelcomeMessage'))
   }
+}
+
+const isLatestAiMessage = (index: number) => {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].type === 'ai') {
+      return i === index
+    }
+  }
+  return false
+}
+
+const canRetryLastExchange = () => {
+  if (isLoading.value) return false
+  if (messages.length < 2) return false
+  const lastTwo = messages.slice(-2)
+  return lastTwo[0]?.type === 'user' && lastTwo[1]?.type === 'ai'
+}
+
+const retryLastExchange = async () => {
+  if (!canRetryLastExchange()) {
+    ElMessage.warning('没有可重试的对话记录')
+    return
+  }
+  const lastUserMessage = messages[messages.length - 2]
+  if (lastUserMessage?.type === 'user') {
+    inputMessage.value = lastUserMessage.content || ''
+  }
+  messages.splice(messages.length - 2, 2)
+  await nextTick()
+  scrollToBottomOnNewMessage()
 }
 
 const generateRequestId = () => {

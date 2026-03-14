@@ -2,8 +2,8 @@
   <div :class="['input-area', {'input-area-mobile': props.isMobile, 'always-fixed-bottom': props.isMobile}]">
     <div class="input-container">
       <!-- 文件预览区域 -->
-      <div v-if="uploadedFiles.length > 0" class="file-preview-area">
-        <div v-for="file in uploadedFiles" :key="file.url" class="file-preview-tag">
+      <div v-if="displayFiles.length > 0" class="file-preview-area">
+        <div v-for="file in displayFiles" :key="file.source + ':' + file.url" class="file-preview-tag">
           <!-- 图片预览 -->
           <img v-if="file.isImage" :src="file.url" class="file-preview-thumb" alt="preview" />
           <!-- 非图片文件图标 -->
@@ -75,7 +75,7 @@
             <el-button
               type="primary"
               :icon="Position"
-              :disabled="(!inputMessage.trim() && uploadedFiles.length === 0) || isLoading"
+              :disabled="(!inputMessage.trim() && uploadedFiles.length === 0 && pastedFiles.length === 0) || isLoading"
               @click="sendMessage"
             >
               {{ t('chat.send') }}
@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
@@ -107,6 +107,9 @@ interface ExtractedFile {
   url: string
   name: string
   isImage: boolean
+  source: 'uploaded' | 'pasted'
+  rawMarker?: string
+  rawUrl?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -164,9 +167,22 @@ const uploadedFile = ref<File | null>(null)
 const showUploadPopover = ref(false)
 const uploadRef = ref()
 const selectedImageSize = ref('1024x1024') // 默认尺寸
+const isNormalizingInput = ref(false)
 
 // 已上传的文件列表
 const uploadedFiles = ref<ExtractedFile[]>([])
+const pastedFiles = ref<ExtractedFile[]>([])
+
+const displayFiles = computed(() => {
+  const merged = [...uploadedFiles.value, ...pastedFiles.value]
+  const seen = new Set<string>()
+  return merged.filter((file) => {
+    const key = `${file.source}:${file.url}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
 
 // 计算属性：判断是否为图片模型
 const isImageModel = computed(() => {
@@ -212,7 +228,7 @@ onUnmounted(() => {
 
 // 方法
 const sendMessage = () => {
-  if (!inputMessage.value.trim() && uploadedFiles.value.length === 0) return
+  if (!inputMessage.value.trim() && uploadedFiles.value.length === 0 && pastedFiles.value.length === 0) return
 
   if (!props.selectedModel) {
     ElMessage.warning('请先选择一个模型')
@@ -223,8 +239,14 @@ const sendMessage = () => {
   let messageToSend = inputMessage.value
 
   // 如果有已上传的文件，将文件URL转换为标记并追加到消息
-  if (uploadedFiles.value.length > 0) {
-    const fileMarkers = uploadedFiles.value.map(file => `\n[FILE_URL:${file.url}]`)
+  if (uploadedFiles.value.length > 0 || pastedFiles.value.length > 0) {
+    const existingUrls = new Set(
+      extractFileMarkers(messageToSend).map(marker => normalizeFileUrl(marker.rawUrl))
+    )
+    const allFiles = [...uploadedFiles.value, ...pastedFiles.value]
+    const fileMarkers = allFiles
+      .filter(file => !existingUrls.has(file.url))
+      .map(file => `\n[FILE_URL:${file.url}]`)
     messageToSend = messageToSend + fileMarkers.join('')
   }
 
@@ -239,6 +261,7 @@ const sendMessage = () => {
   // 清空输入框和文件
   inputMessage.value = ''
   uploadedFiles.value = []
+  pastedFiles.value = []
   if (uploadedFile.value) {
     uploadedFile.value = null
     emit('clear-file')
@@ -317,7 +340,8 @@ const handleFileChange = async (file: any) => {
       uploadedFiles.value.push({
         url: fullUrl,
         name: fileToUpload.name || fileName,
-        isImage: isImageUrl(fullUrl)
+        isImage: isImageUrl(fullUrl),
+        source: 'uploaded'
       })
       ElMessage.success(`文件 "${fileToUpload.name || fileName}" 已上传`)
 
@@ -363,11 +387,98 @@ const isImageUrl = (url: string): boolean => {
 
 // 删除文件
 const removeFile = (fileToRemove: ExtractedFile) => {
+  if (fileToRemove.source === 'pasted') {
+    const index = pastedFiles.value.findIndex(f => f.url === fileToRemove.url)
+    if (index !== -1) {
+      pastedFiles.value.splice(index, 1)
+    }
+    return
+  }
   const index = uploadedFiles.value.findIndex(f => f.url === fileToRemove.url)
   if (index !== -1) {
     uploadedFiles.value.splice(index, 1)
   }
 }
+
+const extractFileMarkers = (content: string) => {
+  const markers: Array<{ rawMarker: string; rawUrl: string }> = []
+  if (!content) return markers
+  const regex = /\[FILE_URL:([^\]]+)\]/g
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(content)) !== null) {
+    const rawUrl = (match[1] || '').trim()
+    if (!rawUrl) continue
+    markers.push({ rawMarker: match[0], rawUrl })
+  }
+  return markers
+}
+
+const normalizeFileUrl = (url: string): string => {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  if (url.startsWith(':')) {
+    return window.location.protocol + '//' + window.location.host + url
+  }
+  if (url.startsWith('/')) {
+    return window.location.protocol + '//' + window.location.host + url
+  }
+  return window.location.protocol + '//' + window.location.host + '/' + url
+}
+
+const getFileNameFromUrl = (url: string) => {
+  if (!url) return ''
+  const cleanUrl = url.split('?')[0]
+  const parts = cleanUrl.split('/')
+  return parts[parts.length - 1] || cleanUrl
+}
+
+const stripFileMarkersFromMessage = (content: string) => {
+  return content.replace(/\[FILE_URL:[^\]]+\]/g, '').replace(/\n{3,}/g, '\n\n')
+}
+
+const addPastedFilesFromMarkers = (markers: Array<{ rawMarker: string; rawUrl: string }>) => {
+  if (markers.length === 0) return
+  const existing = new Set(pastedFiles.value.map(file => file.url))
+  const next = [...pastedFiles.value]
+  for (const marker of markers) {
+    const normalizedUrl = normalizeFileUrl(marker.rawUrl)
+    if (!normalizedUrl || existing.has(normalizedUrl)) continue
+    next.push({
+      url: normalizedUrl,
+      name: getFileNameFromUrl(normalizedUrl),
+      isImage: isImageUrl(normalizedUrl),
+      source: 'pasted',
+      rawMarker: marker.rawMarker,
+      rawUrl: marker.rawUrl
+    })
+    existing.add(normalizedUrl)
+  }
+  pastedFiles.value = next
+}
+
+const syncPastedFiles = (content: string) => {
+  const markers = extractFileMarkers(content)
+  if (markers.length === 0) return
+  addPastedFilesFromMarkers(markers)
+}
+
+watch(() => inputMessage.value, (value) => {
+  if (isNormalizingInput.value) return
+  const rawValue = value || ''
+  const markers = extractFileMarkers(rawValue)
+  if (markers.length === 0) return
+  syncPastedFiles(rawValue)
+  const cleaned = stripFileMarkersFromMessage(rawValue)
+  if (cleaned !== rawValue) {
+    isNormalizingInput.value = true
+    inputMessage.value = cleaned
+    Promise.resolve().then(() => {
+      isNormalizingInput.value = false
+    })
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
