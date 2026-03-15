@@ -802,36 +802,44 @@ const buildPreviewHtml = (imageUrl: string, filename: string) => {
 </html>`
 }
 
-const openPreview = async (imageUrl: string, filename: string) => {
-  const previewHtml = buildPreviewHtml(imageUrl, filename)
-  const previewBlob = new Blob([previewHtml], { type: 'text/html' })
-  const previewUrl = URL.createObjectURL(previewBlob)
-  const previewWindow = window.open(previewUrl, '_blank', 'noopener')
-  if (!previewWindow) {
-    URL.revokeObjectURL(previewUrl)
-    try {
-      await ElMessageBox.confirm('浏览器拦截了预览弹窗，请允许此站点弹窗后重试。', '弹窗被拦截', {
-        confirmButtonText: '我已允许，重试',
-        cancelButtonText: '取消',
-        type: 'warning',
-        closeOnClickModal: false,
-      })
-      const retryWindow = window.open(previewUrl, '_blank', 'noopener')
-      if (!retryWindow) {
-        ElMessage.warning('仍然无法打开预览窗口，请检查浏览器弹窗设置')
-      }
-    } catch {
-      // User cancelled.
-    }
-    return
-  }
-
+const schedulePreviewCleanup = (previewUrl: string, imageUrl: string) => {
   setTimeout(() => {
     URL.revokeObjectURL(previewUrl)
     if (imageUrl.startsWith('blob:')) {
       URL.revokeObjectURL(imageUrl)
     }
   }, 120000)
+}
+
+const openPreview = (imageUrl: string, filename: string) => {
+  const previewHtml = buildPreviewHtml(imageUrl, filename)
+  const previewBlob = new Blob([previewHtml], { type: 'text/html' })
+  const previewUrl = URL.createObjectURL(previewBlob)
+  const previewWindow = window.open(previewUrl, '_blank')
+  if (!previewWindow) {
+    ElMessageBox.confirm('浏览器拦截了预览弹窗，请允许此站点弹窗后重试。', '弹窗被拦截', {
+      confirmButtonText: '我已允许，重试',
+      cancelButtonText: '取消',
+      type: 'warning',
+      closeOnClickModal: false,
+    }).then(() => {
+      const retryWindow = window.open(previewUrl, '_blank')
+      if (!retryWindow) {
+        ElMessage.warning('仍然无法打开预览窗口，请检查浏览器弹窗设置')
+        return
+      }
+      retryWindow.opener = null
+      schedulePreviewCleanup(previewUrl, imageUrl)
+      ElMessage.success('已打开预览，可右键保存')
+    }).catch(() => {
+      URL.revokeObjectURL(previewUrl)
+    })
+    return false
+  }
+  previewWindow.opener = null
+
+  schedulePreviewCleanup(previewUrl, imageUrl)
+  return true
 }
 
 // 导出对话截屏（长截图）
@@ -1012,22 +1020,34 @@ const exportConversationScreenshot = async (options: { skipImageCheck?: boolean 
 
     logExportStep('preview_prompt', { t: performance.now() })
     try {
-      await ElMessageBox.confirm('截图已生成，点击“预览”在新标签页打开，可右键另存为。', '截图已生成', {
+      await ElMessageBox({
+        title: '截图已生成',
+        message: '截图已生成，点击“预览”在新标签页打开，可右键另存为。',
+        showCancelButton: true,
         confirmButtonText: '预览',
         cancelButtonText: '取消',
         type: 'success',
         closeOnClickModal: false,
+        beforeClose: (action, _instance, done) => {
+          if (action === 'confirm') {
+            logExportStep('preview_confirm', { t: performance.now() })
+            const opened = openPreview(downloadUrl, downloadFilename)
+            if (opened) {
+              logExportStep('preview_opened', { t: performance.now() })
+              ElMessage.success('已打开预览，可右键保存')
+              logExportStep('toast_shown', { t: performance.now(), cost: Math.round(performance.now() - exportStart) })
+            }
+          } else {
+            logExportStep('preview_cancel', { t: performance.now() })
+            if (downloadUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(downloadUrl as string);
+            }
+          }
+          done()
+        }
       })
-      logExportStep('preview_confirm', { t: performance.now() })
-      await openPreview(downloadUrl, downloadFilename)
-      logExportStep('preview_opened', { t: performance.now() })
-      ElMessage.success('已打开预览，可右键保存')
-      logExportStep('toast_shown', { t: performance.now(), cost: Math.round(performance.now() - exportStart) })
     } catch {
-      logExportStep('preview_cancel', { t: performance.now() })
-      if (downloadUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(downloadUrl as string);
-      }
+      // ignore cancel
     }
   } catch (error) {
     console.error('导出截图失败:', error);
