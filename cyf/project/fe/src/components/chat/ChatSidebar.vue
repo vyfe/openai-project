@@ -2,13 +2,15 @@
   <!-- 侧边栏 -->
   <transition name="sidebar-slide">
     <div
-      v-show="!formData.sidebarCollapsed"
+      v-show="formData.isMobile ? !formData.sidebarCollapsed : true"
       :class="[
         'chat-sidebar',
         {
           'sidebar-mobile': formData.isMobile,
           'slide-in': !formData.sidebarCollapsed && formData.isMobile,
-          'slide-out': formData.sidebarCollapsed && formData.isMobile
+          'slide-out': formData.sidebarCollapsed && formData.isMobile,
+          'desktop-collapsed': formData.sidebarCollapsed && !formData.isMobile,
+          'desktop-expanded': !formData.sidebarCollapsed && !formData.isMobile
         }
       ]"
     >

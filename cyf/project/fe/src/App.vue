@@ -7,10 +7,15 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import VersionService from './services/version';
+import { useThemeManager } from '@/composables/useThemeManager';
+
+const { initThemeManager } = useThemeManager();
 
 onMounted(() => {
   // 检查版本更新并处理缓存
   VersionService.checkAndHandleVersionChange();
+  // 初始化全局主题管理，统一日夜模式状态和DOM类
+  initThemeManager();
 });
 </script>
 
@@ -47,7 +52,7 @@ onMounted(() => {
 /* 全局深色主题样式 */
 body.dark-theme {
   background-color: #1a1a1a;
-  color: #000000;
+  color: #e0e0e0;
 }
 
 /* Element Plus 禁用状态 CSS 变量 - 夜间模式 */
@@ -156,10 +161,57 @@ body.dark-theme .el-popconfirm {
   color: #e0e0e0;
 }
 
+/* Teleport 到 body 的各类浮层统一暗色样式（tooltip/popconfirm/popover/select/dropdown） */
+body.dark-theme .el-popper,
+body.dark-theme .el-tooltip__popper,
+body.dark-theme .el-popover.el-popper,
+body.dark-theme .el-popconfirm.el-popper,
+body.dark-theme .el-select__popper,
+body.dark-theme .el-dropdown__popper {
+  background-color: #222222 !important;
+  border: 1px solid #555555 !important;
+  color: #e0e0e0 !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35) !important;
+}
+
+body.dark-theme .el-popper * {
+  color: inherit;
+}
+
+body.dark-theme .el-popper__arrow::before {
+  background-color: #222222 !important;
+  border-color: #555555 !important;
+}
+
+body.dark-theme .el-popconfirm__main {
+  color: #e0e0e0 !important;
+}
+
+body.dark-theme .el-popconfirm__icon {
+  color: #f59e0b !important;
+}
+
+body.dark-theme .el-popconfirm__action .el-button--default {
+  background-color: #333333 !important;
+  border-color: #555555 !important;
+  color: #e0e0e0 !important;
+}
+
 body.dark-theme .el-dialog {
   background-color: #222222;
   border: 1px solid #555555;
   color: #e0e0e0;
+}
+
+body.dark-theme .el-dialog__header,
+body.dark-theme .el-dialog__body,
+body.dark-theme .el-dialog__footer {
+  color: #e0e0e0;
+  border-color: #555555 !important;
+}
+
+body.dark-theme .el-overlay-dialog {
+  background: rgba(0, 0, 0, 0.55);
 }
 
 body.dark-theme .el-switch__core {
@@ -231,5 +283,29 @@ body.dark-theme .el-message-box {
 
 body.dark-theme .custom-dark-tooltip .el-tooltip__popper .popper__arrow {
   background-color: #333 !important; /* 修改菱形颜色 */
-} */
+}
+
+/* 管理后台暗色兜底：避免部分 Element Plus 组件维持浅色底 */
+body.dark-theme .admin-page .el-table,
+body.dark-theme .admin-page .el-table__inner-wrapper,
+body.dark-theme .admin-page .el-table__header-wrapper,
+body.dark-theme .admin-page .el-table__body-wrapper,
+body.dark-theme .admin-page .el-table tr,
+body.dark-theme .admin-page .el-table th.el-table__cell,
+body.dark-theme .admin-page .el-table td.el-table__cell {
+  background-color: #222222 !important;
+  color: #e0e0e0 !important;
+  border-color: #555555 !important;
+}
+
+body.dark-theme .admin-page .el-table th.el-table__cell {
+  background-color: #2a2a2a !important;
+  color: #aaaaaa !important;
+}
+
+body.dark-theme .admin-page .el-table__empty-block,
+body.dark-theme .admin-page .el-empty__description {
+  background-color: #222222 !important;
+  color: #9a9a9a !important;
+}
 </style>

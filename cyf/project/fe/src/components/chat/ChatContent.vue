@@ -644,11 +644,9 @@ const updateFontSizeSelectorTheme = () => {
 const setupThemeWatcher = () => {
   // 监听主题变化
   watch(() => formData.isDarkTheme, (newVal) => {
-    if (newVal) {
-      document.body.classList.add('dark-theme')
-    } else {
-      document.body.classList.remove('dark-theme')
-    }
+    document.body.classList.toggle('dark-theme', newVal)
+    document.body.classList.toggle('dark', newVal)
+    document.documentElement.classList.toggle('dark', newVal)
     // 更新字体大小选择器的主题样式
     updateFontSizeSelectorTheme()
   }, { immediate: true })
@@ -2414,11 +2412,9 @@ onMounted(() => {
 
   checkIsMobile()
 
-  if (formData.isDarkTheme) {
-    document.body.classList.add('dark-theme')
-  } else {
-    document.body.classList.remove('dark-theme')
-  }
+  document.body.classList.toggle('dark-theme', formData.isDarkTheme)
+  document.body.classList.toggle('dark', formData.isDarkTheme)
+  document.documentElement.classList.toggle('dark', formData.isDarkTheme)
 
   // 设置主题监听器
   setupThemeWatcher()
@@ -2535,11 +2531,9 @@ watch(() => messages.length, () => {
 
 // 监听暗色主题变化
 watch(() => formData.isDarkTheme, (newVal) => {
-  if (newVal) {
-    document.body.classList.add('dark-theme')
-  } else {
-    document.body.classList.remove('dark-theme')
-  }
+  document.body.classList.toggle('dark-theme', newVal)
+  document.body.classList.toggle('dark', newVal)
+  document.documentElement.classList.toggle('dark', newVal)
 }, { immediate: true })
 
 // 监听模型列表变化，自动生成级联选项

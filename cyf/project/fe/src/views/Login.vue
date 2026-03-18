@@ -1,7 +1,17 @@
 <template>
-  <div class="min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-blue-100 via-sky-100 to-cyan-50 relative overflow-hidden">
-    <!-- Background floating animation -->
-    <div class="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] bg-radial-gradient animate-float"></div>
+  <div
+    class="login-page min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-blue-100 via-sky-100 to-cyan-50 relative overflow-hidden"
+    :class="{ 'login-dark': isDarkTheme }"
+  >
+    <!-- Favicon 飞行动画背景 -->
+    <div class="favicon-sky" aria-hidden="true">
+      <span
+        v-for="flyer in faviconFlyers"
+        :key="flyer.id"
+        class="favicon-flyer"
+        :style="getFlyerStyle(flyer)"
+      />
+    </div>
 
     <div class="relative z-10 flex items-center justify-center">
       <div class="bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-blue-200/30 w-96 max-w-[90%]">
@@ -114,6 +124,8 @@
     <Teleport to="body">
       <div v-if="showRegisterModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div :class="[
+          'login-register-modal',
+          { 'login-dark-modal': isDarkTheme },
           'rounded-2xl shadow-xl border w-96 max-w-[90%] transition-all duration-300 transform',
           'bg-white/95 backdrop-blur-sm border-blue-200/30'
         ]">
@@ -235,10 +247,12 @@ import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 import NotificationPanel from '@/components/NotificationPanel.vue'
 import { useNotifications } from '@/composables/useNotifications'
+import { useThemeManager } from '@/composables/useThemeManager'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
+const { isDarkTheme, initThemeManager } = useThemeManager()
 const loginFormRef = ref()
 const loading = ref(false)
 const showNotificationModal = ref(false)
@@ -267,6 +281,23 @@ const registerForm = reactive({
   password: '',
   confirmPassword: '',
   apiKey: ''
+})
+
+const faviconFlyers = [
+  { id: 1, startY: '16%', midY: '-34px', endY: '-8px', delay: '0s', duration: '24s', scale: '0.92', opacity: '0.11' },
+  { id: 2, startY: '34%', midY: '-46px', endY: '-16px', delay: '6s', duration: '28s', scale: '1.08', opacity: '0.13' },
+  { id: 3, startY: '58%', midY: '-24px', endY: '3px', delay: '12s', duration: '26s', scale: '0.98', opacity: '0.12' },
+  { id: 4, startY: '78%', midY: '-38px', endY: '-12px', delay: '18s', duration: '30s', scale: '1.16', opacity: '0.10' }
+]
+
+const getFlyerStyle = (flyer: (typeof faviconFlyers)[number]) => ({
+  '--start-y': flyer.startY,
+  '--mid-y': flyer.midY,
+  '--end-y': flyer.endY,
+  '--delay': flyer.delay,
+  '--duration': flyer.duration,
+  '--scale': flyer.scale,
+  '--opacity': flyer.opacity
 })
 
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
@@ -307,6 +338,7 @@ const registerRules: FormRules = {
 }
 
 onMounted(() => {
+  initThemeManager()
   fetchNotifications()
 })
 
@@ -404,101 +436,138 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
-@keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(180deg); }
+.favicon-sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+.favicon-flyer {
+  position: absolute;
+  left: -12vw;
+  top: var(--start-y);
+  width: 72px;
+  height: 72px;
+  background-image: url('/favicon-fly.png');
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transform: translate3d(0, 0, 0) scale(var(--scale));
+  filter: drop-shadow(0 10px 18px rgba(90, 123, 193, 0.16));
+  animation: favicon-flight var(--duration) cubic-bezier(0.38, 0, 0.22, 1) infinite;
+  animation-delay: var(--delay);
 }
 
-.bg-radial-gradient {
-  background: radial-gradient(circle, rgba(144, 200, 248, 0.1) 0%, transparent 70%);
+@keyframes favicon-flight {
+  0% {
+    transform: translate3d(-16vw, 0, 0) scale(var(--scale));
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--opacity);
+  }
+  55% {
+    transform: translate3d(52vw, var(--mid-y), 0) scale(calc(var(--scale) + 0.08));
+    opacity: calc(var(--opacity) + 0.08);
+  }
+  90% {
+    opacity: var(--opacity);
+  }
+  100% {
+    transform: translate3d(122vw, var(--end-y), 0) scale(calc(var(--scale) + 0.02));
+    opacity: 0;
+  }
 }
 
-/* 深色主题样式 */
-@media (prefers-color-scheme: dark) {
-  .min-h-screen {
-    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%) !important;
-  }
+/* 深色主题样式：页面级暗色类兜底，避免主题类链路失效 */
+.login-page.login-dark {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%) !important;
+}
 
-  .bg-radial-gradient {
-    background: radial-gradient(circle, rgba(85, 85, 85, 0.1) 0%, transparent 70%) !important;
-  }
+.login-page.login-dark .favicon-flyer {
+  filter: drop-shadow(0 10px 18px rgba(122, 156, 204, 0.3));
+}
 
-  .bg-white\/95 {
-    background: rgba(34, 34, 34, 0.95) !important;
-    color: white !important;
-  }
+.login-page.login-dark .bg-white\/95 {
+  background: rgba(34, 34, 34, 0.95) !important;
+  color: #e0e0e0 !important;
+}
 
-  .border-blue-200\/30 {
-    border: 1px solid rgba(85, 85, 85, 0.3) !important;
-  }
+.login-page.login-dark .border-blue-200\/30 {
+  border-color: rgba(85, 85, 85, 0.35) !important;
+}
 
-  .text-indigo-600 {
-    color: #e0e0e0 !important;
-  }
+.login-page.login-dark .text-indigo-600 {
+  color: #e0e0e0 !important;
+}
 
-  .text-blue-400 {
-    color: #9a9a9a !important;
-  }
+.login-page.login-dark .text-blue-400 {
+  color: #9a9a9a !important;
+}
 
-  .hover\:text-indigo-600:hover {
-    color: #e0e0e0 !important;
-  }
+.login-page.login-dark .hover\:text-indigo-600:hover {
+  color: #e0e0e0 !important;
+}
 
-  .el-input__wrapper {
-    background: rgba(50, 50, 50, 0.9) !important;
-    border: 1px solid #555 !important;
-    color: white !important;
-  }
+.login-page.login-dark .el-input__wrapper {
+  background: rgba(50, 50, 50, 0.9) !important;
+  border: 1px solid #555555 !important;
+  box-shadow: none !important;
+}
 
-  .el-input__inner {
-    background: rgba(50, 50, 50, 0.9) !important;
-    color: white !important;
-  }
+.login-page.login-dark .el-input__inner {
+  background: transparent !important;
+  color: #e0e0e0 !important;
+}
 
-  .el-input__inner::placeholder {
-    color: #aaa !important;
-  }
+.login-page.login-dark .el-input__inner::placeholder {
+  color: #aaaaaa !important;
+}
 
-  .el-input__suffix {
-    color: #aaa !important;
-  }
+.login-page.login-dark .el-input__suffix {
+  color: #aaaaaa !important;
+}
 
-  .el-button {
-    --el-button-bg-color: #409eff !important;
-    --el-button-border-color: #409eff !important;
-    --el-button-text-color: #ffffff !important;
-    --el-button-hover-text-color: #ffffff !important;
-    --el-button-hover-bg-color: #66b1ff !important;
-    --el-button-hover-border-color: #66b1ff !important;
-  }
+.login-page.login-dark .border {
+  border-color: #555555 !important;
+}
 
-  .border {
-    border: 1px solid #555 !important;
-  }
+.login-page.login-dark .bg-gradient-to-r.from-blue-500.to-cyan-400 {
+  background: linear-gradient(135deg, #5a7bc1 0%, #7a9ccc 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
 
-  .bg-gradient-to-r.from-blue-500.to-cyan-400 {
-    background: linear-gradient(135deg, #5a7bc1 0%, #7a9ccc 100%) !important;
-    color: white !important;
-  }
+.login-page.login-dark .hover\:from-blue-600.hover\:to-cyan-500:hover {
+  background: linear-gradient(135deg, #6a8bc1 0%, #8aaecc 100%) !important;
+  box-shadow: 0 10px 20px rgba(90, 123, 193, 0.35) !important;
+}
 
-  .hover\:from-blue-600.hover\:to-cyan-500:hover {
-    background: linear-gradient(135deg, #6a9a6a 0%, #8ab88a 100%) !important;
-    box-shadow: 0 10px 20px rgba(122, 168, 122, 0.3) !important;
-    transform: translateY(-2px) !important;
-  }
+/* 注册弹窗深色主题 */
+.login-page.login-dark .border-gray-200 {
+  border-color: #555555 !important;
+}
 
-  /* 注册弹窗深色主题 */
-  .border-gray-200 {
-    border-color: #555 !important;
-  }
+.login-page.login-dark .text-gray-500 {
+  color: #aaaaaa !important;
+}
 
-  .text-gray-500 {
-    color: #aaa !important;
-  }
+/* Teleport 的注册弹窗暗色样式 */
+.login-register-modal.login-dark-modal {
+  background: rgba(34, 34, 34, 0.96) !important;
+  border-color: rgba(85, 85, 85, 0.35) !important;
+  color: #e0e0e0 !important;
+}
+
+.login-register-modal.login-dark-modal .border-gray-200 {
+  border-color: #555555 !important;
+}
+
+.login-register-modal.login-dark-modal .text-gray-500 {
+  color: #aaaaaa !important;
 }
 
 .el-input__inner,
@@ -529,5 +598,13 @@ const handleRegister = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+@media (max-width: 768px) {
+  .favicon-flyer {
+    width: 54px;
+    height: 54px;
+    filter: drop-shadow(0 8px 12px rgba(90, 123, 193, 0.16));
+  }
 }
 </style>

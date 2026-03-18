@@ -1,4 +1,37 @@
 /* Admin页面样式 */
+.admin-page.admin-dark {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  color: #e0e0e0;
+}
+
+.admin-page.admin-dark header {
+  background: rgba(34, 34, 34, 0.9) !important;
+  border-color: rgba(85, 85, 85, 0.3) !important;
+}
+
+.admin-page.admin-dark h1 {
+  color: #7a9ccc !important;
+}
+
+.admin-page.admin-dark :deep(.el-tabs__header) {
+  border-color: #555555 !important;
+}
+
+.admin-page.admin-dark :deep(.el-tabs__item) {
+  color: #9a9a9a !important;
+}
+
+.admin-page.admin-dark :deep(.el-tabs__item.is-active) {
+  color: #7a9ccc !important;
+}
+
+.admin-page.admin-dark :deep(.el-tabs__active-bar) {
+  background-color: #7a9ccc !important;
+}
+
+.admin-page.admin-dark :deep(.el-tabs__content) {
+  color: #e0e0e0;
+}
 
 /* 使用CSS变量配合Tailwind的暗色模式 */
 .admin-tabs :deep(.el-tabs__nav) {
@@ -85,6 +118,21 @@
 :deep(.el-table) {
   border-radius: 8px;
   overflow: hidden;
+}
+
+.admin-page.admin-dark :deep(.el-table),
+.admin-page.admin-dark :deep(.el-table__inner-wrapper),
+.admin-page.admin-dark :deep(.el-table tr),
+.admin-page.admin-dark :deep(.el-table th.el-table__cell),
+.admin-page.admin-dark :deep(.el-table td.el-table__cell) {
+  background-color: #222222 !important;
+  color: #e0e0e0 !important;
+  border-color: #555555 !important;
+}
+
+.admin-page.admin-dark :deep(.el-table th.el-table__cell) {
+  background-color: #2a2a2a !important;
+  color: #aaaaaa !important;
 }
 
 :deep(.el-table__header-wrapper) {
@@ -211,6 +259,24 @@
 
 :deep(.el-input__wrapper) {
   border-radius: 6px;
+}
+
+.admin-page.admin-dark :deep(.el-input__wrapper),
+.admin-page.admin-dark :deep(.el-textarea__inner),
+.admin-page.admin-dark :deep(.el-select__wrapper) {
+  background-color: #333333 !important;
+  border-color: #555555 !important;
+  color: #e0e0e0 !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-dark :deep(.el-input__inner),
+.admin-page.admin-dark :deep(.el-textarea__inner) {
+  color: #e0e0e0 !important;
+}
+
+.admin-page.admin-dark :deep(.el-form-item__label) {
+  color: #d1d5db !important;
 }
 
 :deep(.el-input__inner) {
@@ -394,6 +460,13 @@
 :deep(.el-pagination button) {
   background-color: var(--pagination-bg, #ffffff);
   color: var(--pagination-color, #374151);
+}
+
+.admin-page.admin-dark :deep(.el-pagination),
+.admin-page.admin-dark :deep(.el-pagination button),
+.admin-page.admin-dark :deep(.el-pagination .el-pager li) {
+  background-color: #222222 !important;
+  color: #e0e0e0 !important;
 }
 
 .dark :deep(.el-pagination button) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -9,11 +9,13 @@ import UserTable from '@/components/admin/UserTable.vue'
 import NotificationTable from '@/components/admin/NotificationTable.vue'
 import TestLimitTable from '@/components/admin/TestLimitTable.vue'
 import SqlExecutor from '@/components/admin/SqlExecutor.vue'
+import { useThemeManager } from '@/composables/useThemeManager'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const activeTab = ref('models')
+const { isDarkTheme, initThemeManager } = useThemeManager()
 
 const tabs = [
   { name: 'models', label: t('admin.modelManagement') },
@@ -27,10 +29,14 @@ const tabs = [
 const goBack = () => {
   router.push('/chat')
 }
+
+onMounted(() => {
+  initThemeManager()
+})
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+  <div class="admin-page min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col" :class="{ dark: isDarkTheme, 'admin-dark': isDarkTheme }">
     <!-- Header -->
     <header class="bg-white dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
@@ -71,6 +77,6 @@ const goBack = () => {
   </div>
 </template>
 
-<style scoped>
+<style>
 @import '@/styles/admin.css';
 </style>
