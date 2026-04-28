@@ -11,3 +11,4 @@
 .codex/
 .idea/
 .joycode/
+/__pycache__/
