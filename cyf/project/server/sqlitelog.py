@@ -103,6 +103,7 @@ class User(Model):
     password_hash = CharField()            # 密码哈希值
     salt = CharField()                     # 密码盐值
     api_key = CharField(null=True)         # 用户专属API密钥
+    token = TextField(null=True)           # 持久化登录 token（JSON）
     browser_conf = TextField(null=True)    # 浏览器配置（云端保存）
     role = CharField(default='user') # 账户是否激活
     is_active = BooleanField(default=True) # 账户是否激活
@@ -169,6 +170,8 @@ def ensure_schema():
         missing = []
         if 'browser_conf' not in columns:
             missing.append(('browser_conf', TextField(null=True)))
+        if 'token' not in columns:
+            missing.append(('token', TextField(null=True)))
 
         if missing:
             migrator = SqliteMigrator(db)
@@ -360,6 +363,55 @@ def get_user_by_username(username: str, role: str = None):
             return User.get(User.username == username, User.is_active == True, User.role == role)
     except DoesNotExist:
         return None
+
+
+def get_user_token_payload(username: str) -> Optional[dict]:
+    user = get_user_by_username(username)
+    if not user or not user.token:
+        return None
+    try:
+        payload = json.loads(user.token)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    return None
+
+
+def set_user_token_payload(username: str, payload: Optional[dict]) -> bool:
+    user = get_user_by_username(username)
+    if not user:
+        return False
+    try:
+        user.token = json.dumps(payload, ensure_ascii=False) if payload else None
+        user.updated_at = datetime.now()
+        user.save()
+        return True
+    except Exception:
+        return False
+
+
+def find_user_by_token(token: str, token_type: str = 'access') -> Optional[tuple]:
+    if not token:
+        return None
+    users = User.select().where(User.is_active == True)
+    token_key = 'access_token' if token_type == 'access' else 'refresh_token'
+    for user in users:
+        if not user.token:
+            continue
+        try:
+            payload = json.loads(user.token)
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if payload.get(token_key) == token:
+            return user, payload
+    return None
+
+
+def get_active_token_count() -> int:
+    return User.select().where((User.is_active == True) & (User.token.is_null(False))).count()
 
 def verify_user_password(username: str, password: str, role: str = 'user') -> tuple:
     user = get_user_by_username(username, role)

@@ -699,12 +699,14 @@ def user_delete():
         if hard_delete:
             # 硬删除
             user = User.get_by_id(int(user_id))
+            user.token = None
             user.delete_instance()
             return success_response(msg="用户永久删除成功")
         else:
             # 软删除（标记为未激活）
             user = User.get_by_id(int(user_id))
             user.is_active = False
+            user.token = None
             user.updated_at = datetime.now()
             user.save()
             return success_response(msg="用户已标记为未激活")

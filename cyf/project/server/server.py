@@ -158,8 +158,6 @@ CACHE_EXPIRY_TIME = {}
 # 鉴权 Token 配置
 ACCESS_TOKEN_TTL_SECONDS = int(conf.get('auth', 'access_token_ttl_seconds', fallback='1800'))
 REFRESH_TOKEN_TTL_SECONDS = int(conf.get('auth', 'refresh_token_ttl_seconds', fallback='604800'))
-AUTH_TOKEN_STORE = {}
-AUTH_TOKEN_LOCK = threading.Lock()
 SERVER_START_TIME = time.time()
 
 # 线程本地存储，用于跟踪当前请求使用的 host 索引
@@ -238,17 +236,6 @@ def _now_ts() -> int:
     return int(time.time())
 
 
-def _cleanup_expired_tokens():
-    now_ts = _now_ts()
-    expired_tokens = []
-    with AUTH_TOKEN_LOCK:
-        for token, payload in AUTH_TOKEN_STORE.items():
-            if payload.get('expires_at', 0) <= now_ts:
-                expired_tokens.append(token)
-        for token in expired_tokens:
-            AUTH_TOKEN_STORE.pop(token, None)
-
-
 def _extract_bearer_token() -> str:
     auth_header = request.headers.get('Authorization', '')
     if not auth_header:
@@ -260,87 +247,63 @@ def _extract_bearer_token() -> str:
 
 
 def _issue_auth_tokens(username: str, role: str) -> dict:
-    _cleanup_expired_tokens()
     now_ts = _now_ts()
     access_token = secrets.token_urlsafe(32)
     refresh_token = secrets.token_urlsafe(48)
     session_id = secrets.token_hex(12)
     access_expires_at = now_ts + ACCESS_TOKEN_TTL_SECONDS
     refresh_expires_at = now_ts + REFRESH_TOKEN_TTL_SECONDS
-
-    access_payload = {
-        "type": "access",
-        "username": username,
-        "role": role,
-        "session_id": session_id,
-        "issued_at": now_ts,
-        "expires_at": access_expires_at
-    }
-    refresh_payload = {
-        "type": "refresh",
-        "username": username,
-        "role": role,
-        "session_id": session_id,
-        "issued_at": now_ts,
-        "expires_at": refresh_expires_at
-    }
-    with AUTH_TOKEN_LOCK:
-        AUTH_TOKEN_STORE[access_token] = access_payload
-        AUTH_TOKEN_STORE[refresh_token] = refresh_payload
-
-    return {
+    token_bundle = {
         "access_token": access_token,
         "access_token_expires_at": access_expires_at,
         "refresh_token": refresh_token,
-        "refresh_token_expires_at": refresh_expires_at
+        "refresh_token_expires_at": refresh_expires_at,
+        "session_id": session_id,
+        "role": role
     }
+    sqlitelog.set_user_token_payload(username, token_bundle)
+    return token_bundle
 
 
 def _issue_access_token(username: str, role: str, session_id: str) -> dict:
     """仅签发 access token；refresh token 在登录时签发，刷新阶段不轮换。"""
-    _cleanup_expired_tokens()
     now_ts = _now_ts()
     access_token = secrets.token_urlsafe(32)
     access_expires_at = now_ts + ACCESS_TOKEN_TTL_SECONDS
-    access_payload = {
-        "type": "access",
-        "username": username,
-        "role": role,
-        "session_id": session_id,
-        "issued_at": now_ts,
-        "expires_at": access_expires_at
-    }
-    with AUTH_TOKEN_LOCK:
-        AUTH_TOKEN_STORE[access_token] = access_payload
-    return {
+    token_payload = sqlitelog.get_user_token_payload(username) or {}
+    token_payload.update({
         "access_token": access_token,
-        "access_token_expires_at": access_expires_at
-    }
+        "access_token_expires_at": access_expires_at,
+        "session_id": session_id,
+        "role": role
+    })
+    sqlitelog.set_user_token_payload(username, token_payload)
+    return {"access_token": access_token, "access_token_expires_at": access_expires_at}
 
 
 def _get_token_payload(token: str, token_type: str) -> tuple[bool, str, dict]:
     if not token:
         return False, "缺少令牌", {}
-    _cleanup_expired_tokens()
-    with AUTH_TOKEN_LOCK:
-        payload = AUTH_TOKEN_STORE.get(token)
-    if not payload:
+    found = sqlitelog.find_user_by_token(token, token_type)
+    if not found:
         return False, "令牌无效或已过期", {}
-    if payload.get("type") != token_type:
-        return False, "令牌类型错误", {}
-    if payload.get("expires_at", 0) <= _now_ts():
-        with AUTH_TOKEN_LOCK:
-            AUTH_TOKEN_STORE.pop(token, None)
+    user_obj, token_payload = found
+    now_ts = _now_ts()
+    expire_key = 'access_token_expires_at' if token_type == 'access' else 'refresh_token_expires_at'
+    if int(token_payload.get(expire_key, 0) or 0) <= now_ts:
+        # 过期后清理持久化 token，避免脏数据
+        sqlitelog.set_user_token_payload(user_obj.username, None)
         return False, "令牌已过期", {}
-    return True, "", payload
+    return True, "", {
+        "username": user_obj.username,
+        "role": token_payload.get("role", user_obj.role),
+        "session_id": token_payload.get("session_id", "")
+    }
 
 
 def revoke_user_tokens(username: str):
     """使某个用户的所有 token 失效（例如改密后）"""
-    with AUTH_TOKEN_LOCK:
-        to_remove = [token for token, payload in AUTH_TOKEN_STORE.items() if payload.get('username') == username]
-        for token in to_remove:
-            AUTH_TOKEN_STORE.pop(token, None)
+    sqlitelog.set_user_token_payload(username, None)
 
 
 def authenticate_request_token(required_role: str = None) -> tuple[bool, str, dict]:
@@ -372,26 +335,15 @@ def refresh_access_token(refresh_token: str) -> tuple[bool, str, dict]:
         revoke_user_tokens(username)
         return False, "用户不存在或已禁用", {}
 
-    # 仅清理当前会话的 access token，不轮换 refresh token
-    with AUTH_TOKEN_LOCK:
-        to_remove = [
-            token for token, token_payload in AUTH_TOKEN_STORE.items()
-            if token_payload.get('type') == 'access'
-            and token_payload.get('username') == username
-            and token_payload.get('session_id') == session_id
-        ]
-        for token in to_remove:
-            AUTH_TOKEN_STORE.pop(token, None)
-        # 若 refresh token 仍存在，继续保活该会话；若不存在则返回失效
-        refresh_payload = AUTH_TOKEN_STORE.get(refresh_token)
-        if not refresh_payload or refresh_payload.get('type') != 'refresh':
-            return False, "刷新令牌已失效，请重新登录", {}
+    current_payload = sqlitelog.get_user_token_payload(username) or {}
+    if current_payload.get('refresh_token') != refresh_token:
+        return False, "刷新令牌已失效，请重新登录", {}
 
     new_access = _issue_access_token(username, role or user_obj.role, session_id)
     return True, "", {
         **new_access,
         "refresh_token": refresh_token,
-        "refresh_token_expires_at": payload.get('expires_at')
+        "refresh_token_expires_at": current_payload.get('refresh_token_expires_at')
     }
 
 
@@ -422,7 +374,7 @@ def get_runtime_state_snapshot() -> dict:
         },
         "api_hosts": host_status,
         "token_stats": {
-            "active_token_count": len(AUTH_TOKEN_STORE)
+            "active_token_count": sqlitelog.get_active_token_count()
         }
     }
 
