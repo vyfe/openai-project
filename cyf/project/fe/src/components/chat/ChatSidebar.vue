@@ -208,17 +208,25 @@
 
           <!-- 增强角色界面，只有在启用时才显示 -->
           <div v-if="formData.enhancedRoleEnabled" class="enhanced-role-interface">
-            <!-- 分组标签 -->
-            <el-tabs v-model="formData.activeEnhancedGroup" type="card" @tab-change="handleGroupChange">
-              <el-tab-pane v-for="(roles, groupName) in formData.enhancedRoleGroups" :key="groupName" :label="groupName"
-                :name="groupName">
-              </el-tab-pane>
-            </el-tabs>
+            <!-- 分组标签（平铺） -->
+            <div v-if="enhancedGroupNames.length > 0" class="enhanced-role-groups">
+              <button
+                v-for="groupName in enhancedGroupNames"
+                :key="groupName"
+                type="button"
+                class="enhanced-role-group-btn"
+                :class="{ active: formData.activeEnhancedGroup === groupName }"
+                :aria-pressed="formData.activeEnhancedGroup === groupName"
+                @click="handleGroupChange(groupName)"
+              >
+                {{ groupName }}
+              </button>
+            </div>
 
             <!-- 角色列表 -->
-            <div v-if="formData.activeEnhancedGroup && formData.enhancedRoleGroups[formData.activeEnhancedGroup]" class="enhanced-role-list">
+            <div v-if="currentEnhancedRoles.length > 0" class="enhanced-role-list">
               <el-radio-group v-model="formData.selectedEnhancedRole" @change="handleEnhancedRoleSelect">
-                <div v-for="role in formData.enhancedRoleGroups[formData.activeEnhancedGroup]" :key="role.role_name"
+                <div v-for="role in currentEnhancedRoles" :key="role.role_name"
                   class="enhanced-role-item">
                   <el-radio :value="role.role_name" border class="enhanced-role-radio">
                     <div class="role-info">
@@ -368,14 +376,29 @@ const loadEnhancedRoles = async () => {
     if (response && response.success && response.groups) {
       formData.enhancedRoleGroups = response.groups
 
-      // 如果还没有 systemPromptId，自动选择第一个角色
-      if (!formData.systemPromptId && Object.keys(response.groups).length > 0) {
-        const firstGroup = Object.keys(response.groups)[0]
-        if (response.groups[firstGroup] && response.groups[firstGroup].length > 0) {
-          formData.systemPromptId = response.groups[firstGroup][0].id
-          formData.selectedEnhancedRole = response.groups[firstGroup][0].role_name
-          formData.activeEnhancedGroup = firstGroup
-        }
+      const groupNames = Object.keys(response.groups)
+      if (groupNames.length === 0) {
+        formData.activeEnhancedGroup = ''
+        formData.selectedEnhancedRole = ''
+        formData.systemPromptId = undefined
+        return
+      }
+
+      const hasValidActiveGroup =
+        formData.activeEnhancedGroup &&
+        response.groups[formData.activeEnhancedGroup] &&
+        response.groups[formData.activeEnhancedGroup].length > 0
+      const targetGroup = hasValidActiveGroup ? formData.activeEnhancedGroup : groupNames[0]
+
+      formData.activeEnhancedGroup = targetGroup
+      localStorage.setItem('activeEnhancedGroup', targetGroup)
+
+      const targetRoles = response.groups[targetGroup] || []
+      if (targetRoles.length > 0) {
+        const targetRole = targetRoles.find((role: any) => role.role_name === formData.selectedEnhancedRole) || targetRoles[0]
+        formData.selectedEnhancedRole = targetRole.role_name
+        formData.systemPromptId = targetRole.id
+        localStorage.setItem('selectedEnhancedRole', targetRole.role_name)
       }
     } else {
       console.error('获取增强角色数据失败:', response?.msg)
@@ -405,6 +428,10 @@ const handleEnhancedRoleToggle = (enabled: boolean) => {
 
 // 处理增强角色分组切换
 const handleGroupChange = (groupName: string) => {
+  if (groupName === formData.activeEnhancedGroup) {
+    return
+  }
+
   formData.activeEnhancedGroup = groupName
   localStorage.setItem('activeEnhancedGroup', groupName)
 
@@ -772,6 +799,13 @@ watch(() => formData.selectedModel, (newValue) => {
 
 // Component-specific reactive state that isn't shared through formData and needs initialization
 const loadingEnhancedRoles = ref(false)
+const enhancedGroupNames = computed(() => Object.keys(formData.enhancedRoleGroups || {}))
+const currentEnhancedRoles = computed(() => {
+  if (!formData.activeEnhancedGroup) {
+    return []
+  }
+  return formData.enhancedRoleGroups[formData.activeEnhancedGroup] || []
+})
 
 // 使用国际化
 const { t } = useI18n()
