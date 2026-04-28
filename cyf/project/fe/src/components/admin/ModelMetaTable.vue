@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { modelMetaAPI } from '@/services/adminApi'
+import { useAdminPagedList } from '@/composables/useAdminPagedList'
+import { useAdminCrudDialog } from '@/composables/useAdminCrudDialog'
+import { useAdminAction } from '@/composables/useAdminAction'
+import { Plus } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 
@@ -16,11 +20,18 @@ interface ModelMeta {
   status_valid: boolean
 }
 
-const models = ref<ModelMeta[]>([])
-const loading = ref(false)
-const dialogVisible = ref(false)
-const dialogMode = ref<'create' | 'edit'>('create')
-const formData = ref({
+const {
+  items: models,
+  loading,
+  keyword,
+  pagination,
+  fetchList: fetchModels,
+  search: handleSearch,
+  changePage: handlePageChange,
+  changePageSize: handlePageSizeChange
+} = useAdminPagedList<ModelMeta, { page?: number; page_size?: number; keyword?: string }>(modelMetaAPI.list)
+
+const createEmptyForm = () => ({
   id: 0,
   model_name: '',
   model_desc: '',
@@ -30,39 +41,16 @@ const formData = ref({
   status_valid: true
 })
 
-const fetchModels = async () => {
-  loading.value = true
-  try {
-    const response = await modelMetaAPI.list()
-    if (response.success) {
-      models.value = response.data || []
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || t('admin.loading'))
-  } finally {
-    loading.value = false
-  }
-}
+const { runAction, runConfirmedAction } = useAdminAction((key) => t(key))
 
-const openCreateDialog = () => {
-  dialogMode.value = 'create'
-  formData.value = {
-    id: 0,
-    model_name: '',
-    model_desc: '',
-    model_type: 1,
-    model_grp: '',
-    recommend: false,
-    status_valid: true
-  }
-  dialogVisible.value = true
-}
-
-const openEditDialog = (row: ModelMeta) => {
-  dialogMode.value = 'edit'
-  formData.value = { ...row }
-  dialogVisible.value = true
-}
+const {
+  dialogVisible,
+  dialogMode,
+  formData,
+  openCreateDialog,
+  openEditDialog,
+  closeDialog
+} = useAdminCrudDialog(createEmptyForm)
 
 const saveModel = async () => {
   if (!formData.value.model_name) {
@@ -70,52 +58,46 @@ const saveModel = async () => {
     return
   }
 
-  try {
-    if (dialogMode.value === 'create') {
-      const response = await modelMetaAPI.create(formData.value)
-      if (response.success) {
-        ElMessage.success(t('admin.saveSuccess'))
-        dialogVisible.value = false
-        fetchModels()
-      }
-    } else {
-      const response = await modelMetaAPI.update(formData.value)
-      if (response.success) {
-        ElMessage.success(t('admin.saveSuccess'))
-        dialogVisible.value = false
-        fetchModels()
+  await runAction(
+    async () => (dialogMode.value === 'create'
+      ? modelMetaAPI.create(formData.value)
+      : modelMetaAPI.update(formData.value)),
+    {
+      successText: t('admin.saveSuccess'),
+      errorFallbackText: 'admin.executeFailed',
+      onSuccess: async () => {
+        closeDialog()
+        await fetchModels()
       }
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || t('admin.executeFailed'))
-  }
+  ).catch(() => undefined)
 }
 
 const deleteModel = async (row: ModelMeta) => {
-  try {
-    await ElMessageBox.confirm(
-      t('admin.confirmDelete'),
-      t('admin.confirm'),
-      {
-        confirmButtonText: t('admin.yes'),
-        cancelButtonText: t('admin.no'),
-        type: 'warning'
+  await runConfirmedAction(
+    {
+      message: t('admin.confirmDelete'),
+      title: t('admin.confirm'),
+      confirmButtonText: t('admin.yes'),
+      cancelButtonText: t('admin.no'),
+      type: 'warning'
+    },
+    () => modelMetaAPI.delete(row.id),
+    {
+      successText: t('admin.deleteSuccess'),
+      errorFallbackText: 'admin.deleteFailed',
+      ignoreCancel: true,
+      onSuccess: async () => {
+        await fetchModels()
       }
-    )
-    const response = await modelMetaAPI.delete(row.id)
-    if (response.success) {
-      ElMessage.success(t('admin.deleteSuccess'))
-      fetchModels()
     }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || t('admin.deleteFailed'))
-    }
-  }
+  ).catch(() => undefined)
 }
 
 onMounted(() => {
-  fetchModels()
+  fetchModels().catch((error: any) => {
+    ElMessage.error(error.response?.data?.msg || error.message || t('admin.loading'))
+  })
 })
 </script>
 
@@ -125,9 +107,20 @@ onMounted(() => {
       <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
         {{ t('admin.modelManagement') }}
       </h2>
-      <el-button type="primary" @click="openCreateDialog" :icon="Plus">
-        {{ t('admin.create') }}
-      </el-button>
+      <div class="flex items-center gap-2">
+        <el-input
+          v-model="keyword"
+          clearable
+          :placeholder="t('admin.searchPlaceholder')"
+          style="width: 220px"
+          @keyup.enter="handleSearch"
+          @clear="() => handleSearch().catch(() => undefined)"
+        />
+        <el-button type="primary" @click="() => handleSearch().catch(() => undefined)">{{ t('admin.query') }}</el-button>
+        <el-button type="primary" @click="openCreateDialog" :icon="Plus">
+          {{ t('admin.create') }}
+        </el-button>
+      </div>
     </div>
 
     <el-table
@@ -174,6 +167,19 @@ onMounted(() => {
       </el-table-column>
     </el-table>
 
+    <div class="mt-4 flex justify-end">
+      <el-pagination
+        background
+        layout="total, sizes, prev, pager, next"
+        :total="pagination.total"
+        :page-size="pagination.page_size"
+        :current-page="pagination.page"
+        :page-sizes="[10, 20, 50, 100]"
+        @current-change="(page) => handlePageChange(page).catch(() => undefined)"
+        @size-change="(size) => handlePageSizeChange(size).catch(() => undefined)"
+      />
+    </div>
+
     <el-dialog
       v-model="dialogVisible"
       :title="dialogMode === 'create' ? t('admin.create') : t('admin.edit')"
@@ -203,7 +209,7 @@ onMounted(() => {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">{{ t('admin.cancel') }}</el-button>
+        <el-button @click="closeDialog">{{ t('admin.cancel') }}</el-button>
         <el-button type="primary" @click="saveModel">{{ t('admin.save') }}</el-button>
       </template>
     </el-dialog>

@@ -1,107 +1,21 @@
-import axios from 'axios'
-import { useAuthStore } from '@/stores/auth'
+import { API_BASE_URL, createApiClient, getValidAccessToken } from '@/services/httpClient'
 
-// 根据实际host动态确定API地址，并支持HTTPS
-const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    // 开发环境使用localhost
-    return 'http://localhost:39997'
-  } else {
-    // 生产环境根据实际host动态确定地址，支持HTTPS
-    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-    const baseUrl = `${protocol}//${window.location.hostname}`
-    return baseUrl
-  }
-}
-
-const API_BASE_URL = getApiBaseUrl()
-
-// 创建axios实例
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 300000, // 5分钟超时 (原为 120000)
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  maxBodyLength: Infinity,  // 允许无限大的请求体
-  maxContentLength: Infinity,  // 允许无限大的响应体
+const api = createApiClient({
+  requireAuthByDefault: true,
+  publicPathPrefixes: ['/never_guess_my_usage/login', '/never_guess_my_usage/register']
 })
 
-// 请求拦截器 - 自动注入用户凭据并将数据转换为JSON格式
-api.interceptors.request.use(
-  (config) => {
-    // 获取认证信息并注入到请求参数中
-    const authStore = useAuthStore()
-    const credentials = authStore.getCredentials()
-
-    // 根据请求类型处理认证信息
-    if (config.method?.toLowerCase() === 'post' && config.headers['Content-Type'] === 'application/json') {
-      // POST请求，认证信息加入请求体
-      if (!config.data) {
-        config.data = {}
-      }
-      if (credentials.user) {
-        (config.data as any).user = credentials.user
-      }
-      if (credentials.password) {
-        (config.data as any).password = credentials.password
-      }
-    } else {
-      // GET请求或其他类型，认证信息加入URL参数
-      if (credentials.user) {
-        if (config.params) {
-          config.params.user = credentials.user
-        } else {
-          config.params = { user: credentials.user }
-        }
-      }
-
-      if (credentials.password) {
-        if (config.params) {
-          config.params.password = credentials.password
-        } else {
-          config.params = { ...config.params, password: credentials.password }
-        }
-      }
-    }
-
-    // 如果是普通对象数据且不是FormData，将其转换为JSON格式
-    if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
-      // 保持为JSON对象格式，不转换为表单数据
-      if (config.headers['Content-Type'] === 'application/json') {
-        config.data = JSON.stringify(config.data)
-      }
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
-
-// 响应拦截器
-api.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
-  (error) => {
-    console.error('API Error:', error)
-    return Promise.reject(error)
-  }
-)
-
-// 用户相关API - 适配后端实际API
 export const authAPI = {
   login: (username: string, password: string) => {
     return api.post('/never_guess_my_usage/login', {
       user: username,
-      password: password
+      password
     })
   },
   register: (username: string, password: string, apiKey?: string) => {
     const data: any = {
-      username: username,
-      password: password
+      username,
+      password
     }
     if (apiKey !== undefined) {
       data.api_key = apiKey
@@ -110,12 +24,10 @@ export const authAPI = {
   }
 }
 
-// 文件上传API - 适配后端实际API
 export const fileAPI = {
   upload: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    // 使用自定义api实例，保持响应结构一致
     return api.post('/never_guess_my_usage/download', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
@@ -124,9 +36,12 @@ export const fileAPI = {
   }
 }
 
-// 聊天API - 适配后端实际API
+const getAuthHeaders = async () => {
+  const token = await getValidAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export const chatAPI = {
-  // 普通聊天接口
   sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number) => {
     const data: any = {
       model,
@@ -136,19 +51,12 @@ export const chatAPI = {
       data.dialog_mode = 'multi'
       data.dialog = JSON.stringify(dialog)
     }
-    if (dialogTitle) {
-      data.dialog_title = dialogTitle
-    }
-    if (maxResponseTokens) {
-      data.max_response_tokens = maxResponseTokens
-    }
-    if (systemPromptId) {
-      data.system_prompt_id = systemPromptId
-    }
+    if (dialogTitle) data.dialog_title = dialogTitle
+    if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
+    if (systemPromptId) data.system_prompt_id = systemPromptId
     return api.post('/never_guess_my_usage/split', data)
   },
 
-  // 流式聊天接口
   sendChatStream: async (
     model: string,
     message: string,
@@ -169,100 +77,68 @@ export const chatAPI = {
       data.dialog_mode = 'multi'
       data.dialog = JSON.stringify(dialog)
     }
-    if (dialogTitle) {
-      data.dialog_title = dialogTitle
-    }
-    if (maxResponseTokens) {
-      data.max_response_tokens = maxResponseTokens
-    }
-    if (systemPromptId) {
-      data.system_prompt_id = systemPromptId
-    }
-    if (requestId) {
-      data.request_id = requestId
-    }
+    if (dialogTitle) data.dialog_title = dialogTitle
+    if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
+    if (systemPromptId) data.system_prompt_id = systemPromptId
+    if (requestId) data.request_id = requestId
 
-    // 添加认证信息到数据中
-    data.user = useAuthStore().user || '';
-    data.password = useAuthStore().password || '';
-
-    // 使用fetch API来处理SSE流式响应，改用POST请求以避免URL长度限制
+    const headers = await getAuthHeaders()
     const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/split_stream`, {
       method: 'POST',
       headers: {
-        'Accept': 'text/event-stream',
+        Accept: 'text/event-stream',
         'Content-Type': 'application/json',
         'Cache-Control': 'no-cache',
+        ...headers
       },
       body: JSON.stringify(data),
       signal
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-    const reader = response.body?.getReader();
+    const reader = response.body?.getReader()
     if (!reader) {
-      throw new Error('No reader available');
+      throw new Error('No reader available')
     }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const decoder = new TextDecoder()
+    let buffer = ''
 
     try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await reader.read()
+        if (done) break
 
-        buffer += decoder.decode(value, { stream: true });
-
-        // 按行分割缓冲区
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留最后一行，可能是不完整的
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const dataStr = line.slice(6); // 移除 'data: ' 前缀
-              if (dataStr.trim()) {
-                const parsedData = JSON.parse(dataStr);
-
-                // 检查是否存在错误
-                if (parsedData.error) {
-                  // 如果存在错误信息，抛出错误
-                  throw new Error(parsedData.error.msg || 'API请求失败');
-                }
-
-                onChunk(parsedData.content, parsedData.done, parsedData.finish_reason, parsedData);
-
-                if (parsedData.done) {
-                  return; // 结束读取
-                }
-              }
-            } catch (e) {
-              console.error('Error parsing SSE data:', e);
-              // 如果解析错误或遇到异常，也需要把错误信息传出去
-              if (e instanceof Error) {
-                throw e; // 重新抛出错误，让调用方处理
-              }
-            }
+          if (!line.startsWith('data: ')) continue
+          const dataStr = line.slice(6)
+          if (!dataStr.trim()) continue
+          const parsedData = JSON.parse(dataStr)
+          if (parsedData.error) {
+            throw new Error(parsedData.error.msg || 'API请求失败')
           }
+          onChunk(parsedData.content, parsedData.done, parsedData.finish_reason, parsedData)
+          if (parsedData.done) return
         }
       }
     } finally {
-      reader.releaseLock();
+      reader.releaseLock()
     }
   },
 
-  // 终止流式对话
   cancelChatStream: (requestId: string) => {
     return api.post('/never_guess_my_usage/split_stream_cancel', {
       request_id: requestId
     })
   },
 
-  // 图片生成接口
   sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number) => {
     const data: any = {
       model,
@@ -272,73 +148,37 @@ export const chatAPI = {
       data.dialog_mode = 'multi'
       data.dialog = JSON.stringify(dialog)
     }
-    if (dialogTitle) {
-      data.dialog_title = dialogTitle
-    }
-    if (imageSize) {
-      data.size = imageSize
-    }
-    if (dialogId) {
-      data.dialogId = dialogId
-    }
-    if (systemPromptId) {
-      data.system_prompt_id = systemPromptId
-    }
+    if (dialogTitle) data.dialog_title = dialogTitle
+    if (imageSize) data.size = imageSize
+    if (dialogId) data.dialogId = dialogId
+    if (systemPromptId) data.system_prompt_id = systemPromptId
     return api.post('/never_guess_my_usage/split_pic', data)
   },
 
-  // 获取对话历史列表
-  getDialogHistory: () => {
-    return api.post('/never_guess_my_usage/split_his', {})
-  },
+  getDialogHistory: () => api.post('/never_guess_my_usage/split_his', {}),
 
-  // 获取特定对话内容
-  getDialogContent: (dialogId: number) => {
-    return api.post('/never_guess_my_usage/split_his_content', {
-      dialogId
-    })
-  },
+  getDialogContent: (dialogId: number) => api.post('/never_guess_my_usage/split_his_content', { dialogId }),
 
-  // 删除历史会话（支持批量删除）
-  deleteDialogs: (dialogIds: number[]) => {
-    return api.post('/never_guess_my_usage/split_his_delete', {
-      dialog_ids: JSON.stringify(dialogIds)
-    })
-  },
+  deleteDialogs: (dialogIds: number[]) => api.post('/never_guess_my_usage/split_his_delete', {
+    dialog_ids: JSON.stringify(dialogIds)
+  }),
 
-  // 获取可用模型列表
-  getModels: () => {
-    return api.get('/never_guess_my_usage/models')
-  },
+  getModels: () => api.get('/never_guess_my_usage/models'),
 
-  // 获取分组的模型列表
-  getGroupedModels: () => {
-    return api.post('/never_guess_my_usage/models/grouped',{})
-  },
+  getGroupedModels: () => api.post('/never_guess_my_usage/models/grouped', {}),
 
-  // 获取用量信息
-  getUsage: () => {
-    // 添加认证信息到数据中
-    const data: any = {}
-    return api.post('/never_guess_my_usage/usage', data)
-  },
+  getUsage: () => api.post('/never_guess_my_usage/usage', {}),
 
-  // 获取分组系统提示词
-  getSystemPromptsByGroup: () => {
-    return api.get('/never_guess_my_usage/system_prompts_by_group')
-  },
+  getSystemPromptsByGroup: () => api.get('/never_guess_my_usage/system_prompts_by_group'),
 
-  // 更新对话标题
-  updateDialogTitle: (dialogId: number, newTitle: string) => {
-    return api.post('/never_guess_my_usage/update_dialog_title', {
-      dialog_id: dialogId,
-      new_title: newTitle
-    })
-  },
+  updateDialogTitle: (dialogId: number, newTitle: string) => api.post('/never_guess_my_usage/update_dialog_title', {
+    dialog_id: dialogId,
+    new_title: newTitle
+  }),
 
-  // 重置密码（支持更新 API key）
-  resetPassword: (newPassword: string, newApiKey?: string) => {
+  resetPassword: (currentPassword: string, newPassword: string, newApiKey?: string) => {
     const data: any = {
+      current_password: currentPassword,
       new_password: newPassword
     }
     if (newApiKey !== undefined) {
@@ -347,20 +187,13 @@ export const chatAPI = {
     return api.post('/never_guess_my_usage/del_password', data)
   },
 
-  // 获取通知列表
-  getNotifications: () => {
-    return api.get('/never_guess_my_usage/notifications')
-  },
+  getNotifications: () => api.get('/never_guess_my_usage/notifications'),
 
-  saveBrowserConf: (browserConf: string) => {
-    return api.post('/never_guess_my_usage/browser_conf/save', {
-      browser_conf: browserConf
-    })
-  },
+  saveBrowserConf: (browserConf: string) => api.post('/never_guess_my_usage/browser_conf/save', {
+    browser_conf: browserConf
+  }),
 
-  getBrowserConf: () => {
-    return api.post('/never_guess_my_usage/browser_conf/get', {})
-  }
+  getBrowserConf: () => api.post('/never_guess_my_usage/browser_conf/get', {})
 }
 
 export default api

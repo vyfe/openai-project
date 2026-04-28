@@ -124,30 +124,39 @@ def init_model_meta_data():
         if db.is_closed():
             db.connect()
 
-        added_count = 0  # 计数新增的记录数
+        added_count = 0   # 新增记录数
+        updated_count = 0 # 更新记录数
 
-        # 插入新数据（仅插入不存在的模型）
+        # 写入模型元数据（新增或更新）
         for model_data in models_data:
-            # 检查必要字段是否存在
-            if 'id' not in model_data:
-                print(f"跳过无效数据项: {model_data}")
-                continue
-
-            model_name = model_data.get('id', '').strip()
+            # 兼容两种字段：API(id/desc_zh/exists) 与 默认数据(model_name/model_desc/status_valid)
+            model_name = str(model_data.get('id') or model_data.get('model_name') or '').strip()
             if not model_name:
                 print(f"跳过空模型名称的数据项: {model_data}")
                 continue
 
-            model_desc = model_data.get('desc_zh', 'No description available')
+            model_desc = str(model_data.get('desc_zh') or model_data.get('model_desc') or 'No description available')
             recommend = bool(model_data.get('recommend', False))
-            status_valid = bool(model_data.get('exists', True))
+            status_valid = bool(model_data.get('exists', model_data.get('status_valid', True)))
 
-            # 检查模型是否已存在
             try:
                 existing_model = ModelMeta.get(ModelMeta.model_name == model_name)
-                print(f"模型 {model_name} 已存在，跳过")
+                changed = False
+                if existing_model.model_desc != model_desc:
+                    existing_model.model_desc = model_desc
+                    changed = True
+                if existing_model.recommend != recommend:
+                    existing_model.recommend = recommend
+                    changed = True
+                if existing_model.status_valid != status_valid:
+                    existing_model.status_valid = status_valid
+                    changed = True
+
+                if changed:
+                    existing_model.save()
+                    updated_count += 1
+                    print(f"成功更新模型: {model_name}")
             except ModelMeta.DoesNotExist:
-                # 模型不存在，执行插入
                 try:
                     ModelMeta.create(
                         model_name=model_name,
@@ -161,7 +170,7 @@ def init_model_meta_data():
                     print(f"添加模型 {model_name} 时出错: {e}")
                     continue
 
-        print(f"完成模型元数据初始化，共新增 {added_count} 个模型")
+        print(f"完成模型元数据初始化，新增 {added_count} 个，更新 {updated_count} 个")
 
     except Exception as e:
         print(f"初始化过程中出现错误: {e}")

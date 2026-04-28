@@ -34,7 +34,7 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const user = localStorage.getItem('user')
-  const password = localStorage.getItem('password')
+  const refreshToken = localStorage.getItem('refresh_token')
 
   // 解析 role（存储的是 JSON 字符串）
   let role = null
@@ -57,9 +57,9 @@ router.beforeEach((to, from, next) => {
     return
   }
 
-  if (to.meta.requiresAuth && (!user || !password)) {
+  if (to.meta.requiresAuth && (!user || !refreshToken)) {
     next('/login')
-  } else if (to.path === '/login' && user && password) {
+  } else if (to.path === '/login' && user && refreshToken) {
     next('/chat')
   } else {
     next()

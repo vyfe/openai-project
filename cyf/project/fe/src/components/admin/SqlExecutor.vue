@@ -1,17 +1,32 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { sqlAPI } from '@/services/adminApi'
 
 const { t } = useI18n()
 
+type SqlMetaTable = {
+  table_name: string
+  row_count: number
+  columns: Array<{
+    name: string
+    data_type: string
+    nullable: boolean
+    primary_key: boolean
+  }>
+}
+
 const sqlInput = ref('')
 const executing = ref(false)
+const loadingMeta = ref(false)
 const results = ref<any[]>([])
 const columns = ref<string[]>([])
 const hasError = ref(false)
 const errorMessage = ref('')
+const dbPath = ref('')
+const metaTables = ref<SqlMetaTable[]>([])
+const activeMetaTable = ref('')
 
 const executeSQL = async () => {
   const sql = sqlInput.value.trim()
@@ -29,24 +44,17 @@ const executeSQL = async () => {
     if (response.success) {
       results.value = []
       columns.value = []
-
-      // 处理结果
-      if (Array.isArray(response.data)) {
-        if (response.data.length > 0) {
-          // 如果是数组，提取列名
-          columns.value = Object.keys(response.data[0])
-          results.value = response.data
-        }
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        columns.value = Object.keys(response.data[0])
+        results.value = response.data
       } else if (typeof response.data === 'object' && response.data !== null) {
-        // 如果是对象，转换为数组
         columns.value = Object.keys(response.data)
         results.value = [response.data]
       }
-
       if (results.value.length === 0) {
-        // 如果没有结果，可能是INSERT/UPDATE/DELETE等操作
         ElMessage.success(t('admin.executeSuccess'))
       }
+      await fetchSqlMeta()
     } else {
       hasError.value = true
       errorMessage.value = response.msg || t('admin.executeFailed')
@@ -59,6 +67,24 @@ const executeSQL = async () => {
   }
 }
 
+const fetchSqlMeta = async () => {
+  loadingMeta.value = true
+  try {
+    const response = await sqlAPI.meta()
+    if (response.success) {
+      dbPath.value = response.data?.database?.path || ''
+      metaTables.value = response.data?.tables || []
+      if (metaTables.value.length > 0 && !activeMetaTable.value) {
+        activeMetaTable.value = metaTables.value[0].table_name
+      }
+    }
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.msg || error.message || t('admin.executeFailed'))
+  } finally {
+    loadingMeta.value = false
+  }
+}
+
 const clearResults = () => {
   results.value = []
   columns.value = []
@@ -66,15 +92,9 @@ const clearResults = () => {
   errorMessage.value = ''
 }
 
-// TODO(human): 实现SQL语法高亮功能
-// 前端使用CodeMirror编辑器实现SQL语法高亮
-// 考虑添加常用SQL模板按钮（如SELECT、INSERT、UPDATE等）
-// 可以添加表名自动补全功能
-
-// TODO(human): 实现查询历史记录功能
-// 保存最近执行的SQL语句
-// 提供快速访问历史查询的功能
-// 可以添加收藏常用查询的功能
+onMounted(() => {
+  fetchSqlMeta()
+})
 </script>
 
 <template>
@@ -88,7 +108,54 @@ const clearResults = () => {
       </p>
     </div>
 
-    <!-- SQL输入区域 -->
+    <div class="mb-6 rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white/80 dark:bg-gray-800/60">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-md font-semibold text-gray-800 dark:text-gray-200">
+          {{ t('admin.sqlMeta') }}
+        </h3>
+        <el-button size="small" :loading="loadingMeta" @click="fetchSqlMeta">{{ t('admin.refresh') }}</el-button>
+      </div>
+      <p class="text-xs text-gray-500 mb-3 break-all">{{ dbPath }}</p>
+
+      <el-table
+        v-loading="loadingMeta"
+        :data="metaTables"
+        size="small"
+        border
+        max-height="220"
+      >
+        <el-table-column prop="table_name" :label="t('admin.tableName')" min-width="160" />
+        <el-table-column prop="row_count" :label="t('admin.rowCount')" width="120" />
+      </el-table>
+
+      <div class="mt-4" v-if="metaTables.length">
+        <el-select v-model="activeMetaTable" style="width: 260px" :placeholder="t('admin.tableName')">
+          <el-option
+            v-for="item in metaTables"
+            :key="item.table_name"
+            :label="item.table_name"
+            :value="item.table_name"
+          />
+        </el-select>
+        <el-table
+          class="mt-3"
+          :data="metaTables.find(ti => ti.table_name === activeMetaTable)?.columns || []"
+          size="small"
+          border
+          max-height="220"
+        >
+          <el-table-column prop="name" :label="t('admin.columnName')" min-width="180" />
+          <el-table-column prop="data_type" :label="t('admin.columnType')" min-width="120" />
+          <el-table-column prop="nullable" :label="t('admin.nullable')" width="100">
+            <template #default="{ row }">{{ row.nullable ? t('admin.yes') : t('admin.no') }}</template>
+          </el-table-column>
+          <el-table-column prop="primary_key" :label="t('admin.primaryKey')" width="100">
+            <template #default="{ row }">{{ row.primary_key ? t('admin.yes') : t('admin.no') }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </div>
+
     <div class="mb-4">
       <el-input
         v-model="sqlInput"
@@ -99,7 +166,6 @@ const clearResults = () => {
       />
     </div>
 
-    <!-- 操作按钮 -->
     <div class="mb-4 flex gap-2">
       <el-button
         type="primary"
@@ -115,9 +181,7 @@ const clearResults = () => {
       </el-button>
     </div>
 
-    <!-- 执行结果 -->
     <div class="results-container" v-if="hasError || columns.length > 0">
-      <!-- 错误信息 -->
       <div v-if="hasError" class="error-message mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
         <div class="flex items-center gap-2 text-red-600 dark:text-red-400">
           <el-icon><CircleCloseFilled /></el-icon>
@@ -126,7 +190,6 @@ const clearResults = () => {
         <p class="mt-2 text-sm">{{ errorMessage }}</p>
       </div>
 
-      <!-- 结果表格 -->
       <div v-else-if="columns.length > 0">
         <h3 class="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">
           {{ t('admin.result') }} ({{ results.length }} {{ t('admin.units') }})
@@ -150,7 +213,6 @@ const clearResults = () => {
       </div>
     </div>
 
-    <!-- 空状态 -->
     <div v-else class="empty-state p-8 text-center">
       <el-icon class="text-6xl text-gray-300 dark:text-gray-600"><Document /></el-icon>
       <p class="mt-4 text-gray-500 dark:text-gray-400">

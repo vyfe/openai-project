@@ -3,6 +3,7 @@ import json
 import logging
 import os.path
 import random
+import secrets
 import sys
 import time
 import re
@@ -94,6 +95,58 @@ conf = configparser.ConfigParser()
 conf.read('conf/conf.ini', encoding="UTF-8")
 url_list = conf['api']['api_host'].split(',')
 web_host = conf['common']['host']
+
+# ========== API Host 黑名单机制 ==========
+# 黑名单字典：{url_index: 拉黑结束时间戳}
+api_host_blacklist = {}
+# 黑名单持续时间（秒）：5分钟
+BLACKLIST_DURATION = 5 * 60
+# 黑名单锁
+blacklist_lock = threading.Lock()
+
+def is_host_blacklisted(url_index: int) -> bool:
+    """检查 host 是否在黑名单中"""
+    with blacklist_lock:
+        if url_index in api_host_blacklist:
+            if time.time() < api_host_blacklist[url_index]:
+                return True
+            else:
+                # 已过期，移除
+                del api_host_blacklist[url_index]
+        return False
+
+def blacklist_host(url_index: int):
+    """将 host 拉入黑名单 5 分钟"""
+    with blacklist_lock:
+        api_host_blacklist[url_index] = time.time() + BLACKLIST_DURATION
+        app.logger.warning(f"API Host {url_list[url_index]} 被拉黑 5 分钟")
+
+def get_available_host_indices() -> list:
+    """获取所有可用的 host 索引（未被拉黑的）"""
+    available = []
+    for i in range(len(url_list)):
+        if not is_host_blacklisted(i):
+            available.append(i)
+    return available
+
+def cleanup_expired_blacklist():
+    """清理过期的黑名单条目（可选的主动清理）"""
+    with blacklist_lock:
+        current_time = time.time()
+        expired = [idx for idx, end_time in api_host_blacklist.items() if current_time >= end_time]
+        for idx in expired:
+            del api_host_blacklist[idx]
+
+# 启动定时清理线程
+def blacklist_cleanup_worker():
+    """定时清理过期黑名单的后台线程"""
+    while True:
+        time.sleep(60)  # 每分钟检查一次
+        cleanup_expired_blacklist()
+
+cleanup_thread = threading.Thread(target=blacklist_cleanup_worker, daemon=True)
+cleanup_thread.start()
+# ========== 黑名单机制结束 ==========
 # 解析用户凭据，支持格式：用户名:密码:api_key（api_key可选）
 user_credentials = {}
 user_api_keys = {}  # 存储用户的专属API key
@@ -101,6 +154,277 @@ user_api_keys = {}  # 存储用户的专属API key
 # 模型缓存相关配置
 MODEL_CACHE = {}
 CACHE_EXPIRY_TIME = {}
+
+# 鉴权 Token 配置
+ACCESS_TOKEN_TTL_SECONDS = int(conf.get('auth', 'access_token_ttl_seconds', fallback='1800'))
+REFRESH_TOKEN_TTL_SECONDS = int(conf.get('auth', 'refresh_token_ttl_seconds', fallback='604800'))
+AUTH_TOKEN_STORE = {}
+AUTH_TOKEN_LOCK = threading.Lock()
+SERVER_START_TIME = time.time()
+
+# 线程本地存储，用于跟踪当前请求使用的 host 索引
+_thread_local = threading.local()
+
+def get_current_url_index() -> int:
+    """获取当前请求使用的 url 索引"""
+    return getattr(_thread_local, 'url_index', None)
+
+def set_current_url_index(index: int):
+    """设置当前请求使用的 url 索引"""
+    _thread_local.url_index = index
+
+
+def invalidate_model_cache(reason: str = "manual"):
+    """主动失效模型缓存"""
+    MODEL_CACHE.pop('models', None)
+    CACHE_EXPIRY_TIME.pop('models', None)
+    app.logger.info(f"模型缓存已失效，reason={reason}")
+
+
+def _seconds_until_next(hour: int, minute: int = 0) -> int:
+    now = datetime.now()
+    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return max(1, int((target - now).total_seconds()))
+
+
+MODEL_META_TIMER_LOCK = threading.Lock()
+MODEL_META_TIMER = None
+
+
+def _run_model_meta_refresh(reason: str):
+    try:
+        from init.init_model_meta import init_model_meta_data
+        init_model_meta_data()
+        invalidate_model_cache(reason=reason)
+        app.logger.info(f"模型元数据定时刷新成功，reason={reason}")
+    except Exception as e:
+        app.logger.error(f"模型元数据定时刷新失败，reason={reason}, err={str(e)}")
+
+
+def _schedule_next_model_meta_refresh():
+    global MODEL_META_TIMER
+    schedule_hour = int(conf.get('model_filter', 'meta_refresh_hour', fallback='2'))
+    schedule_minute = int(conf.get('model_filter', 'meta_refresh_minute', fallback='0'))
+    wait_seconds = _seconds_until_next(schedule_hour, schedule_minute)
+
+    app.logger.info(
+        f"模型元数据定时任务将在 {wait_seconds}s 后执行，下次时间: {schedule_hour:02d}:{schedule_minute:02d}"
+    )
+
+    timer = threading.Timer(wait_seconds, _model_meta_refresh_job)
+    timer.daemon = True
+    timer.name = 'model-meta-refresh-timer'
+    with MODEL_META_TIMER_LOCK:
+        MODEL_META_TIMER = timer
+    timer.start()
+
+
+def _model_meta_refresh_job():
+    _run_model_meta_refresh("daily_schedule")
+    _schedule_next_model_meta_refresh()
+
+
+def start_model_meta_scheduler():
+    """启动模型元数据每日定时刷新（默认 02:00）。"""
+    refresh_on_startup = conf.get('model_filter', 'meta_refresh_on_startup', fallback='true').lower() in ('1', 'true', 'yes', 'on')
+    if refresh_on_startup:
+        _run_model_meta_refresh("startup_refresh")
+    _schedule_next_model_meta_refresh()
+
+
+def _now_ts() -> int:
+    return int(time.time())
+
+
+def _cleanup_expired_tokens():
+    now_ts = _now_ts()
+    expired_tokens = []
+    with AUTH_TOKEN_LOCK:
+        for token, payload in AUTH_TOKEN_STORE.items():
+            if payload.get('expires_at', 0) <= now_ts:
+                expired_tokens.append(token)
+        for token in expired_tokens:
+            AUTH_TOKEN_STORE.pop(token, None)
+
+
+def _extract_bearer_token() -> str:
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header:
+        return ''
+    prefix = 'bearer '
+    if auth_header.lower().startswith(prefix):
+        return auth_header[len(prefix):].strip()
+    return ''
+
+
+def _issue_auth_tokens(username: str, role: str) -> dict:
+    _cleanup_expired_tokens()
+    now_ts = _now_ts()
+    access_token = secrets.token_urlsafe(32)
+    refresh_token = secrets.token_urlsafe(48)
+    session_id = secrets.token_hex(12)
+    access_expires_at = now_ts + ACCESS_TOKEN_TTL_SECONDS
+    refresh_expires_at = now_ts + REFRESH_TOKEN_TTL_SECONDS
+
+    access_payload = {
+        "type": "access",
+        "username": username,
+        "role": role,
+        "session_id": session_id,
+        "issued_at": now_ts,
+        "expires_at": access_expires_at
+    }
+    refresh_payload = {
+        "type": "refresh",
+        "username": username,
+        "role": role,
+        "session_id": session_id,
+        "issued_at": now_ts,
+        "expires_at": refresh_expires_at
+    }
+    with AUTH_TOKEN_LOCK:
+        AUTH_TOKEN_STORE[access_token] = access_payload
+        AUTH_TOKEN_STORE[refresh_token] = refresh_payload
+
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": access_expires_at,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": refresh_expires_at
+    }
+
+
+def _issue_access_token(username: str, role: str, session_id: str) -> dict:
+    """仅签发 access token；refresh token 在登录时签发，刷新阶段不轮换。"""
+    _cleanup_expired_tokens()
+    now_ts = _now_ts()
+    access_token = secrets.token_urlsafe(32)
+    access_expires_at = now_ts + ACCESS_TOKEN_TTL_SECONDS
+    access_payload = {
+        "type": "access",
+        "username": username,
+        "role": role,
+        "session_id": session_id,
+        "issued_at": now_ts,
+        "expires_at": access_expires_at
+    }
+    with AUTH_TOKEN_LOCK:
+        AUTH_TOKEN_STORE[access_token] = access_payload
+    return {
+        "access_token": access_token,
+        "access_token_expires_at": access_expires_at
+    }
+
+
+def _get_token_payload(token: str, token_type: str) -> tuple[bool, str, dict]:
+    if not token:
+        return False, "缺少令牌", {}
+    _cleanup_expired_tokens()
+    with AUTH_TOKEN_LOCK:
+        payload = AUTH_TOKEN_STORE.get(token)
+    if not payload:
+        return False, "令牌无效或已过期", {}
+    if payload.get("type") != token_type:
+        return False, "令牌类型错误", {}
+    if payload.get("expires_at", 0) <= _now_ts():
+        with AUTH_TOKEN_LOCK:
+            AUTH_TOKEN_STORE.pop(token, None)
+        return False, "令牌已过期", {}
+    return True, "", payload
+
+
+def revoke_user_tokens(username: str):
+    """使某个用户的所有 token 失效（例如改密后）"""
+    with AUTH_TOKEN_LOCK:
+        to_remove = [token for token, payload in AUTH_TOKEN_STORE.items() if payload.get('username') == username]
+        for token in to_remove:
+            AUTH_TOKEN_STORE.pop(token, None)
+
+
+def authenticate_request_token(required_role: str = None) -> tuple[bool, str, dict]:
+    token = _extract_bearer_token()
+    if not token:
+        return False, "缺少访问令牌", {}
+    ok, msg, payload = _get_token_payload(token, "access")
+    if not ok:
+        return False, msg, {}
+    if required_role and payload.get('role') != required_role:
+        return False, "权限不足", {}
+    return True, "", payload
+
+
+def refresh_access_token(refresh_token: str) -> tuple[bool, str, dict]:
+    ok, msg, payload = _get_token_payload(refresh_token, "refresh")
+    if not ok:
+        return False, msg, {}
+
+    username = payload.get('username')
+    role = payload.get('role')
+    session_id = payload.get('session_id')
+    if not username:
+        return False, "刷新令牌无效", {}
+
+    # 校验用户是否仍然有效
+    user_obj = sqlitelog.get_user_by_username(username)
+    if not user_obj:
+        revoke_user_tokens(username)
+        return False, "用户不存在或已禁用", {}
+
+    # 仅清理当前会话的 access token，不轮换 refresh token
+    with AUTH_TOKEN_LOCK:
+        to_remove = [
+            token for token, token_payload in AUTH_TOKEN_STORE.items()
+            if token_payload.get('type') == 'access'
+            and token_payload.get('username') == username
+            and token_payload.get('session_id') == session_id
+        ]
+        for token in to_remove:
+            AUTH_TOKEN_STORE.pop(token, None)
+        # 若 refresh token 仍存在，继续保活该会话；若不存在则返回失效
+        refresh_payload = AUTH_TOKEN_STORE.get(refresh_token)
+        if not refresh_payload or refresh_payload.get('type') != 'refresh':
+            return False, "刷新令牌已失效，请重新登录", {}
+
+    new_access = _issue_access_token(username, role or user_obj.role, session_id)
+    return True, "", {
+        **new_access,
+        "refresh_token": refresh_token,
+        "refresh_token_expires_at": payload.get('expires_at')
+    }
+
+
+def get_runtime_state_snapshot() -> dict:
+    now_ts = _now_ts()
+    with blacklist_lock:
+        blacklist_snapshot = dict(api_host_blacklist)
+
+    host_status = []
+    for idx, host in enumerate(url_list):
+        blacklisted_until = blacklist_snapshot.get(idx, 0)
+        remaining = max(0, int(blacklisted_until - now_ts))
+        host_status.append({
+            "index": idx,
+            "host": host,
+            "blacklisted": remaining > 0,
+            "blacklist_remaining_seconds": remaining
+        })
+
+    model_cache_expire_ts = int(CACHE_EXPIRY_TIME.get('models', 0) or 0)
+    return {
+        "uptime_seconds": max(0, int(now_ts - SERVER_START_TIME)),
+        "model_cache": {
+            "cached": "models" in MODEL_CACHE,
+            "model_count": len(MODEL_CACHE.get('models', [])) if isinstance(MODEL_CACHE.get('models', []), list) else 0,
+            "expires_at": model_cache_expire_ts,
+            "expires_in_seconds": max(0, model_cache_expire_ts - now_ts) if model_cache_expire_ts else 0
+        },
+        "api_hosts": host_status,
+        "token_stats": {
+            "active_token_count": len(AUTH_TOKEN_STORE)
+        }
+    }
 
 # 测试用户限制配置
 test_user_name = conf.get('common', 'test_user', fallback='')
@@ -222,9 +546,16 @@ def get_content_type(filename: str) -> str:
     return content_types.get(ext, 'application/octet-stream')
 
 
-def handle_api_exception(e, user=None, model=None, dialog_content=None):
+def handle_api_exception(e, user=None, model=None, dialog_content=None, url_index=None):
     """
     统一处理API异常，特别处理IP白名单限制等错误
+    
+    Args:
+        e: 异常对象
+        user: 用户名
+        model: 模型名
+        dialog_content: 对话内容
+        url_index: 使用的 host 索引，如果不为 None 则会将该 host 拉黑
     """
     app.logger.error(f"API请求异常: {str(e)}, 类型: {type(e).__name__}")
 
@@ -232,6 +563,10 @@ def handle_api_exception(e, user=None, model=None, dialog_content=None):
     if user and model:
         error_msg = f"API Error: {str(e)}"
         sqlitelog.set_log(user, 0, model, json.dumps({"error": error_msg, "content": dialog_content or ""}))
+
+    # 如果提供了 url_index，将该 host 拉黑
+    if url_index is not None:
+        blacklist_host(url_index)
 
     # 处理不同的异常类型
     if isinstance(e, AuthenticationError):
@@ -352,54 +687,99 @@ def require_auth(f):
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # 首先检查Content-Type头以确定请求数据格式
-        content_type = request.content_type
+        # CORS 预检请求直接放行，避免被鉴权拦截
+        if request.method == 'OPTIONS':
+            return '', 200
 
+        # 优先使用 Bearer Token 鉴权
+        token_ok, token_msg, token_payload = authenticate_request_token()
+        if token_ok:
+            kwargs['user'] = token_payload.get('username', '')
+            kwargs['password'] = ''
+            return f(*args, **kwargs)
+
+        # 兼容旧版 user/password 模式
+        content_type = request.content_type
         if content_type and 'application/json' in content_type:
-            # 如果是JSON请求，从JSON数据中获取参数
             json_data = request.get_json(silent=True)
             if json_data:
-                user = json_data.get('user', '').strip()
-                password = json_data.get('password', '').strip()
+                user = str(json_data.get('user', '')).strip()
+                password = str(json_data.get('password', '')).strip()
             else:
-                # 如果JSON数据无效，尝试从其他来源获取
                 user = request.values.get('user', '').strip()
                 password = request.values.get('password', '').strip()
         else:
-            # 否则是表单数据或URL参数
             user = request.values.get('user', '').strip()
             password = request.values.get('password', '').strip()
 
-        # 验证用户凭据
-        is_valid, error_msg, _ = verify_credentials(user, password)
+        is_valid, error_msg, user_info = verify_credentials(user, password)
         if not is_valid:
-            return {"msg": error_msg}, 200
+            fail_msg = error_msg or token_msg or "认证失败"
+            return {"success": False, "msg": fail_msg}, 401
 
-        # 将用户信息注入到函数参数中
         kwargs['user'] = user
         kwargs['password'] = password
-
         return f(*args, **kwargs)
     return decorated_function
 
-def random_client() -> OpenAI:
-    return clients[random.randint(0, len(url_list) - 1)]
+def random_client() -> tuple:
+    """返回一个随机的未被拉黑的 API 客户端
+    
+    返回: (OpenAI客户端, url_index)
+    """
+    available_indices = get_available_host_indices()
+    if not available_indices:
+        # 如果所有 host 都被拉黑，随机返回一个（降级处理）
+        app.logger.warning("所有 API Host 都被拉黑，降级使用随机 host")
+        url_index = random.randint(0, len(url_list) - 1)
+        return clients[url_index], url_index
+    
+    selected_index = random.choice(available_indices)
+    set_current_url_index(selected_index)
+    return clients[selected_index], selected_index
 
 
-def get_client_for_user(username: str) -> OpenAI:
-    """根据用户名获取对应的API客户端"""
+def get_client_for_url_index(url_index: int, api_key: str = None) -> OpenAI:
+    """根据 url 索引获取 API 客户端
+    
+    Args:
+        url_index: url_list 中的索引
+        api_key: 可选的 API key，如果为 None 则使用默认 key
+    """
+    if api_key:
+        return OpenAI(api_key=api_key, base_url=url_list[url_index])
+    else:
+        return clients[url_index]
+
+
+def get_client_for_user(username: str) -> tuple:
+    """根据用户名获取对应的API客户端（优先使用未被拉黑的 host）
+    
+    返回: (OpenAI客户端, url_index)
+    """
     if USE_DB_AUTH:
         api_key = sqlitelog.get_user_api_key(username)
     else:
         api_key = user_api_keys.get(username)
 
+    # 获取可用的 host 索引
+    available_indices = get_available_host_indices()
+    if not available_indices:
+        # 所有 host 都被拉黑，降级处理
+        app.logger.warning("所有 API Host 都被拉黑，降级使用随机 host")
+        url_index = random.randint(0, len(url_list) - 1)
+    else:
+        url_index = random.choice(available_indices)
+
+    # 设置当前线程使用的 url 索引，用于异常处理时拉黑
+    set_current_url_index(url_index)
+
     if api_key:
         # 为用户创建具有其专属API key的客户端
-        url = url_list[random.randint(0, len(url_list) - 1)]
-        return OpenAI(api_key=api_key, base_url=url)
+        return OpenAI(api_key=api_key, base_url=url_list[url_index]), url_index
     else:
         # 返回默认客户端
-        return random_client()
+        return clients[url_index], url_index
 
 
 
@@ -481,7 +861,7 @@ def get_cached_models():
         return MODEL_CACHE.get('models', [])
 
     try:
-        client = random_client()
+        client, _ = random_client()
         models_response = client.models.list()
 
         # 解析排除规则
@@ -623,7 +1003,6 @@ def health_check():
 
 @app.route('/never_guess_my_usage/login', methods=['POST'])
 def login():
-    content_type = request.content_type
     data = get_request_data()
     # 否则是表单数据
     user = data.get('user', '').strip()
@@ -637,7 +1016,29 @@ def login():
     if not is_valid:
         return {"success": False, "msg": error_msg}, 200
 
-    return {"success": True, "msg": "登录成功", "data": user_info}, 200
+    token_bundle = _issue_auth_tokens(user_info.get('username', user), user_info.get('role', 'user'))
+    return {
+        "success": True,
+        "msg": "登录成功",
+        "data": {
+            **user_info,
+            **token_bundle
+        }
+    }, 200
+
+
+@app.route('/never_guess_my_usage/token/refresh', methods=['POST'])
+def refresh_token():
+    data = request.get_json(silent=True) or {}
+    refresh_token_value = str(data.get('refresh_token', '')).strip()
+    if not refresh_token_value:
+        return {"success": False, "msg": "缺少 refresh_token"}, 401
+
+    ok, msg, token_bundle = refresh_access_token(refresh_token_value)
+    if not ok:
+        return {"success": False, "msg": msg or "刷新令牌失败"}, 401
+
+    return {"success": True, "msg": "刷新成功", "data": token_bundle}, 200
 
 
 @app.route('/never_guess_my_usage/register', methods=['POST'])
@@ -811,7 +1212,8 @@ def dialog(user, password):
 
         # 添加API请求的异常处理
         try:
-            result = get_client_for_user(user).chat.completions.create(**api_params)
+            client, url_index = get_client_for_user(user)
+            result = client.chat.completions.create(**api_params)
             # 4 sqlite3数据库写日志：用户名+token数+raw msg
             tokens = result.usage.total_tokens
             app.logger.info(result)
@@ -832,7 +1234,7 @@ def dialog(user, password):
 
             return response_data, 200
         except Exception as api_e:
-            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
+            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs, url_index=url_index), 200
     except json.JSONDecodeError:
         return {"msg": "api return json not ok"}, 200
 
@@ -930,7 +1332,8 @@ def dialog_stream(user, password):
                     "timeout": 300  # 5分钟超时
                 }
 
-                stream = get_client_for_user(user).chat.completions.create(**api_params)
+                client, url_index = get_client_for_user(user)
+                stream = client.chat.completions.create(**api_params)
                 set_stream_object(request_id, stream)
 
                 finish_reason = None
@@ -966,7 +1369,7 @@ def dialog_stream(user, password):
                 yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id})}\n\n"
 
             except Exception as api_e:
-                error_response = handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs)
+                error_response = handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs, url_index=url_index)
                 app.logger.error(f"流式API请求异常处理: {error_response}")
                 # 发送错误信息，标记为已完成，带有错误详情
                 yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"
@@ -1059,10 +1462,11 @@ def dialog_pic(user, password):
 
                 
         try:
+            client, url_index = get_client_for_user(user)
             # 如果有文件，使用图片编辑API；否则使用图片生成API
             if processed_data['files']:
                 # 使用第一个文件进行图片编辑,多图编辑兼容性不太好
-                result = get_client_for_user(user).images.edit(
+                result = client.images.edit(
                     model=model,
                     image=processed_data['files'][0]['data'],
                     prompt=processed_data['text_content'],
@@ -1073,7 +1477,7 @@ def dialog_pic(user, password):
                 )
             else:
                 # 无文件，直接生成图片
-                result = get_client_for_user(user).images.generate(
+                result = client.images.generate(
                     model=model,
                     prompt=processed_data['text_content'],
                     n=1,
@@ -1082,7 +1486,7 @@ def dialog_pic(user, password):
                     timeout=300
                 )
         except Exception as api_e:
-            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs), 200
+            return handle_api_exception(api_e, user=user, model=model, dialog_content=dialogs, url_index=url_index), 200
 
         app.logger.info(result)
         # 返回的图片url需要转储到本地的downloads/image中，再生成新的链接/日志/对话记录，同时在客户端展示图片和文件url
@@ -1139,7 +1543,7 @@ def dialog_pic(user, password):
 def dialog_his(user, password):
     # 根据用户名获取3日内历史纪录，[{日期+标题、类型}], 按id倒排
     app.logger.info(user)
-    min_time_str = (datetime.now() - timedelta(days=5)).date()
+    min_time_str = (datetime.now() - timedelta(days=15)).date()
     dialog_list = sqlitelog.get_dialog_list(user, min_time_str)
     dialog_list = [ {**item, "start_date": item["start_date"].strftime("%Y-%m-%d")} for item in dialog_list]
     return {"content": dialog_list}, 200
@@ -1437,14 +1841,20 @@ def user_reset_password(user, password):
     """重置用户密码，同时可更新 API key"""
     try:
         data = get_request_data()
+        current_password = data.get('current_password', '').strip()
         new_password = data.get('new_password', '').strip()
         new_api_key = data.get('new_api_key', '').strip()
+
+        if not current_password:
+            return jsonify({"success": False, "msg": "当前密码不能为空"})
 
         if not new_password:
             return jsonify({"success": False, "msg": "新密码不能为空"})
 
-        # 由于使用了require_auth装饰器，我们已经有了经过验证的用户信息
-        current_user = user  # 从装饰器获得的用户名
+        current_user = user
+        is_valid_current, error_msg, _ = verify_credentials(current_user, current_password)
+        if not is_valid_current:
+            return jsonify({"success": False, "msg": error_msg or "当前密码不正确"})
 
         # 调用sqlitelog中的重置密码函数
         from sqlitelog import reset_user_password
@@ -1461,7 +1871,9 @@ def user_reset_password(user, password):
                 user_obj.updated_at = datetime.now()
                 user_obj.save()
 
-        return jsonify({"success": True, "msg": "密码更新成功"})
+        # 改密后让所有 token 失效，强制重新登录
+        revoke_user_tokens(current_user)
+        return jsonify({"success": True, "msg": "密码更新成功，请重新登录"})
 
     except Exception as e:
         app.logger.error(f"重置密码失败: {str(e)}")
@@ -1479,6 +1891,9 @@ except ImportError:
     print("警告: init_model_meta.py 文件不存在或导入失败，跳过模型元数据初始化")
 except Exception as e:
     print(f"模型元数据初始化过程中发生错误: {e}")
+
+# 启动模型元数据每日定时刷新（默认每天 02:00）
+start_model_meta_scheduler()
 
 # 注册 admin 路由（如果存在）
 if admin_app:

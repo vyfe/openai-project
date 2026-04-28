@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -9,12 +9,14 @@ import UserTable from '@/components/admin/UserTable.vue'
 import NotificationTable from '@/components/admin/NotificationTable.vue'
 import TestLimitTable from '@/components/admin/TestLimitTable.vue'
 import SqlExecutor from '@/components/admin/SqlExecutor.vue'
+import RuntimeOverview from '@/components/admin/RuntimeOverview.vue'
 import { useThemeManager } from '@/composables/useThemeManager'
 
 const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const activeTab = ref('models')
+const loadedTabs = ref(new Set<string>(['models']))
 const { isDarkTheme, initThemeManager } = useThemeManager()
 
 const tabs = [
@@ -23,7 +25,8 @@ const tabs = [
   { name: 'users', label: t('admin.userManagement') },
   { name: 'notifications', label: t('admin.notificationManagement') },
   { name: 'limits', label: t('admin.limitManagement') },
-  { name: 'sql', label: t('admin.sqlExecute') }
+  { name: 'sql', label: t('admin.sqlExecute') },
+  { name: 'observability', label: t('admin.observability') }
 ]
 
 const goBack = () => {
@@ -32,6 +35,10 @@ const goBack = () => {
 
 onMounted(() => {
   initThemeManager()
+})
+
+watch(activeTab, (tab) => {
+  loadedTabs.value.add(tab)
 })
 </script>
 
@@ -64,12 +71,13 @@ onMounted(() => {
       <div class="max-w-7xl mx-auto">
         <el-tabs v-model="activeTab" class="admin-tabs">
           <el-tab-pane v-for="tab in tabs" :key="tab.name" :name="tab.name" :label="tab.label">
-            <ModelMetaTable v-if="tab.name === 'models'" />
-            <SystemPromptTable v-if="tab.name === 'prompts'" />
-            <UserTable v-if="tab.name === 'users'" />
-            <NotificationTable v-if="tab.name === 'notifications'" />
-            <TestLimitTable v-if="tab.name === 'limits'" />
-            <SqlExecutor v-if="tab.name === 'sql'" />
+            <ModelMetaTable v-if="tab.name === 'models' && loadedTabs.has('models')" />
+            <SystemPromptTable v-if="tab.name === 'prompts' && loadedTabs.has('prompts')" />
+            <UserTable v-if="tab.name === 'users' && loadedTabs.has('users')" />
+            <NotificationTable v-if="tab.name === 'notifications' && loadedTabs.has('notifications')" />
+            <TestLimitTable v-if="tab.name === 'limits' && loadedTabs.has('limits')" />
+            <SqlExecutor v-if="tab.name === 'sql' && loadedTabs.has('sql')" />
+            <RuntimeOverview v-if="tab.name === 'observability' && loadedTabs.has('observability')" />
           </el-tab-pane>
         </el-tabs>
       </div>

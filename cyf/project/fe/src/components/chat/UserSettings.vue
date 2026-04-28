@@ -78,7 +78,7 @@ import { ref, reactive, computed, defineProps, defineEmits } from 'vue'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../../stores/auth'
-import { chatAPI, authAPI } from '../../services/api'
+import { chatAPI } from '../../services/api'
 import { InfoFilled } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
@@ -149,14 +149,9 @@ const handleSubmit = async () => {
   loading.value = true
   try {
     // 先验证当前密码
-    const loginResult = await authAPI.login(authStore.user, form.currentPassword)
-    if (!loginResult.success) {
-      ElMessage.error(loginResult.msg || t('chat.currentPasswordIncorrect'))
-      return
-    }
-
     // 重置密码（可选择更新 API key）
     const resetResult = await chatAPI.resetPassword(
+      form.currentPassword,
       form.newPassword,
       form.apiKey || undefined
     )

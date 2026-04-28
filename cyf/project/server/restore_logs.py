@@ -87,13 +87,10 @@ class RestoreManager:
             # 将数据插入到主库
             with self.main_db.atomic():
                 for row in rows:
-                    # 将查询结果转换为字典
-                    row_data = dict(zip(columns, row))
-                    
-                    # 插入到主库
+                    # row 是元组，直接使用索引
                     self.main_db.execute_sql(
                         self._build_insert_sql(table_name, columns),
-                        tuple(row[col] for col in columns)
+                        row
                     )
                     restored_count += 1
             

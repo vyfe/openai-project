@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { notificationAPI } from '@/services/adminApi'
+import { useAdminPagedList } from '@/composables/useAdminPagedList'
+import { useAdminCrudDialog } from '@/composables/useAdminCrudDialog'
+import { useAdminAction } from '@/composables/useAdminAction'
+import { Plus } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 
@@ -17,11 +21,18 @@ interface Notification {
   updated_at: string
 }
 
-const notifications = ref<Notification[]>([])
-const loading = ref(false)
-const dialogVisible = ref(false)
-const dialogMode = ref<'create' | 'edit'>('create')
-const formData = ref({
+const {
+  items: notifications,
+  loading,
+  keyword,
+  pagination,
+  fetchList: fetchNotifications,
+  search: handleSearch,
+  changePage: handlePageChange,
+  changePageSize: handlePageSizeChange
+} = useAdminPagedList<Notification, { page?: number; page_size?: number; keyword?: string }>(notificationAPI.list)
+
+const createEmptyForm = () => ({
   id: 0,
   title: '',
   content: '',
@@ -30,36 +41,26 @@ const formData = ref({
   status: 'active'
 })
 
-const fetchNotifications = async () => {
-  loading.value = true
-  try {
-    const response = await notificationAPI.list()
-    if (response.success) {
-      notifications.value = response.data || []
-    }
-  } catch (error: any) {
-    ElMessage.error(error.message || t('admin.loading'))
-  } finally {
-    loading.value = false
-  }
-}
+const { runAction, runConfirmedAction } = useAdminAction((key) => t(key))
+
+const {
+  dialogVisible,
+  dialogMode,
+  formData,
+  openEditDialog,
+  closeDialog
+} = useAdminCrudDialog(
+  createEmptyForm,
+  (row: Notification) => ({ ...row })
+)
 
 const openCreateDialog = () => {
-  dialogMode.value = 'create'
+  const today = new Date().toISOString().slice(0, 10)
   formData.value = {
-    id: 0,
-    title: '',
-    content: '',
-    publish_time: new Date().toISOString().slice(0, 10),
-    priority: 0,
-    status: 'active'
+    ...createEmptyForm(),
+    publish_time: today
   }
-  dialogVisible.value = true
-}
-
-const openEditDialog = (row: Notification) => {
-  dialogMode.value = 'edit'
-  formData.value = { ...row }
+  dialogMode.value = 'create'
   dialogVisible.value = true
 }
 
@@ -69,52 +70,46 @@ const saveNotification = async () => {
     return
   }
 
-  try {
-    if (dialogMode.value === 'create') {
-      const response = await notificationAPI.create(formData.value)
-      if (response.success) {
-        ElMessage.success(t('admin.saveSuccess'))
-        dialogVisible.value = false
-        fetchNotifications()
-      }
-    } else {
-      const response = await notificationAPI.update(formData.value)
-      if (response.success) {
-        ElMessage.success(t('admin.saveSuccess'))
-        dialogVisible.value = false
-        fetchNotifications()
+  await runAction(
+    async () => (dialogMode.value === 'create'
+      ? notificationAPI.create(formData.value)
+      : notificationAPI.update(formData.value)),
+    {
+      successText: t('admin.saveSuccess'),
+      errorFallbackText: 'admin.executeFailed',
+      onSuccess: async () => {
+        closeDialog()
+        await fetchNotifications()
       }
     }
-  } catch (error: any) {
-    ElMessage.error(error.message || t('admin.executeFailed'))
-  }
+  ).catch(() => undefined)
 }
 
 const deleteNotification = async (row: Notification) => {
-  try {
-    await ElMessageBox.confirm(
-      `${t('admin.confirmDelete')} (${row.title})?`,
-      t('admin.confirm'),
-      {
-        confirmButtonText: t('admin.yes'),
-        cancelButtonText: t('admin.no'),
-        type: 'warning'
+  await runConfirmedAction(
+    {
+      message: `${t('admin.confirmDelete')} (${row.title})?`,
+      title: t('admin.confirm'),
+      confirmButtonText: t('admin.yes'),
+      cancelButtonText: t('admin.no'),
+      type: 'warning'
+    },
+    () => notificationAPI.delete(row.id),
+    {
+      successText: t('admin.deleteSuccess'),
+      errorFallbackText: 'admin.deleteFailed',
+      ignoreCancel: true,
+      onSuccess: async () => {
+        await fetchNotifications()
       }
-    )
-    const response = await notificationAPI.delete(row.id)
-    if (response.success) {
-      ElMessage.success(t('admin.deleteSuccess'))
-      fetchNotifications()
     }
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || t('admin.deleteFailed'))
-    }
-  }
+  ).catch(() => undefined)
 }
 
 onMounted(() => {
-  fetchNotifications()
+  fetchNotifications().catch((error: any) => {
+    ElMessage.error(error.response?.data?.msg || error.message || t('admin.loading'))
+  })
 })
 </script>
 
@@ -124,9 +119,20 @@ onMounted(() => {
       <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
         {{ t('admin.notificationManagement') }}
       </h2>
-      <el-button type="primary" @click="openCreateDialog" :icon="Plus">
-        {{ t('admin.create') }}
-      </el-button>
+      <div class="flex items-center gap-2">
+        <el-input
+          v-model="keyword"
+          clearable
+          :placeholder="t('admin.searchPlaceholder')"
+          style="width: 220px"
+          @keyup.enter="handleSearch"
+          @clear="() => handleSearch().catch(() => undefined)"
+        />
+        <el-button type="primary" @click="() => handleSearch().catch(() => undefined)">{{ t('admin.query') }}</el-button>
+        <el-button type="primary" @click="openCreateDialog" :icon="Plus">
+          {{ t('admin.create') }}
+        </el-button>
+      </div>
     </div>
 
     <el-table
@@ -168,6 +174,19 @@ onMounted(() => {
       </el-table-column>
     </el-table>
 
+    <div class="mt-4 flex justify-end">
+      <el-pagination
+        background
+        layout="total, sizes, prev, pager, next"
+        :total="pagination.total"
+        :page-size="pagination.page_size"
+        :current-page="pagination.page"
+        :page-sizes="[10, 20, 50, 100]"
+        @current-change="(page) => handlePageChange(page).catch(() => undefined)"
+        @size-change="(size) => handlePageSizeChange(size).catch(() => undefined)"
+      />
+    </div>
+
     <el-dialog
       v-model="dialogVisible"
       :title="dialogMode === 'create' ? t('admin.create') : t('admin.edit')"
@@ -194,7 +213,7 @@ onMounted(() => {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">{{ t('admin.cancel') }}</el-button>
+        <el-button @click="closeDialog">{{ t('admin.cancel') }}</el-button>
         <el-button type="primary" @click="saveNotification">{{ t('admin.save') }}</el-button>
       </template>
     </el-dialog>

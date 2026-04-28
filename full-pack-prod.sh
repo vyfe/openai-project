@@ -43,20 +43,15 @@ echo "✅ 完整打包完成: $DIST_DIR/$FULL_PACKAGE_NAME"
 # 返回项目根目录
 cd "$PROJECT_ROOT"
 
-# 可选：询问用户是否删除源文件
+# 自动删除原始文件（无交互确认）
 echo ""
-read -p "⚠️  是否保留原始文件？(输入 'y' 确认保留): " DELETE_CONFIRMATION
-if [ "$DELETE_CONFIRMATION" != "y" ]; then
-    echo "🗑️  删除原始文件..."
-    rm -f dist/server.tar.gz
-    rm -f dist/fe.tar.gz
-    rm -f dist/start-prod.sh
-    rm -f dist/nginx.conf.tpl
-    rm -f dist/requirements.txt
-    echo "✅ 原始文件已删除"
-else
-    echo "ℹ️  已跳过删除原始文件步骤"
-fi
+echo "🗑️  删除原始文件..."
+rm -f dist/server.tar.gz
+rm -f dist/fe.tar.gz
+rm -f dist/start-prod.sh
+rm -f dist/nginx.conf.tpl
+rm -f dist/requirements.txt
+echo "✅ 原始文件已删除"
 
 echo ""
 echo "🎉 完整打包完成！"

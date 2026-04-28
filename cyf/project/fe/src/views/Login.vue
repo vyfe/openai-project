@@ -359,8 +359,11 @@ const handleLogin = async () => {
           const userData = response.data || { username: loginForm.username, role: 'user' }
           authStore.login({
             username: userData.username || loginForm.username,
-            password: loginForm.password,
-            role: userData.role || 'user'
+            role: userData.role || 'user',
+            accessToken: userData.access_token,
+            accessTokenExpiresAt: userData.access_token_expires_at,
+            refreshToken: userData.refresh_token,
+            refreshTokenExpiresAt: userData.refresh_token_expires_at
           })
 
           ElMessage.success(response.msg || t('login.successMessage'))

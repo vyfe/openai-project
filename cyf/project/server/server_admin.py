@@ -5,6 +5,8 @@ from functools import wraps
 from datetime import datetime
 from peewee import DoesNotExist, IntegrityError
 import configparser
+import importlib
+import sys
 import sqlitelog
 from sqlitelog import ModelMeta, SystemPrompt, TestLimit, User, Notification
 
@@ -37,15 +39,66 @@ def test_limit_to_dict(limit):
 
 def user_to_dict(user):
     """User 转字典（排除敏感字段）"""
+    api_key = user.api_key or ''
+    api_key_masked = '-'
+    if api_key:
+        if len(api_key) <= 8:
+            api_key_masked = api_key
+        else:
+            api_key_masked = f"{api_key[:4]}****{api_key[-4:]}"
     return {
         'id': user.id,
         'username': user.username,
-        'api_key': user.api_key,
+        'api_key_masked': api_key_masked,
         'role': user.role,
         'is_active': user.is_active,
         'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else None,
         'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
     }
+
+
+def user_to_detail_dict(user):
+    """用户详情（按需返回敏感字段）"""
+    data = user_to_dict(user)
+    data['api_key'] = user.api_key
+    return data
+
+
+def parse_pagination_args(default_page_size: int = 20, max_page_size: int = 200):
+    page = request.args.get('page', default=1, type=int) or 1
+    page_size = request.args.get('page_size', default=default_page_size, type=int) or default_page_size
+    page = 1 if page < 1 else page
+    if page_size < 1:
+        page_size = default_page_size
+    if page_size > max_page_size:
+        page_size = max_page_size
+    offset = (page - 1) * page_size
+    return page, page_size, offset
+
+
+def build_page_result(items, total, page, page_size):
+    pages = (total + page_size - 1) // page_size if total > 0 else 1
+    return {
+        "items": items,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "pages": pages
+        }
+    }
+
+
+def get_server_module():
+    server_mod = sys.modules.get('server')
+    if server_mod:
+        return server_mod
+
+    main_mod = sys.modules.get('__main__')
+    if main_mod and hasattr(main_mod, 'authenticate_request_token'):
+        return main_mod
+
+    return importlib.import_module('server')
 
 def to_bool(value):
     """
@@ -81,13 +134,24 @@ def require_admin_auth(f):
     """管理员认证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # CORS 预检请求直接放行，避免浏览器 OPTIONS 被鉴权拦截
+        if request.method == 'OPTIONS':
+            return '', 200
+
+        server_mod = get_server_module()
+        # 优先支持 Bearer Token 鉴权
+        ok, msg, payload = server_mod.authenticate_request_token(required_role='admin')
+        if ok:
+            return f(*args, **kwargs)
+
+        # 兼容旧版 user/password 模式
         data = get_request_data()
-        user = data.get('user', '').strip()
-        password = data.get('password', '').strip()
+        user = str(data.get('user', '')).strip()
+        password = str(data.get('password', '')).strip()
         # 只允许管理员角色登录
         success, error_msg, _ = sqlitelog.verify_user_password(user, password, "admin")
         if not success:
-            return jsonify({"success": False, "msg": error_msg or "认证失败"})
+            return jsonify({"success": False, "msg": error_msg or msg or "认证失败"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -97,6 +161,8 @@ def require_admin_auth(f):
 def model_meta_list():
     """获取模型元数据列表"""
     try:
+        page, page_size, offset = parse_pagination_args(default_page_size=50)
+        keyword = (request.args.get('keyword') or '').strip()
         # 获取过滤参数
         recommend = request.args.get('recommend')
         status_valid = request.args.get('status_valid')
@@ -107,9 +173,22 @@ def model_meta_list():
         if status_valid is not None:
             status_valid = to_bool(status_valid)
         
-        # 查询数据
-        models = sqlitelog.get_model_meta_list(recommend=recommend, status_valid=status_valid)
-        return success_response(data=models)
+        query = ModelMeta.select()
+        if recommend is not None:
+            query = query.where(ModelMeta.recommend == recommend)
+        if status_valid is not None:
+            query = query.where(ModelMeta.status_valid == status_valid)
+        if keyword:
+            query = query.where(
+                (ModelMeta.model_name.contains(keyword)) |
+                (ModelMeta.model_desc.contains(keyword)) |
+                (ModelMeta.model_grp.contains(keyword))
+            )
+
+        total = query.count()
+        query = query.order_by(ModelMeta.id.desc()).offset(offset).limit(page_size)
+        models = [m.to_dict() for m in query.iterator()]
+        return success_response(data=build_page_result(models, total, page, page_size))
     except Exception as e:
         return error_response(f"获取模型列表失败: {str(e)}")
 
@@ -149,6 +228,7 @@ def model_meta_create():
             recommend=recommend,
             status_valid=status_valid
         )
+        get_server_module().invalidate_model_cache("model_meta_create")
         return success_response(data=model.to_dict(), msg="模型创建成功")
     except IntegrityError:
         return error_response("模型名称已存在")
@@ -185,6 +265,7 @@ def model_meta_update():
             model.status_valid = to_bool(data['status_valid'])
 
         model.save()
+        get_server_module().invalidate_model_cache("model_meta_update")
         return success_response(data=model.to_dict(), msg="模型更新成功")
     except DoesNotExist:
         return error_response("模型不存在")
@@ -205,6 +286,7 @@ def model_meta_delete():
 
         model = ModelMeta.get_by_id(int(model_id))
         model.delete_instance()
+        get_server_module().invalidate_model_cache("model_meta_delete")
         return success_response(msg="模型删除成功")
     except DoesNotExist:
         return error_response("模型不存在")
@@ -217,10 +299,10 @@ def model_meta_delete():
 def system_prompt_list():
     """获取系统提示词列表"""
     try:
-        # 获取过滤参数（从POST请求体中获取）
-        data = get_request_data()
-        role_group = data.get('role_group')
-        status_valid = data.get('status_valid')
+        page, page_size, offset = parse_pagination_args(default_page_size=30)
+        role_group = request.args.get('role_group')
+        status_valid = request.args.get('status_valid')
+        keyword = (request.args.get('keyword') or '').strip()
 
         # 转换布尔值
         if status_valid is not None:
@@ -233,9 +315,17 @@ def system_prompt_list():
         if status_valid is not None:
             query = query.where(SystemPrompt.status_valid == status_valid)
 
-        # 返回字典格式的结果列表（query.dicts() 已经返回字典，不需要调用 to_dict）
-        prompts = list(query.dicts().iterator())
-        return success_response(data=prompts)
+        if keyword:
+            query = query.where(
+                (SystemPrompt.role_name.contains(keyword)) |
+                (SystemPrompt.role_group.contains(keyword)) |
+                (SystemPrompt.role_desc.contains(keyword))
+            )
+
+        total = query.count()
+        query = query.order_by(SystemPrompt.id.desc()).offset(offset).limit(page_size)
+        prompts = [item for item in query.dicts().iterator()]
+        return success_response(data=build_page_result(prompts, total, page, page_size))
     except Exception as e:
         return error_response(f"获取系统提示词列表失败: {str(e)}")
 
@@ -256,7 +346,7 @@ def system_prompt_get(prompt_id):
 def system_prompt_create():
     """创建系统提示词"""
     try:
-        data = request.form
+        data = get_request_data()
         role_name = data.get('role_name', '').strip()
         role_group = data.get('role_group', '').strip()
         
@@ -336,9 +426,15 @@ def system_prompt_delete():
 def test_limit_list():
     """获取测试限制列表"""
     try:
-        query = TestLimit.select().order_by(TestLimit.id.desc())
+        page, page_size, offset = parse_pagination_args(default_page_size=50)
+        keyword = (request.args.get('keyword') or '').strip()
+        query = TestLimit.select()
+        if keyword:
+            query = query.where(TestLimit.user_ip.contains(keyword))
+        total = query.count()
+        query = query.order_by(TestLimit.id.desc()).offset(offset).limit(page_size)
         limits = [test_limit_to_dict(limit) for limit in query.iterator()]
-        return success_response(data=limits)
+        return success_response(data=build_page_result(limits, total, page, page_size))
     except Exception as e:
         return error_response(f"获取测试限制列表失败: {str(e)}")
 
@@ -474,9 +570,23 @@ def test_limit_reset():
 def user_list():
     """获取用户列表"""
     try:
-        query = User.select().order_by(User.id.desc())
+        page, page_size, offset = parse_pagination_args(default_page_size=50)
+        keyword = (request.args.get('keyword') or '').strip()
+        role = (request.args.get('role') or '').strip()
+        is_active = request.args.get('is_active')
+
+        query = User.select()
+        if keyword:
+            query = query.where(User.username.contains(keyword))
+        if role:
+            query = query.where(User.role == role)
+        if is_active is not None:
+            query = query.where(User.is_active == to_bool(is_active))
+
+        total = query.count()
+        query = query.order_by(User.id.desc()).offset(offset).limit(page_size)
         users = [user_to_dict(user) for user in query.iterator()]
-        return success_response(data=users)
+        return success_response(data=build_page_result(users, total, page, page_size))
     except Exception as e:
         return error_response(f"获取用户列表失败: {str(e)}")
 
@@ -486,7 +596,7 @@ def user_get(user_id):
     """获取单个用户信息"""
     try:
         user = User.get_by_id(user_id)
-        return success_response(data=user_to_dict(user))
+        return success_response(data=user_to_detail_dict(user))
     except DoesNotExist:
         return error_response("用户不存在")
     except Exception as e:
@@ -623,14 +733,23 @@ def notification_to_dict(notification):
 def notification_list():
     """获取通知公告列表"""
     try:
+        page, page_size, offset = parse_pagination_args(default_page_size=20)
         # 获取过滤参数
         status = request.args.get('status')
-        limit = request.args.get('limit', type=int)
-        offset = request.args.get('offset', type=int)
-        
-        # 查询数据
-        notifications = sqlitelog.get_notification_list(status=status, limit=limit, offset=offset)
-        return success_response(data=notifications)
+        keyword = (request.args.get('keyword') or '').strip()
+
+        query = Notification.select()
+        if status:
+            query = query.where(Notification.status == status)
+        if keyword:
+            query = query.where(
+                (Notification.title.contains(keyword)) |
+                (Notification.content.contains(keyword))
+            )
+        total = query.count()
+        query = query.order_by(Notification.priority.desc(), Notification.publish_time.desc()).offset(offset).limit(page_size)
+        notifications = [notification_to_dict(notification) for notification in query.iterator()]
+        return success_response(data=build_page_result(notifications, total, page, page_size))
     except Exception as e:
         return error_response(f"获取通知列表失败: {str(e)}")
 
@@ -777,6 +896,62 @@ def sql_execute():
     except Exception as e:
         app.logger.error(f"SQL execute error: {str(e)}")
         return error_response(f"SQL执行失败: {str(e)}")
+
+
+@app.route('/runtime/overview', methods=['GET'])
+@require_admin_auth
+def runtime_overview():
+    """获取运行时可观测信息"""
+    try:
+        runtime = get_server_module().get_runtime_state_snapshot()
+        db_path = str(sqlitelog.db.database)
+        return success_response(data={
+            "runtime": runtime,
+            "database": {
+                "path": db_path
+            }
+        })
+    except Exception as e:
+        return error_response(f"获取运行时概览失败: {str(e)}")
+
+
+@app.route('/sql/meta', methods=['GET'])
+@require_admin_auth
+def sql_meta():
+    """获取数据库元信息（表、字段、记录数）"""
+    try:
+        table_names = sqlitelog.db.get_tables()
+        tables = []
+        for table_name in table_names:
+            columns = sqlitelog.db.get_columns(table_name)
+            column_items = []
+            for col in columns:
+                column_items.append({
+                    "name": col.name,
+                    "data_type": getattr(col, 'data_type', ''),
+                    "nullable": bool(getattr(col, 'null', True)),
+                    "primary_key": bool(getattr(col, 'primary_key', False))
+                })
+
+            # 记录数：使用参数绑定，避免拼接注入
+            count_sql = f'SELECT COUNT(*) AS total FROM "{table_name}"'
+            count_result = sqlitelog.message_query(count_sql)
+            row_count = int(count_result[0].get('total', 0)) if count_result else 0
+
+            tables.append({
+                "table_name": table_name,
+                "row_count": row_count,
+                "columns": column_items
+            })
+
+        return success_response(data={
+            "database": {
+                "path": str(sqlitelog.db.database)
+            },
+            "tables": tables
+        })
+    except Exception as e:
+        return error_response(f"获取数据库元信息失败: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=39998, debug=True)
