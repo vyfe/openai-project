@@ -1,0 +1,50 @@
+body.dark-theme,
+html.dark,
+:root.dark {
+  color-scheme: dark;
+
+  --bg-0: #1f1b18;
+  --bg-1: #29231f;
+  --bg-2: #332c26;
+  --line-1: #4a4037;
+  --text-1: #ebe3d9;
+  --text-2: #bcae9f;
+  --accent-1: #d89a60;
+  --accent-2: #7ea683;
+  --accent-1-soft: rgba(216, 154, 96, 0.18);
+  --accent-2-soft: rgba(126, 166, 131, 0.2);
+
+  --bg-app-gradient: linear-gradient(180deg, #1f1b18 0%, #26211d 52%, #222720 100%);
+  --overlay-1: rgba(41, 35, 31, 0.88);
+
+  --el-color-primary: var(--accent-1);
+  --el-color-primary-light-3: #e2b288;
+  --el-color-primary-light-5: #ebc7a9;
+  --el-color-primary-light-8: #f5e2cd;
+  --el-color-primary-light-9: #faefe2;
+  --el-color-primary-dark-2: #ba7f49;
+
+  --el-color-success: var(--accent-2);
+  --el-color-success-light-3: #9abd9e;
+  --el-color-success-light-5: #b3cfb6;
+  --el-color-success-light-8: #dce9dd;
+  --el-color-success-dark-2: #67876c;
+
+  --el-bg-color: var(--bg-1);
+  --el-bg-color-page: var(--bg-0);
+  --el-fill-color-light: var(--bg-2);
+  --el-border-color: var(--line-1);
+  --el-border-color-light: color-mix(in srgb, var(--line-1) 80%, black);
+  --el-text-color-primary: var(--text-1);
+  --el-text-color-regular: var(--text-2);
+
+  /* Element Plus disabled states in dark mode */
+  --el-disabled-bg-color: #383027;
+  --el-disabled-border-color: #5b4f43;
+  --el-disabled-text-color: #9b8d7d;
+}
+
+body.dark-theme {
+  background-color: var(--bg-0);
+  color: var(--text-1);
+}

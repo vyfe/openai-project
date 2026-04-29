@@ -30,26 +30,28 @@
       </div>
       <!-- 内容区域容器 -->
       <div class="sidebar-content">
-        <div class="model-selector" @click.stop v-show="activeSection === 'model'">
-        <h3>{{ t('chat.selectProvider') }}</h3>
-        <div class="provider-selector">
-          <el-select v-model="formData.providerValue" :placeholder="t('chat.selectProvider')" size="small" filterable clearable
-            @change="handleProviderChange">
-            <el-option v-for="provider in formData.providers" :key="provider" :label="provider" :value="provider" />
-          </el-select>
+        <div class="sidebar-section-card model-selector" @click.stop v-show="activeSection === 'model'">
+          <div class="sidebar-section-heading">{{ t('chat.model') }}</div>
+          <h3>{{ t('chat.selectProvider') }}</h3>
+          <div class="provider-selector">
+            <el-select v-model="formData.providerValue" :placeholder="t('chat.selectProvider')" size="small" filterable clearable
+              @change="handleProviderChange">
+              <el-option v-for="provider in formData.providers" :key="provider" :label="provider" :value="provider" />
+            </el-select>
+          </div>
+          <h3>{{ t('chat.selectModel') }}</h3>
+          <div class="model-selector-inner">
+            <el-select v-model="formData.modelValue" :placeholder="t('chat.selectModel')" size="small" filterable clearable
+              :disabled="!formData.providerValue" @change="handleModelChange">
+              <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
+                <span>{{ model.label }}</span>
+                <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
+              </el-option>
+            </el-select>
+          </div>
         </div>
-        <h3>{{ t('chat.selectModel') }}</h3>
-        <div class="model-selector">
-          <el-select v-model="formData.modelValue" :placeholder="t('chat.selectModel')" size="small" filterable clearable
-            :disabled="!formData.providerValue" @change="handleModelChange">
-            <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
-              <span>{{ model.label }}</span>
-              <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
-            </el-option>
-          </el-select>
-        </div>
-      </div>
-      <div class="context-settings-section" v-show="activeSection === 'model'">
+
+      <div class="sidebar-section-card context-settings-section" v-show="activeSection === 'model'">
         <!-- 显示选中模型的描述 -->
         <div v-if="formData.currentModelDesc" class="model-description">
           <div class="model-desc-text">
@@ -61,13 +63,14 @@
         </div>
       </div>
 
-      <div class="dialog-history-section" v-show="activeSection === 'history'">
+      <div class="sidebar-section-card dialog-history-section" v-show="activeSection === 'history'">
+        <div class="sidebar-section-heading">{{ t('chat.history') }}</div>
         <div class="history-section-header">
           <div class="history-actions">
             <el-button type="default" size="small" text @click="loadDialogHistory" :loading="formData.loadingHistory" class="text-gray-700 dark:text-gray-300 hover:bg-transparent">
               {{ t('chat.refreshHistory') }}
             </el-button>
-            <el-button v-if="!isEditMode" type="default" size="small" text @click="enterEditMode" class="text-blue-500 hover:bg-transparent">
+            <el-button v-if="!isEditMode" type="default" size="small" text @click="enterEditMode" class="text-amber-700 hover:bg-transparent">
               {{ t('chat.edit') }}
             </el-button>
             <div v-else class="edit-mode-actions">
@@ -75,7 +78,7 @@
                 @click="confirmBatchDelete" class="text-red-500 hover:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ t('chat.delete') }} ({{ selectedDialogs.length }})
               </el-button>
-              <el-button type="default" size="small" text @click="exitEditMode" class="text-blue-500 hover:bg-transparent">
+              <el-button type="default" size="small" text @click="exitEditMode" class="text-amber-700 hover:bg-transparent">
                 {{ t('chat.cancel') }}
               </el-button>
             </div>
@@ -89,10 +92,10 @@
             <el-checkbox v-if="isEditMode" v-model="selectedDialogs" :label="dialog.id" @click.stop
               class="dialog-checkbox" />
             <div class="dialog-content" @click.stop="!isEditMode && loadDialogContent(dialog.id)">
-              <el-tooltip :content="dialog.dialog_name" :disabled="!shouldShowTooltip(dialog.dialog_name, 'title')"
+                <el-tooltip :content="dialog.dialog_name" :disabled="!shouldShowTooltip(dialog.dialog_name, 'title')"
                 placement="top" popper-class="custom-dark-tooltip">
                 <div class="dialog-title" :style="{ maxWidth: '100%' }">
-                  {{ dialog.dialog_name }}
+                  {{ formatDialogTitle(dialog.dialog_name) }}
                 </div>
               </el-tooltip>
               <div class="dialog-info">
@@ -119,7 +122,8 @@
       </div>
 
       <!-- 上下文设置部分 -->
-      <div class="context-settings-section settings-section" v-show="activeSection === 'settings'">
+      <div class="sidebar-section-card context-settings-section settings-section" v-show="activeSection === 'settings'">
+        <div class="sidebar-section-heading">{{ t('chat.settings') }}</div>
         <h3>{{ t('chat.contextSettings') }}</h3>
         <div class="context-slider-wrapper">
           <div class="context-label">
@@ -152,7 +156,8 @@
       </div>
 
       <!-- 角色设定部分 -->
-      <div class="system-prompt-section" v-show="activeSection === 'role'">
+      <div class="sidebar-section-card system-prompt-section" v-show="activeSection === 'role'">
+        <div class="sidebar-section-heading">{{ t('chat.roleSettingTitle') }}</div>
         <el-input v-model="formData.systemPrompt" type="textarea" :rows="3" :disabled="formData.enhancedRoleEnabled"
           :placeholder="t('chat.systemPromptPlaceholderSidebar')" resize="vertical" @blur="handleSystemPromptBlur" />
         <div class="system-prompt-hint">{{ t('chat.aiBehaviorHint') }}</div>
@@ -242,7 +247,7 @@
       </div>
 
       <!-- 发送键偏好设置 -->
-      <div class="send-preference-section settings-section" v-show="activeSection === 'settings'">
+      <div class="sidebar-section-card send-preference-section settings-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.sendSetting') }}</h3>
         <div class="send-preference-wrapper">
           <el-switch v-model="formData.sendPreference" :active-value="'enter'" :inactive-value="'ctrl_enter'"
@@ -254,7 +259,7 @@
       </div>
 
       <!-- 配置导入导出 -->
-      <div class="import-export-section settings-section" v-show="activeSection === 'settings'">
+      <div class="sidebar-section-card import-export-section settings-section" v-show="activeSection === 'settings'">
         <h3>{{ t('chat.configImportExport') }}</h3>
         <div class="import-export-wrapper">
           <el-button type="primary" size="small" @click="exportConfig">
@@ -1198,6 +1203,15 @@ const shouldShowTooltip = (text: string, type: 'title' | 'model') => {
     return text && text.length > 12
   }
   return false
+}
+
+const MAX_DIALOG_TITLE_LENGTH = 24
+
+const formatDialogTitle = (text?: string) => {
+  if (!text) return ''
+  return text.length > MAX_DIALOG_TITLE_LENGTH
+    ? `${text.slice(0, MAX_DIALOG_TITLE_LENGTH)}...`
+    : text
 }
 
 </script>

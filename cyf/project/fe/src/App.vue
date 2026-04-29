@@ -24,288 +24,134 @@ onMounted(() => {
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "@/styles/tokens.css";
+@import "@/styles/theme-light.css";
+@import "@/styles/theme-dark.css";
 #app {
-  font-family: "Noto Sans SC", 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
   padding: 0;
   height: 100vh;
-  background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
-}
-
-/* 基础字体大小变量和Element Plus支持 */
-:root {
-  --message-font-size-small: 13px;
-  --message-font-size-medium: 16px;
-  --message-font-size-large: 20px;
-
-  /* 为Element Plus组件添加字体大小支持 */
-  --el-font-size-base: var(--message-font-size-medium);
-  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
-  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
-  --el-font-size-medium: var(--message-font-size-medium);
-  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
-  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
-}
-
-/* 全局深色主题样式 */
-body.dark-theme {
-  background-color: #1a1a1a;
-  color: #e0e0e0;
-}
-
-/* Element Plus 禁用状态 CSS 变量 - 夜间模式 */
-body.dark-theme {
-  --el-disabled-bg-color: #2a2a2a;
-  --el-disabled-border-color: #555555;
-  --el-disabled-text-color: #9a9a9a;
+  background: var(--bg-app-gradient);
 }
 
 body.dark-theme .el-input.is-disabled .el-input__inner {
-  color: #9a9a9a !important;
-  -webkit-text-fill-color: #9a9a9a !important;
+  color: var(--el-disabled-text-color) !important;
+  -webkit-text-fill-color: var(--el-disabled-text-color) !important;
 }
 
-/* Element Plus 组件深色主题覆盖 */
-body.dark-theme .el-button {
-  background-color: #333333;
-  border-color: #555555;
-  color: #e0e0e0;
+/* Element Plus dark theme unified by tokens */
+body.dark-theme .el-button,
+body.dark-theme .el-select__wrapper,
+body.dark-theme .el-tag,
+body.dark-theme .el-dialog,
+body.dark-theme .el-dropdown-menu,
+body.dark-theme .el-message-box,
+body.dark-theme .el-upload-dragger,
+body.dark-theme .el-popover,
+body.dark-theme .el-popconfirm,
+body.dark-theme .el-select-dropdown {
+  background-color: var(--bg-1);
+  border-color: var(--line-1);
+  color: var(--text-1);
+}
+
+body.dark-theme .el-select__wrapper:hover,
+body.dark-theme .el-upload-dragger:hover {
+  border-color: var(--accent-1);
+  box-shadow: 0 0 0 1px var(--accent-1) inset;
 }
 
 body.dark-theme .el-button--primary {
-  background: linear-gradient(135deg, #5a7bc1 0%, #7a9ccc 100%);
-  border-color: #5a7bc1;
-  color: white;
+  background: linear-gradient(135deg, var(--accent-1) 0%, var(--el-color-primary-light-3) 100%);
+  border-color: var(--accent-1);
+  color: #fff;
 }
 
 body.dark-theme .el-button--primary:hover {
-  background: linear-gradient(135deg, #6a8bc1 0%, #8aaecc 100%);
-  border-color: #6a8bc1;
+  background: linear-gradient(135deg, var(--el-color-primary-light-3) 0%, var(--el-color-primary-light-5) 100%);
+  border-color: var(--el-color-primary-light-3);
 }
 
-body.dark-theme .el-button--danger {
-  background-color: #5a3232;
-  border-color: #7a4242;
-  color: white;
+body.dark-theme .el-slider__runway,
+body.dark-theme .el-switch__core,
+body.dark-theme .el-checkbox__input .el-checkbox__inner,
+body.dark-theme .el-radio-button__inner {
+  background-color: var(--bg-2);
+  border-color: var(--line-1);
+  color: var(--text-1);
 }
 
-/* Element Plus 2.x 新版 el-select 收起状态样式 */
-body.dark-theme .el-select__wrapper {
-  background-color: #333333;
-  box-shadow: 0 0 0 1px #555555 inset;
-}
-
-body.dark-theme .el-select__wrapper:hover {
-  box-shadow: 0 0 0 1px #7a9ccc inset;
-}
-
-body.dark-theme .el-select__selection,
-body.dark-theme .el-select__selected-item {
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-select__placeholder {
-  color: #9a9a9a;
-}
-
-body.dark-theme .el-select__caret {
-  color: #9a9a9a;
-}
-
-body.dark-theme .el-select__input {
-  color: #e0e0e0;
-  background-color: transparent;
-}
-
-body.dark-theme .el-select-dropdown {
-  background-color: #222222;
-  border: 1px solid #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-select-dropdown__item {
-  color: #e0e0e0;
-  background-color: #222222;
-}
-
-body.dark-theme .el-select-dropdown__item.hover,
-body.dark-theme .el-select-dropdown__item:hover {
-  background-color: #333333;
-}
-
-body.dark-theme .el-slider__runway {
-  background-color: #555555;
-}
-
-body.dark-theme .el-slider__bar {
-  background-color: #7a9ccc;
+body.dark-theme .el-slider__bar,
+body.dark-theme .el-slider__button,
+body.dark-theme .el-switch.is-checked .el-switch__core,
+body.dark-theme .el-checkbox__input.is-checked .el-checkbox__inner,
+body.dark-theme .el-radio-button.is-active .el-radio-button__inner {
+  background-color: var(--accent-1);
+  border-color: var(--accent-1);
 }
 
 body.dark-theme .el-slider__button {
-  background-color: #7a9ccc;
-  border: 2px solid #90d8ff;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--accent-2);
 }
 
-body.dark-theme .el-tag {
-  background-color: #333333;
-  border-color: #555555;
-  color: #e0e0e0;
+body.dark-theme .el-select__selection,
+body.dark-theme .el-select__selected-item,
+body.dark-theme .el-select__input,
+body.dark-theme .el-dialog__header,
+body.dark-theme .el-dialog__body,
+body.dark-theme .el-dialog__footer,
+body.dark-theme .el-dropdown-menu__item,
+body.dark-theme .el-popconfirm__main {
+  color: var(--text-1);
 }
 
-body.dark-theme .el-popover,
-body.dark-theme .el-popconfirm {
-  background-color: #222222;
-  border: 1px solid #555555;
-  color: #e0e0e0;
+body.dark-theme .el-select__placeholder,
+body.dark-theme .el-select__caret {
+  color: var(--text-2);
 }
 
-/* Teleport 到 body 的各类浮层统一暗色样式（tooltip/popconfirm/popover/select/dropdown） */
 body.dark-theme .el-popper,
 body.dark-theme .el-tooltip__popper,
 body.dark-theme .el-popover.el-popper,
 body.dark-theme .el-popconfirm.el-popper,
 body.dark-theme .el-select__popper,
 body.dark-theme .el-dropdown__popper {
-  background-color: #222222 !important;
-  border: 1px solid #555555 !important;
-  color: #e0e0e0 !important;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35) !important;
-}
-
-body.dark-theme .el-popper * {
-  color: inherit;
+  background-color: var(--bg-1) !important;
+  border: 1px solid var(--line-1) !important;
+  color: var(--text-1) !important;
 }
 
 body.dark-theme .el-popper__arrow::before {
-  background-color: #222222 !important;
-  border-color: #555555 !important;
-}
-
-body.dark-theme .el-popconfirm__main {
-  color: #e0e0e0 !important;
-}
-
-body.dark-theme .el-popconfirm__icon {
-  color: #f59e0b !important;
-}
-
-body.dark-theme .el-popconfirm__action .el-button--default {
-  background-color: #333333 !important;
-  border-color: #555555 !important;
-  color: #e0e0e0 !important;
-}
-
-body.dark-theme .el-dialog {
-  background-color: #222222;
-  border: 1px solid #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-dialog__header,
-body.dark-theme .el-dialog__body,
-body.dark-theme .el-dialog__footer {
-  color: #e0e0e0;
-  border-color: #555555 !important;
+  background-color: var(--bg-1) !important;
+  border-color: var(--line-1) !important;
 }
 
 body.dark-theme .el-overlay-dialog {
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.45);
 }
 
-body.dark-theme .el-switch__core {
-  background-color: #555555;
-  border-color: #555555;
-}
-
-body.dark-theme .el-switch.is-checked .el-switch__core {
-  background-color: #7a9ccc;
-  border-color: #7a9ccc;
-}
-
-body.dark-theme .el-radio-button__inner {
-  background-color: #333333;
-  border-color: #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-radio-button__inner:hover {
-  background-color: #444444;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-radio-button.is-active .el-radio-button__inner {
-  background-color: #5a7bc1;
-  border-color: #7a9ccc;
-  color: white;
-}
-
-body.dark-theme .el-checkbox__input .el-checkbox__inner {
-  background-color: #333333;
-  border: 1px solid #555555;
-}
-
-body.dark-theme .el-checkbox__input.is-checked .el-checkbox__inner {
-  background-color: #7a9ccc;
-  border-color: #7a9ccc;
-}
-
-body.dark-theme .el-upload-dragger {
-  background-color: #333333;
-  border: 1px dashed #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-upload-dragger:hover {
-  border-color: #7a9ccc;
-}
-
-body.dark-theme .el-dropdown-menu {
-  background-color: #222222;
-  border: 1px solid #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-dropdown-menu__item {
-  color: #e0e0e0;
-}
-
-body.dark-theme .el-dropdown-menu__item:hover {
-  background-color: #333333;
-}
-
-body.dark-theme .el-message-box {
-  background-color: #222222;
-  border: 1px solid #555555;
-  color: #e0e0e0;
-}
-
-body.dark-theme .custom-dark-tooltip .el-tooltip__popper .popper__arrow {
-  background-color: #333 !important; /* 修改菱形颜色 */
-}
-
-/* 管理后台暗色兜底：避免部分 Element Plus 组件维持浅色底 */
 body.dark-theme .admin-page .el-table,
 body.dark-theme .admin-page .el-table__inner-wrapper,
 body.dark-theme .admin-page .el-table__header-wrapper,
 body.dark-theme .admin-page .el-table__body-wrapper,
 body.dark-theme .admin-page .el-table tr,
 body.dark-theme .admin-page .el-table th.el-table__cell,
-body.dark-theme .admin-page .el-table td.el-table__cell {
-  background-color: #222222 !important;
-  color: #e0e0e0 !important;
-  border-color: #555555 !important;
+body.dark-theme .admin-page .el-table td.el-table__cell,
+body.dark-theme .admin-page .el-table__empty-block,
+body.dark-theme .admin-page .el-empty__description {
+  background-color: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  border-color: var(--line-1) !important;
 }
 
 body.dark-theme .admin-page .el-table th.el-table__cell {
-  background-color: #2a2a2a !important;
-  color: #aaaaaa !important;
+  background-color: var(--bg-2) !important;
+  color: var(--text-2) !important;
 }
 
-body.dark-theme .admin-page .el-table__empty-block,
-body.dark-theme .admin-page .el-empty__description {
-  background-color: #222222 !important;
-  color: #9a9a9a !important;
-}
 </style>

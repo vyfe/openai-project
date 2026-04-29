@@ -6,7 +6,7 @@
     <div class="flex items-center mb-4">
       <h2 :class="[
         'text-lg font-bold flex items-center',
-        isDarkTheme ? 'text-indigo-400' : 'text-indigo-600'
+        isDarkTheme ? 'text-emerald-400' : 'text-amber-700'
       ]">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
           <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
@@ -19,7 +19,7 @@
       <div v-if="loading" class="flex justify-center items-center h-32">
         <div :class="[
           'animate-spin rounded-full h-8 w-8 border-b-2',
-          isDarkTheme ? 'border-indigo-400' : 'border-indigo-600'
+          isDarkTheme ? 'border-emerald-400' : 'border-amber-700'
         ]"></div>
       </div>
 
@@ -36,14 +36,14 @@
           :key="notification.id || index"
           :class="[
             'p-3 rounded-lg border transition-colors cursor-pointer',
-            isDarkTheme ? 'bg-gray-700 border-gray-600 hover:bg-gray-600/80' : 'bg-white border-gray-200 hover:bg-indigo-50'
+            isDarkTheme ? 'bg-gray-700 border-gray-600 hover:bg-gray-600/80' : 'bg-white border-gray-200 hover:bg-amber-50'
           ]"
         >
           <div class="flex items-start">
             <div class="flex-shrink-0 mt-0.5">
               <div :class="[
                 'w-2 h-2 rounded-full',
-                isDarkTheme ? 'bg-indigo-400' : 'bg-indigo-500'
+                isDarkTheme ? 'bg-emerald-400' : 'bg-amber-600'
               ]"></div>
             </div>
             <div class="ml-3">
@@ -84,7 +84,7 @@
     ]">
       <h2 :class="[
         'text-lg font-bold flex items-center',
-        isDarkTheme ? 'text-indigo-400' : 'text-indigo-600'
+        isDarkTheme ? 'text-emerald-400' : 'text-amber-700'
       ]">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
           <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
@@ -105,7 +105,7 @@
       <div v-if="loading" class="flex justify-center items-center h-32">
         <div :class="[
           'animate-spin rounded-full h-8 w-8 border-b-2',
-          isDarkTheme ? 'border-indigo-400' : 'border-indigo-600'
+          isDarkTheme ? 'border-emerald-400' : 'border-amber-700'
         ]"></div>
       </div>
 
@@ -122,14 +122,14 @@
           :key="notification.id || index"
           :class="[
             'p-3 rounded-lg border transition-colors cursor-pointer',
-            isDarkTheme ? 'bg-gray-700 border-gray-600 hover:bg-gray-600/80' : 'bg-white border-gray-200 hover:bg-indigo-50'
+            isDarkTheme ? 'bg-gray-700 border-gray-600 hover:bg-gray-600/80' : 'bg-white border-gray-200 hover:bg-amber-50'
           ]"
         >
           <div class="flex items-start">
             <div class="flex-shrink-0 mt-0.5">
               <div :class="[
                 'w-2 h-2 rounded-full',
-                isDarkTheme ? 'bg-indigo-400' : 'bg-indigo-500'
+                isDarkTheme ? 'bg-emerald-400' : 'bg-amber-600'
               ]"></div>
             </div>
             <div class="ml-3">

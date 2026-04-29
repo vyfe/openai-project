@@ -1,0 +1,77 @@
+:root {
+  /* Typography */
+  --font-sans: "Noto Sans SC", "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+
+  --message-font-size-small: 13px;
+  --message-font-size-medium: 16px;
+  --message-font-size-large: 20px;
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* Radius */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-mid: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Semantic colors (default = light) */
+  --bg-0: #f7f4ef;
+  --bg-1: #fcfaf7;
+  --bg-2: #f2ede5;
+  --line-1: #ddd4c7;
+  --text-1: #302d28;
+  --text-2: #6f675d;
+  --accent-1: #c97a2b;
+  --accent-2: #5f8f63;
+  --accent-1-soft: rgba(201, 122, 43, 0.15);
+  --accent-2-soft: rgba(95, 143, 99, 0.15);
+
+  /* App-level tokens */
+  --bg-app-gradient: linear-gradient(135deg, #f8f4ee 0%, #f1ece4 55%, #edf2ea 100%);
+  --overlay-1: rgba(252, 250, 247, 0.88);
+
+  /* Element Plus bridging */
+  --el-color-primary: var(--accent-1);
+  --el-color-primary-light-3: #d89a60;
+  --el-color-primary-light-5: #e5b88c;
+  --el-color-primary-light-7: #efd2b5;
+  --el-color-primary-light-8: #f5dfca;
+  --el-color-primary-light-9: #faefe2;
+  --el-color-primary-dark-2: #aa6624;
+
+  --el-color-success: var(--accent-2);
+  --el-color-success-light-3: #7ea683;
+  --el-color-success-light-5: #9dbda0;
+  --el-color-success-light-8: #d4e1d5;
+  --el-color-success-light-9: #e8f0e8;
+  --el-color-success-dark-2: #4f7753;
+
+  --el-bg-color: var(--bg-1);
+  --el-bg-color-page: var(--bg-0);
+  --el-fill-color-light: var(--bg-2);
+  --el-fill-color-blank: var(--bg-1);
+  --el-border-color: var(--line-1);
+  --el-border-color-light: color-mix(in srgb, var(--line-1) 84%, white);
+  --el-text-color-primary: var(--text-1);
+  --el-text-color-regular: var(--text-2);
+
+  --el-font-size-base: var(--message-font-size-medium);
+  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
+  --el-font-size-medium: var(--message-font-size-medium);
+  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
+}

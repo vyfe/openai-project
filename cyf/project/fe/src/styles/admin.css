@@ -1,36 +1,36 @@
 /* Admin页面样式 */
 .admin-page.admin-dark {
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-  color: #e0e0e0;
+  background: linear-gradient(135deg, #1a1a1a 0%, var(--bg-2) 100%);
+  color: var(--text-1);
 }
 
 .admin-page.admin-dark header {
-  background: rgba(34, 34, 34, 0.9) !important;
-  border-color: rgba(85, 85, 85, 0.3) !important;
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent) !important;
+  border-color: color-mix(in srgb, var(--line-1) 30%, transparent) !important;
 }
 
 .admin-page.admin-dark h1 {
-  color: #7a9ccc !important;
+  color: #d89a60 !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__header) {
-  border-color: #555555 !important;
+  border-color: var(--line-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__item) {
-  color: #9a9a9a !important;
+  color: var(--text-2) !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__item.is-active) {
-  color: #7a9ccc !important;
+  color: #d89a60 !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__active-bar) {
-  background-color: #7a9ccc !important;
+  background-color: #d89a60 !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__content) {
-  color: #e0e0e0;
+  color: var(--text-1);
 }
 
 /* 使用CSS变量配合Tailwind的暗色模式 */
@@ -44,22 +44,22 @@
   padding: 0 20px;
   height: 48px;
   line-height: 48px;
-  color: var(--text-color, #374151);
+  color: var(--text-color, var(--bg-2));
 }
 
 .admin-tabs :deep(.el-tabs__item.is-active) {
-  color: var(--primary-color, #4f46e5);
-  border-bottom-color: var(--primary-color, #4f46e5);
+  color: var(--primary-color, #c97a2b);
+  border-bottom-color: var(--primary-color, #c97a2b);
 }
 
 /* 深色主题适配 - 使用Tailwind的dark:类 */
 .dark .admin-tabs :deep(.el-tabs__nav) {
-  --tab-border-color: #374151;
+  --tab-border-color: var(--bg-2);
   --text-color: #9ca3af;
 }
 
 .dark .admin-tabs :deep(.el-tabs__item.is-active) {
-  --primary-color: #6366f1;
+  --primary-color: #c97a2b;
 }
 
 /* 深色主题下的非激活标签 */
@@ -103,7 +103,7 @@
   }
 
   .dark .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-thumb) {
-    --scrollbar-thumb: #4b5563;
+    --scrollbar-thumb: var(--line-1);
   }
 }
 
@@ -125,14 +125,14 @@
 .admin-page.admin-dark :deep(.el-table tr),
 .admin-page.admin-dark :deep(.el-table th.el-table__cell),
 .admin-page.admin-dark :deep(.el-table td.el-table__cell) {
-  background-color: #222222 !important;
-  color: #e0e0e0 !important;
-  border-color: #555555 !important;
+  background-color: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  border-color: var(--line-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-table th.el-table__cell) {
-  background-color: #2a2a2a !important;
-  color: #aaaaaa !important;
+  background-color: var(--bg-2) !important;
+  color: var(--text-2) !important;
 }
 
 :deep(.el-table__header-wrapper) {
@@ -140,7 +140,7 @@
 }
 
 .dark :deep(.el-table__header-wrapper) {
-  --table-header-bg: #1f2937;
+  --table-header-bg: var(--bg-1);
 }
 
 :deep(.el-table__body tr:hover > td) {
@@ -148,12 +148,12 @@
 }
 
 .dark :deep(.el-table__body tr:hover > td) {
-  --table-hover-bg: #374151;
+  --table-hover-bg: var(--bg-2);
 }
 
 /* 表格文字颜色 */
 :deep(.el-table td) {
-  color: var(--table-text-color, #1f2937);
+  color: var(--table-text-color, var(--bg-1));
 }
 
 .dark :deep(.el-table td) {
@@ -176,7 +176,7 @@
 
 .dark :deep(.el-table--border td),
 .dark :deep(.el-table--border th) {
-  --table-border-color: #374151;
+  --table-border-color: var(--bg-2);
 }
 
 /* 操作列响应式宽度 */
@@ -224,7 +224,7 @@
 }
 
 .dark :deep(.el-dialog__header) {
-  --dialog-border-color: #374151;
+  --dialog-border-color: var(--bg-2);
 }
 
 :deep(.el-dialog__body) {
@@ -236,11 +236,11 @@
 }
 
 .dark :deep(.el-dialog__footer) {
-  --dialog-border-color: #374151;
+  --dialog-border-color: var(--bg-2);
 }
 
 :deep(.el-dialog__title) {
-  color: var(--dialog-title-color, #1f2937);
+  color: var(--dialog-title-color, var(--bg-1));
 }
 
 .dark :deep(.el-dialog__title) {
@@ -250,7 +250,7 @@
 /* 表单样式优化 */
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: var(--form-label-color, #374151);
+  color: var(--form-label-color, var(--bg-2));
 }
 
 .dark :deep(.el-form-item__label) {
@@ -264,15 +264,15 @@
 .admin-page.admin-dark :deep(.el-input__wrapper),
 .admin-page.admin-dark :deep(.el-textarea__inner),
 .admin-page.admin-dark :deep(.el-select__wrapper) {
-  background-color: #333333 !important;
-  border-color: #555555 !important;
-  color: #e0e0e0 !important;
+  background-color: var(--bg-2) !important;
+  border-color: var(--line-1) !important;
+  color: var(--text-1) !important;
   box-shadow: none !important;
 }
 
 .admin-page.admin-dark :deep(.el-input__inner),
 .admin-page.admin-dark :deep(.el-textarea__inner) {
-  color: #e0e0e0 !important;
+  color: var(--text-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-form-item__label) {
@@ -280,7 +280,7 @@
 }
 
 :deep(.el-input__inner) {
-  color: var(--input-text-color, #1f2937);
+  color: var(--input-text-color, var(--bg-1));
 }
 
 .dark :deep(.el-input__inner) {
@@ -293,33 +293,33 @@
 }
 
 .dark :deep(.el-input__wrapper) {
-  --input-bg: #1f2937;
-  --input-border: #4b5563;
+  --input-bg: var(--bg-1);
+  --input-border: var(--line-1);
 }
 
 :deep(.el-textarea__inner) {
   border-radius: 6px;
   resize: vertical;
   background-color: var(--input-bg, #ffffff);
-  color: var(--input-text-color, #1f2937);
+  color: var(--input-text-color, var(--bg-1));
 }
 
 .dark :deep(.el-textarea__inner) {
-  --input-bg: #1f2937;
+  --input-bg: var(--bg-1);
   --input-text-color: #e5e7eb;
 }
 
 /* 按钮样式优化 */
 :deep(.el-button--primary) {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #c97a2b 0%, #5f8f63 100%);
   border: none;
   font-weight: 500;
 }
 
 :deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+  background: linear-gradient(135deg, #4f7753 0%, #67876c 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 12px rgba(201, 122, 43, 0.3);
 }
 
 :deep(.el-button--danger) {
@@ -334,11 +334,11 @@
 /* 普通按钮 */
 :deep(.el-button--default) {
   border-color: var(--btn-default-border, #d1d5db);
-  color: var(--btn-default-color, #374151);
+  color: var(--btn-default-color, var(--bg-2));
 }
 
 .dark :deep(.el-button--default) {
-  --btn-default-border: #4b5563;
+  --btn-default-border: var(--line-1);
   --btn-default-color: #e5e7eb;
 }
 
@@ -347,7 +347,7 @@
 }
 
 .dark :deep(.el-button--default:hover) {
-  --btn-default-hover: #374151;
+  --btn-default-hover: var(--bg-2);
 }
 
 /* 标签样式 */
@@ -362,8 +362,8 @@
 }
 
 :deep(.el-tag--info) {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background-color: #f4eadc;
+  color: #7a5937;
 }
 
 :deep(.el-tag--warning) {
@@ -377,8 +377,8 @@
 }
 
 :deep(.el-tag--primary) {
-  background-color: #dbeafe;
-  color: #1e40af;
+  background-color: #f4eadc;
+  color: #7a5937;
 }
 
 /* 深色模式下的标签 */
@@ -388,8 +388,8 @@
 }
 
 .dark :deep(.el-tag--info) {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background-color: rgba(201, 122, 43, 0.2);
+  color: #d89a60;
 }
 
 .dark :deep(.el-tag--warning) {
@@ -459,18 +459,18 @@
 
 :deep(.el-pagination button) {
   background-color: var(--pagination-bg, #ffffff);
-  color: var(--pagination-color, #374151);
+  color: var(--pagination-color, var(--bg-2));
 }
 
 .admin-page.admin-dark :deep(.el-pagination),
 .admin-page.admin-dark :deep(.el-pagination button),
 .admin-page.admin-dark :deep(.el-pagination .el-pager li) {
-  background-color: #222222 !important;
-  color: #e0e0e0 !important;
+  background-color: var(--bg-1) !important;
+  color: var(--text-1) !important;
 }
 
 .dark :deep(.el-pagination button) {
-  --pagination-bg: #1f2937;
+  --pagination-bg: var(--bg-1);
   --pagination-color: #e5e7eb;
 }
 
@@ -488,13 +488,13 @@
 }
 
 .dark :deep(.el-switch__core) {
-  --switch-off-bg: #4b5563;
+  --switch-off-bg: var(--line-1);
 }
 
 :deep(.el-switch.is-checked .el-switch__core) {
-  background-color: var(--switch-on-bg, #4f46e5);
+  background-color: var(--switch-on-bg, #c97a2b);
 }
 
 .dark :deep(.el-switch.is-checked .el-switch__core) {
-  --switch-on-bg: #6366f1;
+  --switch-on-bg: #c97a2b;
 }

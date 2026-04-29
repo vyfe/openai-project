@@ -1,6 +1,6 @@
 <template>
   <div
-    class="login-page min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-blue-100 via-sky-100 to-cyan-50 relative overflow-hidden"
+    class="login-page login-page-v2 min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-amber-100 via-stone-100 to-emerald-50 relative overflow-hidden"
     :class="{ 'login-dark': isDarkTheme }"
   >
     <!-- Favicon 飞行动画背景 -->
@@ -13,18 +13,18 @@
       />
     </div>
 
-    <div class="relative z-10 flex items-center justify-center">
-      <div class="bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-blue-200/30 w-96 max-w-[90%]">
-        <div class="text-center mb-8">
-          <h1 class="text-2xl font-bold text-indigo-600 mb-2">{{ t('login.title') }}</h1>
-          <p class="text-blue-400">{{ t('login.subtitle') }}</p>
+    <div class="login-shell relative z-10 flex items-center justify-center">
+      <div class="login-card bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-amber-200/30 w-96 max-w-[90%]">
+        <div class="login-head text-center mb-8">
+          <h1 class="login-title text-2xl font-bold text-amber-700 mb-2">{{ t('login.title') }}</h1>
+          <p class="login-subtitle text-stone-500">{{ t('login.subtitle') }}</p>
         </div>
 
         <el-form
           ref="loginFormRef"
           :model="loginForm"
           :rules="loginRules"
-          class="mt-5"
+          class="login-form mt-5"
           @submit.prevent="handleLogin"
         >
           <el-form-item prop="username" class="mb-5">
@@ -56,7 +56,7 @@
               type="primary"
               size="large"
               :loading="loading"
-              class="w-full bg-gradient-to-r from-blue-500 to-cyan-400 border-none text-base font-medium h-12 transition-all duration-300 hover:from-blue-600 hover:to-cyan-500 hover:translate-y-[-2px] hover:shadow-lg"
+              class="login-primary-btn w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
               @click="handleLogin"
             >
               {{ t('login.submitButton') }}
@@ -72,7 +72,7 @@
             size="small"
             @click="showRegisterModal = true"
             :icon="CirclePlus"
-            class="text-blue-500 hover:text-indigo-600"
+            class="login-secondary-btn text-amber-700 hover:text-amber-700"
           >
             {{ t('login.goToRegister') }}
           </el-button>
@@ -96,13 +96,13 @@
       </div>
     </div>
 
-    <div class="mt-8 text-center">
-      <p class="text-blue-400">{{ t('login.description') }}</p>
+    <div class="login-footer mt-8 text-center">
+      <p class="login-footer-desc text-stone-500">{{ t('login.description') }}</p>
       <p class="mt-2.5 flex items-center justify-center gap-1">
-        <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer" class="text-blue-400 text-sm font-medium flex items-center gap-1 hover:text-indigo-600 hover:underline">
+        <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer" class="login-footer-link text-stone-500 text-sm font-medium flex items-center gap-1 hover:text-amber-700 hover:underline">
           <el-icon><Link /></el-icon> {{ t('login.githubLink') }}
         </a>
-        <span class="ml-3.5 text-blue-400 font-medium inline-flex items-center"> {{ t('login.contactInfo') }} </span>
+        <span class="login-footer-contact ml-3.5 text-stone-500 font-medium inline-flex items-center"> {{ t('login.contactInfo') }} </span>
       </p>
     </div>
 
@@ -124,14 +124,14 @@
     <Teleport to="body">
       <div v-if="showRegisterModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div :class="[
-          'login-register-modal',
+          'login-register-modal login-register-modal-v2',
           { 'login-dark-modal': isDarkTheme },
           'rounded-2xl shadow-xl border w-96 max-w-[90%] transition-all duration-300 transform',
-          'bg-white/95 backdrop-blur-sm border-blue-200/30'
+          'bg-white/95 backdrop-blur-sm border-amber-200/30'
         ]">
           <!-- 弹窗头部 -->
           <div class="flex items-center justify-between p-5 border-b border-gray-200">
-            <h2 class="text-lg font-bold flex items-center text-indigo-600">
+            <h2 class="text-lg font-bold flex items-center text-amber-700">
               <el-icon class="mr-2"><CirclePlus /></el-icon>
               {{ t('login.registerTitle') }}
             </h2>
@@ -213,7 +213,7 @@
                   type="primary"
                   size="large"
                   :loading="registerLoading"
-                  class="w-full bg-gradient-to-r from-blue-500 to-cyan-400 border-none text-base font-medium h-12 transition-all duration-300 hover:from-blue-600 hover:to-cyan-500 hover:translate-y-[-2px] hover:shadow-lg"
+                  class="w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
                   @click="handleRegister"
                 >
                   {{ t('login.registerButton') }}
@@ -225,7 +225,7 @@
               {{ t('login.goToLogin') }}
               <button
                 @click="showRegisterModal = false"
-                class="ml-1 text-blue-500 hover:text-indigo-600 font-medium underline"
+                class="ml-1 text-amber-700 hover:text-amber-700 font-medium underline"
               >
                 {{ t('login.submitButton') }}
               </button>
@@ -459,7 +459,7 @@ const handleRegister = async () => {
   background-repeat: no-repeat;
   opacity: 0;
   transform: translate3d(0, 0, 0) scale(var(--scale));
-  filter: drop-shadow(0 10px 18px rgba(90, 123, 193, 0.16));
+  filter: drop-shadow(0 10px 18px rgba(201, 122, 43, 0.16));
   animation: favicon-flight var(--duration) cubic-bezier(0.38, 0, 0.22, 1) infinite;
   animation-delay: var(--delay);
 }
@@ -485,129 +485,146 @@ const handleRegister = async () => {
   }
 }
 
-/* 深色主题样式：页面级暗色类兜底，避免主题类链路失效 */
-.login-page.login-dark {
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 50%, #1a1a1a 100%) !important;
+/* =========================
+   Round 6: login calm style
+   ========================= */
+.login-page-v2 {
+  background: radial-gradient(1200px 520px at 50% -120px, color-mix(in srgb, var(--accent-1) 10%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 88%, var(--bg-2)));
 }
 
-.login-page.login-dark .favicon-flyer {
-  filter: drop-shadow(0 10px 18px rgba(122, 156, 204, 0.3));
+.login-shell {
+  width: 100%;
+  max-width: 960px;
+  padding: 20px 12px 8px;
 }
 
-.login-page.login-dark .bg-white\/95 {
-  background: rgba(34, 34, 34, 0.95) !important;
-  color: #e0e0e0 !important;
+.login-card {
+  width: min(460px, 94vw);
+  margin: 0 auto;
+  background: var(--overlay-1) !important;
+  border: 1px solid var(--line-1) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+  padding: 28px 22px !important;
 }
 
-.login-page.login-dark .border-blue-200\/30 {
-  border-color: rgba(85, 85, 85, 0.35) !important;
+.login-head {
+  margin-bottom: 22px;
 }
 
-.login-page.login-dark .text-indigo-600 {
-  color: #e0e0e0 !important;
+.login-title {
+  margin-bottom: 6px !important;
+  color: var(--text-1) !important;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
-.login-page.login-dark .text-blue-400 {
-  color: #9a9a9a !important;
+.login-subtitle {
+  color: var(--text-2) !important;
+  font-size: 14px;
 }
 
-.login-page.login-dark .hover\:text-indigo-600:hover {
-  color: #e0e0e0 !important;
+.login-form :deep(.el-input__wrapper) {
+  border-radius: 12px;
+  border: 1px solid var(--line-1);
+  box-shadow: none !important;
+  background: var(--bg-1);
 }
 
-.login-page.login-dark .el-input__wrapper {
-  background: rgba(50, 50, 50, 0.9) !important;
-  border: 1px solid #555555 !important;
+.login-form :deep(.el-input__inner) {
+  color: var(--text-1);
+}
+
+.login-form :deep(.el-input__inner::placeholder) {
+  color: var(--text-2);
+}
+
+.login-primary-btn {
+  border: 1px solid var(--line-1) !important;
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.login-primary-btn:hover {
+  background: var(--bg-2) !important;
   box-shadow: none !important;
 }
 
-.login-page.login-dark .el-input__inner {
-  background: transparent !important;
-  color: #e0e0e0 !important;
+.login-secondary-btn {
+  border: 1px solid var(--line-1) !important;
+  border-radius: 999px !important;
+  color: var(--text-2) !important;
+  background: var(--bg-1) !important;
 }
 
-.login-page.login-dark .el-input__inner::placeholder {
-  color: #aaaaaa !important;
+.login-secondary-btn:hover {
+  color: var(--text-1) !important;
+  background: var(--bg-2) !important;
 }
 
-.login-page.login-dark .el-input__suffix {
-  color: #aaaaaa !important;
+.login-footer {
+  margin-top: 14px !important;
 }
 
-.login-page.login-dark .border {
-  border-color: #555555 !important;
+.login-footer-desc,
+.login-footer-link,
+.login-footer-contact {
+  color: var(--text-2) !important;
 }
 
-.login-page.login-dark .bg-gradient-to-r.from-blue-500.to-cyan-400 {
-  background: linear-gradient(135deg, #5a7bc1 0%, #7a9ccc 100%) !important;
-  color: #ffffff !important;
-  border: none !important;
+.login-footer-link:hover {
+  color: var(--text-1) !important;
 }
 
-.login-page.login-dark .hover\:from-blue-600.hover\:to-cyan-500:hover {
-  background: linear-gradient(135deg, #6a8bc1 0%, #8aaecc 100%) !important;
-  box-shadow: 0 10px 20px rgba(90, 123, 193, 0.35) !important;
+.favicon-sky {
+  opacity: 0.22;
 }
 
-/* 注册弹窗深色主题 */
-.login-page.login-dark .border-gray-200 {
-  border-color: #555555 !important;
+.favicon-flyer {
+  animation-duration: 34s !important;
 }
 
-.login-page.login-dark .text-gray-500 {
-  color: #aaaaaa !important;
+body.dark-theme .login-page-v2 {
+  background: radial-gradient(1200px 520px at 50% -120px, var(--accent-1-soft), transparent 70%),
+    linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)));
 }
 
-/* Teleport 的注册弹窗暗色样式 */
-.login-register-modal.login-dark-modal {
-  background: rgba(34, 34, 34, 0.96) !important;
-  border-color: rgba(85, 85, 85, 0.35) !important;
-  color: #e0e0e0 !important;
+body.dark-theme .login-card,
+.login-page.login-dark .login-card {
+  background: var(--overlay-1) !important;
+  border-color: var(--line-1) !important;
 }
 
-.login-register-modal.login-dark-modal .border-gray-200 {
-  border-color: #555555 !important;
-}
-
-.login-register-modal.login-dark-modal .text-gray-500 {
-  color: #aaaaaa !important;
-}
-
-.el-input__inner,
-.el-textarea__inner {
-  background-color: #e4e4e4;
-  color: #4b4b4b;
-}
-
-.notification-button-wrapper {
-  position: relative;
-  display: inline-flex;
-}
-
-.notification-dot {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 8px;
-  height: 8px;
-  background: #ef4444;
-  border-radius: 9999px;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
-  pointer-events: none;
-}
-
-/* 确保 el-form-item 内容居中 */
-:deep(.el-form-item__content) {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+body.dark-theme .login-title,
+body.dark-theme .login-subtitle,
+body.dark-theme .login-footer-desc,
+body.dark-theme .login-footer-link,
+body.dark-theme .login-footer-contact {
+  color: var(--text-1) !important;
 }
 
 @media (max-width: 768px) {
-  .favicon-flyer {
-    width: 54px;
-    height: 54px;
-    filter: drop-shadow(0 8px 12px rgba(90, 123, 193, 0.16));
+  .login-shell {
+    padding: 10px 10px 6px;
+  }
+
+  .login-card {
+    padding: 20px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  .login-title {
+    font-size: 22px;
+  }
+
+  .login-subtitle {
+    font-size: 13px;
   }
 }
 </style>

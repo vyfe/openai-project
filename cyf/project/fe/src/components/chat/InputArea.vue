@@ -43,9 +43,9 @@
           </el-select>
         </div>
 
-        <div class="input-actions">
-          <!-- 将按钮放入编组容器中 -->
-          <div class="button-group">
+          <div class="input-actions">
+            <!-- 将按钮放入编组容器中 -->
+            <div class="button-group">
             <!-- 文件上传按钮移到输入框上方，右侧 -->
             <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
               <template #reference>
@@ -67,6 +67,7 @@
             <el-button
               v-if="props.isLoading && props.streamEnabled"
               type="danger"
+              class="stop-stream-btn"
               :icon="CircleClose"
               @click="emit('stop-stream')"
             >
@@ -74,6 +75,7 @@
             </el-button>
             <el-button
               type="primary"
+              class="send-message-btn"
               :icon="Position"
               :disabled="(!inputMessage.trim() && uploadedFiles.length === 0 && pastedFiles.length === 0) || isLoading"
               @click="sendMessage"

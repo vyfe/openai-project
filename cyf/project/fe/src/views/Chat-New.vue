@@ -1,106 +1,79 @@
 <template>
   <div class="chat-container">
     <!-- 顶部导航栏 -->
-    <div class="chat-header">
-      <div class="header-left-flex">
-        <div class="header-title-section">
-          <el-button
-            class="sidebar-toggle-btn tech-button"
-            :icon="formData.sidebarCollapsed ? Expand : Fold"
-            circle size="medium"
-            @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
-          />
-          <h2>{{ t('chat.title') }}</h2>
-        </div>
-        <!-- 在移动端显示在标题下方的按钮组 -->
-        <div class="header-mobile-buttons md:hidden">
+    <div class="chat-header chat-header-v2">
+      <div class="header-left-v2">
+        <el-button
+          class="sidebar-toggle-btn header-icon-btn"
+          :icon="formData.sidebarCollapsed ? Expand : Fold"
+          circle
+          size="default"
+          @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
+        />
+        <h2>{{ t('chat.title') }}</h2>
+      </div>
 
-          <!-- 用量查询弹窗 -->
-          <el-popover
-            placement="bottom"
-            :width="300"
-            trigger="click"
-            v-model:visible="showUsagePopover"
-          >
-            <template #reference>
-              <el-button
-                class="usage-btn tech-button"
-                :icon="Coin"
-                size="small"
-                @click="fetchUsage"
-              >
-                {{ formData.isMobile ? '' : t('chat.viewUsage') }}
-              </el-button>
-            </template>
-            <div class="usage-content">
-              <div v-if="loadingUsage" class="loading">
-                <el-icon class="is-loading"><Loading /></el-icon>
-                {{ t('chat.loadingUsageData') }}
+      <div class="header-center-v2">
+        <!-- 用量查询弹窗 -->
+        <el-popover
+          placement="bottom"
+          :width="300"
+          trigger="click"
+          v-model:visible="showUsagePopover"
+        >
+          <template #reference>
+            <el-button class="header-icon-btn" :icon="Coin" circle @click="fetchUsage" />
+          </template>
+          <div class="usage-content">
+            <div v-if="loadingUsage" class="loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              {{ t('chat.loadingUsageData') }}
+            </div>
+            <div v-else-if="usageError" class="error">
+              {{ usageError }}
+            </div>
+            <div v-else class="usage-data">
+              <div class="usage-item">
+                <span class="label">{{ t('chat.totalUsage') }}：</span>
+                <span class="value">{{ usageData?.total_usage }} {{ t('chat.yuan') }}</span>
               </div>
-              <div v-else-if="usageError" class="error">
-                {{ usageError }}
+              <div class="usage-item">
+                <span class="label">{{ t('chat.quota') }}：</span>
+                <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} {{ t('chat.yuan') }}</span>
               </div>
-              <div v-else class="usage-data">
-                <div class="usage-item">
-                  <span class="label">{{ t('chat.totalUsage') }}：</span>
-                  <span class="value">{{ usageData?.total_usage }} {{ t('chat.yuan') }}</span>
-                </div>
-                <div class="usage-item">
-                  <span class="label">{{ t('chat.quota') }}：</span>
-                  <span class="value">{{ usageData?.quota > 10000 ? '-' : usageData?.quota }} {{ t('chat.yuan') }}</span>
-                </div>
-                <div class="usage-item" :class="{ 'low-balance': usageData?.remaining < 10 }">
-                  <span class="label">{{ t('chat.remainingQuota') }}：</span>
-                  <span class="value">{{ usageData?.remaining > 10000 ? '-' : usageData?.remaining }} {{ t('chat.yuan') }}</span>
-                </div>
+              <div class="usage-item" :class="{ 'low-balance': usageData?.remaining < 10 }">
+                <span class="label">{{ t('chat.remainingQuota') }}：</span>
+                <span class="value">{{ usageData?.remaining > 10000 ? '-' : usageData?.remaining }} {{ t('chat.yuan') }}</span>
               </div>
             </div>
-          </el-popover>
-
-          <!-- LaTeX 帮助按钮 -->
-          <el-button
-            :icon="Document"
-            size="small"
-            @click="showLatexHelp = true"
-            class="latex-help-btn tech-button"
-          >
-            {{ formData.isMobile ? '' : t('chat.latexHelp') }}
-          </el-button>
-
-          <!-- 通知按钮 -->
-          <div class="notification-button-wrapper">
-            <el-button
-              :icon="Bell"
-              size="small"
-              @click="openNotifications"
-              class="notification-btn tech-button"
-            >
-              {{ formData.isMobile ? '' : t('chat.notifications') }}
-            </el-button>
-            <span v-if="hasNewNotifications" class="notification-dot" />
           </div>
-          <!-- TODO(human): 优化移动端按钮的布局和样式，考虑添加更多针对移动设备的适配样式 -->
+        </el-popover>
+
+        <el-button :icon="Document" circle @click="showLatexHelp = true" class="header-icon-btn" />
+
+        <div class="notification-button-wrapper">
+          <el-button :icon="Bell" circle @click="openNotifications" class="header-icon-btn" />
+          <span v-if="hasNewNotifications" class="notification-dot" />
         </div>
       </div>
-      <div class="header-right">
+
+      <div class="header-right header-right-v2">
         <!-- 语言切换按钮 -->
         <el-button
           @click="toggleLanguage"
-          class="logout-btn tech-button"
-          :class="{'rounded-full': true}"
-          size="medium"
+          class="header-action-btn"
           :icon="SwitchFilled"
         >
           {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
         </el-button>
 
-        <el-button @click="toggleTheme" class="theme-toggle-btn tech-button" :icon="formData.isDarkTheme ? Sunny : Moon">
+        <el-button @click="toggleTheme" class="header-action-btn" :icon="formData.isDarkTheme ? Sunny : Moon">
           {{ formData.isMobile ? '' : (formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')) }}
         </el-button>
 
         <!-- 用户菜单 -->
         <el-dropdown class="user-menu">
-          <el-button class="user-btn tech-button" type="default">
+          <el-button class="user-btn user-btn-v2" type="default">
             <span class="user-name">{{ authStore.user }}</span>
             <el-icon class="el-icon--right"><ArrowDown /></el-icon>
           </el-button>
@@ -739,588 +712,213 @@ watch(() => formData.dialogTitle, (newTitle) => {
 </script>
 
 <style>
-/* 导入科技感字体 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 @import '@/styles/chat.css';
-
-/* 修复消息容器滚动问题 */
 @import '@/styles/message-container-fix.css';
 
-/* 为截图功能添加备用字体，避免Google Fonts加载问题 */
-.messages-container *,
-.message-text * {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+/* =========================
+   Round 2: calm header/layout
+   ========================= */
+.chat-container {
+  background: var(--bg-app-gradient);
 }
 
-/* 仅在非截图模式下应用Google Fonts */
-body:not(.screenshot-mode) .header-title-section h2 {
-  font-family: "Noto Sans SC", sans-serif !important;
+.chat-header.chat-header-v2 {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(280px, auto);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 16px;
+  background: var(--overlay-1);
+  border-bottom: 1px solid var(--line-1);
+  box-shadow: none;
 }
 
-body:not(.screenshot-mode) .user-name {
-  font-family: 'Exo 2', sans-serif !important;
+.header-left-v2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
 }
 
-/* 科技感动画关键帧 */
-@keyframes techGlow {
-  0% {
-    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5),
-                inset 0 0 5px rgba(59, 130, 246, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8),
-                inset 0 0 10px rgba(59, 130, 246, 0.3);
-  }
-  100% {
-    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5),
-                inset 0 0 5px rgba(59, 130, 246, 0.1);
-  }
-}
-
-@keyframes techPulse {
-  0% {
-    transform: scale(1);
-    filter: brightness(1);
-  }
-  50% {
-    transform: scale(1.05);
-    filter: brightness(1.2);
-  }
-  100% {
-    transform: scale(1);
-    filter: brightness(1);
-  }
-}
-
-@keyframes techBorder {
-  0% {
-    border-color: rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    border-color: rgba(59, 130, 246, 0.8);
-  }
-  100% {
-    border-color: rgba(59, 130, 246, 0.3);
-  }
-}
-
-@keyframes techRipple {
-  0% {
-    transform: scale(0);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(4);
-    opacity: 0;
-  }
-}
-
-@keyframes techScan {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes techFlicker {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* 左上角标题样式优化 */
-.header-title-section h2 {
-  font-family: "Noto Sans SC", sans-serif;
+.header-left-v2 h2 {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
-  font-size: 24px;
-  background: linear-gradient(135deg, #f63be7 0%, #1d4ed8 50% , #5c79f6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
-  letter-spacing: 1px;
+  color: var(--text-1);
+  letter-spacing: 0;
+  background: none;
+  -webkit-text-fill-color: initial;
+  text-shadow: none;
+}
+
+.header-left-v2 h2::after {
+  display: none;
+}
+
+.header-center-v2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.header-right-v2 {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.header-icon-btn,
+.header-action-btn,
+.user-btn-v2 {
+  border-radius: 999px !important;
+  border: 1px solid var(--line-1) !important;
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  box-shadow: none !important;
+  transition: background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+
+.header-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+}
+
+.header-action-btn {
+  padding: 8px 12px;
+}
+
+.header-icon-btn:hover,
+.header-action-btn:hover,
+.user-btn-v2:hover {
+  background: var(--bg-2) !important;
+  border-color: var(--line-1) !important;
+  transform: none !important;
+}
+
+.notification-button-wrapper {
   position: relative;
 }
 
-.header-title-section h2::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(45deg, rgba(59, 130, 246, 0.3) 0%, rgba(139, 92, 246, 0.3) 100%);
-  filter: blur(15px);
-  z-index: -1;
-  animation: techGlow 3s ease-in-out infinite;
+.notification-dot {
+  box-shadow: 0 0 0 2px var(--bg-1);
+}
+
+.chat-main {
+  background: transparent;
 }
 
 .chat-workspace {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: transparent;
 }
 
 .chat-tabs-wrap {
-  position: relative;
-  padding: 10px 12px 8px;
-  border-bottom: 1px solid var(--el-border-color-light, #d9e0ef);
-  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.2);
-  background: transparent;
-}
-
-:deep(.dark-theme) .chat-tabs-wrap,
-:deep(body.dark) .chat-tabs-wrap {
-  background: transparent;
-  border-bottom-color: rgba(148, 163, 184, 0.42);
-  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.16);
-}
-
-.chat-tabs-wrap :deep(.el-tabs__header) {
-  margin: 0;
-}
-
-.chat-tabs-wrap :deep(.el-tabs__nav-wrap::after) {
-  display: none;
-}
-
-.chat-tabs-wrap :deep(.el-tabs__nav) {
-  border: none !important;
-  background: transparent !important;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid var(--line-1);
+  box-shadow: none;
 }
 
 .chat-tabs-wrap :deep(.el-tabs__item) {
-  height: 36px;
-  line-height: 36px;
-  border: 1.5px solid rgba(99, 102, 241, 0.62) !important;
-  border-radius: 12px 12px 0 0;
-  margin-right: 8px;
-  padding: 0 14px;
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow:
-    0 6px 20px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.46),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
-  transition: all 0.2s ease;
+  height: 32px;
+  line-height: 32px;
+  border: 1px solid var(--line-1) !important;
+  border-radius: 10px 10px 0 0;
+  margin-right: 6px;
+  padding: 0 12px;
+  color: var(--text-2);
+  background: var(--bg-1);
+  box-shadow: none;
 }
 
 .chat-tabs-wrap :deep(.el-tabs__item:hover) {
-  color: #0f172a;
-  border-color: rgba(37, 99, 235, 0.86) !important;
-  transform: translateY(-1px);
-  box-shadow:
-    0 8px 24px rgba(37, 99, 235, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.56),
-    inset 0 0 0 1px rgba(59, 130, 246, 0.22);
+  color: var(--text-1);
+  border-color: var(--line-1) !important;
+  background: var(--bg-2);
+  transform: none;
+  box-shadow: none;
 }
 
 .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
-  color: #0f172a;
-  border-color: rgba(37, 99, 235, 1) !important;
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(219, 234, 254, 0.65));
-  box-shadow:
-    0 10px 26px rgba(37, 99, 235, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    inset 0 0 0 1px rgba(59, 130, 246, 0.3);
-  animation: activeTabGlowLight 2.6s ease-in-out infinite;
-}
-
-:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item),
-:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item) {
-  color: #e2e8f0;
-  background: linear-gradient(135deg, rgba(67, 56, 84, 0.58), rgba(47, 54, 72, 0.62));
-  border: 1.5px solid rgba(192, 132, 252, 0.72) !important;
-  box-shadow:
-    0 6px 20px rgba(2, 6, 23, 0.34),
-    inset 0 1px 0 rgba(196, 181, 253, 0.16),
-    inset 0 0 0 1px rgba(167, 139, 250, 0.2);
-}
-
-:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item:hover),
-:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item:hover) {
-  color: #f8fafc;
-  border-color: rgba(216, 180, 254, 0.92) !important;
-  box-shadow: 0 8px 22px rgba(67, 56, 202, 0.24), inset 0 1px 0 rgba(221, 214, 254, 0.18);
-}
-
-:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item.is-active),
-:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
-  color: #f8fafc;
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.46), rgba(76, 82, 118, 0.7));
-  border-color: rgba(233, 213, 255, 1) !important;
-  box-shadow: 0 10px 28px rgba(88, 28, 135, 0.36), inset 0 1px 0 rgba(243, 232, 255, 0.2);
-  animation: activeTabGlowDark 2.6s ease-in-out infinite;
-}
-
-@keyframes activeTabGlowLight {
-  0%, 100% {
-    box-shadow:
-      0 10px 26px rgba(37, 99, 235, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 0.82),
-      inset 0 0 0 1px rgba(59, 130, 246, 0.28);
-  }
-  50% {
-    box-shadow:
-      0 12px 30px rgba(37, 99, 235, 0.34),
-      0 0 0 1px rgba(59, 130, 246, 0.34),
-      inset 0 1px 0 rgba(255, 255, 255, 0.9),
-      inset 0 0 0 1px rgba(59, 130, 246, 0.42);
-  }
-}
-
-@keyframes activeTabGlowDark {
-  0%, 100% {
-    box-shadow:
-      0 10px 28px rgba(88, 28, 135, 0.34),
-      inset 0 1px 0 rgba(243, 232, 255, 0.2),
-      inset 0 0 0 1px rgba(216, 180, 254, 0.22);
-  }
-  50% {
-    box-shadow:
-      0 12px 32px rgba(126, 34, 206, 0.44),
-      0 0 0 1px rgba(233, 213, 255, 0.36),
-      inset 0 1px 0 rgba(243, 232, 255, 0.26),
-      inset 0 0 0 1px rgba(233, 213, 255, 0.36);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-tabs-wrap :deep(.el-tabs__item.is-active),
-  :deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item.is-active),
-  :deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
-    animation: none !important;
-  }
-}
-
-.chat-tab-label {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 260px;
-  min-width: 0;
-}
-
-.chat-tab-title {
-  display: inline-block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--text-1);
+  border-color: var(--line-1) !important;
+  background: var(--bg-1);
+  box-shadow: none;
+  animation: none;
 }
 
 .chat-tab-loading {
-  font-size: 12px;
-  color: #2563eb;
+  color: var(--text-2);
 }
 
-.chat-tab-unread-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ef4444;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.78);
-  flex-shrink: 0;
+body.dark-theme .chat-header.chat-header-v2 {
+  border-bottom-color: var(--line-1);
 }
 
-:deep(.dark-theme) .chat-tab-unread-dot,
-:deep(body.dark) .chat-tab-unread-dot {
-  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
+body.dark-theme .header-icon-btn,
+body.dark-theme .header-action-btn,
+body.dark-theme .user-btn-v2,
+body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item),
+body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  border-color: var(--line-1) !important;
+}
+
+body.dark-theme .header-icon-btn:hover,
+body.dark-theme .header-action-btn:hover,
+body.dark-theme .user-btn-v2:hover,
+body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item:hover) {
+  background: var(--bg-2) !important;
+}
+
+@media (max-width: 1024px) {
+  .chat-header.chat-header-v2 {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "left right"
+      "center center";
+  }
+
+  .header-left-v2 {
+    grid-area: left;
+  }
+
+  .header-right-v2 {
+    grid-area: right;
+  }
+
+  .header-center-v2 {
+    grid-area: center;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 768px) {
+  .chat-header.chat-header-v2 {
+    grid-template-columns: 1fr auto;
+    gap: var(--sp-2);
+    padding: 8px 10px;
+  }
+
+  .header-left-v2 h2 {
+    font-size: 16px;
+  }
+
+  .header-action-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
   .chat-tabs-wrap {
-    padding: 8px 8px 6px;
+    padding: 6px 8px 4px;
   }
-
-  .chat-tab-label {
-    max-width: 170px;
-  }
-
-  .chat-tabs-wrap :deep(.el-tabs__item) {
-    margin-right: 6px;
-    padding: 0 10px;
-    height: 32px;
-    line-height: 32px;
-    border-radius: 10px 10px 0 0;
-  }
-}
-
-/* 科技感按钮基础样式 */
-.tech-button {
-  position: relative;
-  overflow: hidden;
-  font-family: "Noto Sans SC", sans-serif;
-  font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-}
-
-/* 扫描光线效果 */
-.tech-button::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 246, 0.6), transparent);
-  transition: left 0.6s;
-  pointer-events: none;
-}
-
-.tech-button:hover::after {
-  left: 100%;
-}
-
-/* 波纹效果容器 */
-.tech-button {
-  overflow: hidden;
-}
-
-/* 科技感边框动画 */
-.tech-button::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6);
-  border-radius: inherit;
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 0.3s ease;
-}
-
-.tech-button:hover::before {
-  opacity: 1;
-  animation: techBorder 2s linear infinite;
-}
-
-.tech-button:hover {
-  animation: techPulse 0.6s ease-in-out;
-  border-color: rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
-  transform: translateY(-2px);
-}
-
-.tech-button:active {
-  transform: translateY(0);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
-}
-
-/* 点击波纹效果 */
-.tech-button.ripple-effect::after {
-  content: '';
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.6);
-  transform: scale(0);
-  animation: techRipple 0.6s ease-out;
-  pointer-events: none;
-}
-
-/* 科技感按钮基础样式 - 保持原始背景色 */
-.tech-button {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 2px solid transparent;
-  backdrop-filter: blur(10px);
-  cursor: pointer;
-}
-
-/* 扫描光线效果 */
-.tech-button::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 246, 0.4), transparent);
-  transition: left 0.6s;
-  pointer-events: none;
-}
-
-.tech-button:hover::after {
-  left: 100%;
-}
-
-/* 科技感边框动画 */
-.tech-button::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6);
-  border-radius: inherit;
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 0.3s ease;
-}
-
-.tech-button:hover::before {
-  opacity: 1;
-  animation: techBorder 2s linear infinite;
-}
-
-.tech-button:hover {
-  border-color: rgba(59, 130, 246, 0.8);
-  box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
-  transform: translateY(-1px);
-}
-
-.tech-button:active {
-  transform: translateY(0);
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
-}
-
-/* 侧边栏切换按钮 */
-.sidebar-toggle-btn {
-  animation: techBorder 4s ease-in-out infinite;
-  border-radius: 50% !important;
-}
-
-/* 语言切换按钮 */
-.language-toggle-btn {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 10px;
-  border-radius: 50% !important;
-  padding: 0;
-}
-
-/* 主题切换按钮 */
-.theme-toggle-btn {
-  /* 保持原始背景色 */
-}
-
-/* 用户菜单按钮 */
-.user-btn {
-  padding: 8px 12px;
-  border-radius: 20px;
-  background-color: var(--el-button-bg-color, #f0f0f0);
-  border: 1px solid var(--el-border-color, #dcdfe6);
-}
-
-.user-name {
-  margin-right: 6px;
-  font-weight: 500;
-  font-family: 'Exo 2', sans-serif;
-}
-
-/* 按钮图标动画 */
-.tech-button .el-icon {
-  transition: all 0.3s ease;
-}
-
-.tech-button:hover .el-icon {
-  transform: scale(1.2) rotate(5deg);
-  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8));
-}
-
-/* 用户菜单下拉动画 */
-.el-dropdown-menu {
-  animation: techFadeIn 0.3s ease-out;
-}
-
-@keyframes techFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.el-dropdown-item {
-  transition: all 0.2s ease;
-}
-
-.el-dropdown-item:hover {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-  transform: translateX(5px);
-}
-
-/* 暗色主题下的效果 - 简洁风格 */
-.dark-theme .tech-button:hover {
-  border-color: rgba(147, 197, 253, 0.6);
-  box-shadow: 0 2px 8px rgba(147, 197, 253, 0.2);
-}
-
-.dark-theme .header-title-section h2 {
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #a78bfa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .header-title-section h2 {
-    font-size: 20px;
-  }
-  
-  .tech-button {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-  
-  .language-toggle-btn {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
-  }
-}
-
-/* 为移动端调整样式 */
-@media (max-width: 768px) {
-  .user-menu {
-    margin-left: 5px;
-  }
-
-  .user-btn {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-}
-
-/* 用户菜单样式 */
-.user-menu {
-  margin-left: 10px;
-}
-
-.user-btn {
-  padding: 8px 12px;
-  border-radius: 20px;
-  background-color: var(--el-button-bg-color, #f0f0f0);
-  border: 1px solid var(--el-border-color, #dcdfe6);
-}
-
-.user-name {
-  margin-right: 6px;
-  font-weight: 500;
 }
 
 /* 为移动端调整样式 */

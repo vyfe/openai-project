@@ -56,7 +56,7 @@ watch(activeTab, (tab) => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+          <h1 class="text-2xl font-bold text-amber-700 dark:text-emerald-400">
             {{ t('admin.title') }}
           </h1>
         </div>

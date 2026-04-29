@@ -43,11 +43,11 @@ body.dark-theme .font-size-label {
   top: 2px;
   height: calc(100% - 4px);
   width: calc(33.333% - 2px);
-  background: #409eff;
+  background: #c97a2b;
   border-radius: 25px;
   transition: all 0.4s cubic-bezier(0.65, 0, 0.35, 1);
   z-index: 0;
-  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.2);
+  box-shadow: 0 2px 4px rgba(201, 122, 43, 0.2);
 }
 
 /* 字体大小选项按钮组 */
@@ -201,8 +201,8 @@ body.dark-theme .font-size-option.active {
 }
 
 body.dark-theme .font-size-slider-bg {
-  background: #337ecc;
-  box-shadow: 0 2px 4px rgba(51, 126, 204, 0.2);
+  background: #aa6624;
+  box-shadow: 0 2px 4px rgba(170, 102, 36, 0.2);
 }
 
 body.dark-theme .font-size-selector:hover {

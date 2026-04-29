@@ -1,0 +1,12 @@
+:root,
+body {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-0);
+  color: var(--text-1);
+  transition: background-color var(--dur-mid) var(--ease-standard), color var(--dur-mid) var(--ease-standard);
+}
