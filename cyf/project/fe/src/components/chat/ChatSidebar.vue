@@ -39,7 +39,7 @@
           </el-select>
         </div>
         <h3>{{ t('chat.selectModel') }}</h3>
-        <div class="model-selector">
+        <div class="model-selector" v-if="!isV2Mode">
           <el-select v-model="formData.modelValue" :placeholder="t('chat.selectModel')" size="small" filterable clearable
             :disabled="!formData.providerValue" @change="handleModelChange">
             <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
@@ -48,15 +48,66 @@
             </el-option>
           </el-select>
         </div>
+        <div v-else class="model-multi-selector">
+          <el-checkbox-group v-model="formData.selectedModels" @change="handleMultiModelChange">
+            <div v-for="model in filteredTextModels" :key="model.value" class="multi-model-item">
+              <el-checkbox
+                :label="model.value"
+                :disabled="formData.selectedModels.length >= 3 && !formData.selectedModels.includes(model.value)"
+              >
+                {{ model.label }}
+              </el-checkbox>
+            </div>
+          </el-checkbox-group>
+          <div class="selected-model-list" v-if="formData.selectedModels.length > 0">
+            <div class="selected-model-title">已选模型</div>
+            <el-tag
+              v-for="modelId in formData.selectedModels"
+              :key="modelId"
+              size="small"
+              class="selected-model-tag"
+              closable
+              @close="removeSelectedModel(modelId)"
+            >
+              {{ modelId }}
+            </el-tag>
+          </div>
+          <div v-if="filteredImageModels.length > 0" class="image-model-entry">
+            <div class="selected-model-title">图片模型（切换到 V1 单模型）</div>
+            <div class="image-model-list">
+              <el-tag
+                v-for="imgModel in filteredImageModels"
+                :key="imgModel.value"
+                class="image-model-tag"
+                effect="plain"
+                @click="activateImageModelFromV2(imgModel.value)"
+              >
+                {{ imgModel.label }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="context-settings-section" v-show="activeSection === 'model'">
         <!-- 显示选中模型的描述 -->
-        <div v-if="formData.currentModelDesc" class="model-description">
+        <div v-if="!isV2Mode && formData.currentModelDesc" class="model-description">
           <div class="model-desc-text">
             <el-icon>
               <InfoFilled />
             </el-icon>
             <span>{{ formData.currentModelDesc }}</span>
+          </div>
+        </div>
+        <div v-if="isV2Mode && selectedModelDescriptions.length > 0" class="model-description">
+          <div
+            v-for="item in selectedModelDescriptions"
+            :key="item.value"
+            class="model-desc-text model-desc-multi"
+          >
+            <el-icon>
+              <InfoFilled />
+            </el-icon>
+            <span><strong>{{ item.label }}：</strong>{{ item.model_desc || '暂无描述' }}</span>
           </div>
         </div>
       </div>
@@ -71,6 +122,16 @@
               {{ t('chat.edit') }}
             </el-button>
             <div v-else class="edit-mode-actions">
+              <el-button
+                v-if="canMigrateHistory"
+                type="primary"
+                text
+                size="small"
+                :disabled="selectedDialogs.length === 0"
+                @click="confirmBatchMigrate"
+              >
+                复制到多模型 ({{ selectedDialogs.length }})
+              </el-button>
               <el-button type="danger" text size="small" :disabled="selectedDialogs.length === 0"
                 @click="confirmBatchDelete" class="text-red-500 hover:bg-transparent disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ t('chat.delete') }} ({{ selectedDialogs.length }})
@@ -83,36 +144,47 @@
         </div>
 
         <div class="dialog-list">
-          <div v-for="dialog in formData.dialogHistory" :key="dialog.id" class="dialog-item"
-            :class="{ 'selected': isEditMode && selectedDialogs.includes(dialog.id) }"
-            @click="isEditMode ? toggleSelectDialog(dialog.id) : loadDialogContent(dialog.id)">
-            <el-checkbox v-if="isEditMode" v-model="selectedDialogs" :label="dialog.id" @click.stop
+          <div v-for="dialog in historyItems" :key="historyRowId(dialog)" class="dialog-item"
+            :class="{ 'selected': isEditMode && selectedDialogs.includes(historyRowId(dialog)) }"
+            @click="isEditMode ? toggleSelectDialog(historyRowId(dialog)) : loadDialogContent(historyRowId(dialog))">
+            <el-checkbox v-if="isEditMode" v-model="selectedDialogs" :label="historyRowId(dialog)" @click.stop
               class="dialog-checkbox" />
-            <div class="dialog-content" @click.stop="!isEditMode && loadDialogContent(dialog.id)">
-              <el-tooltip :content="dialog.dialog_name" :disabled="!shouldShowTooltip(dialog.dialog_name, 'title')"
+            <div class="dialog-content" @click.stop="!isEditMode && loadDialogContent(historyRowId(dialog))">
+              <el-tooltip :content="getHistoryTitle(dialog)" :disabled="!shouldShowTooltip(getHistoryTitle(dialog), 'title')"
                 placement="top" popper-class="custom-dark-tooltip">
                 <div class="dialog-title" :style="{ maxWidth: '100%' }">
-                  {{ dialog.dialog_name }}
+                  {{ getHistoryTitle(dialog) }}
                 </div>
               </el-tooltip>
               <div class="dialog-info">
-                <el-tooltip :content="dialog.modelname" :disabled="!shouldShowTooltip(dialog.modelname, 'model')"
+                <el-tooltip :content="getHistoryModelMeta(dialog)" :disabled="!shouldShowTooltip(getHistoryModelMeta(dialog), 'model')"
                   placement="top" popper-class="custom-dark-tooltip">
                   <div class="dialog-model" :style="{ maxWidth: '80px' }">
-                    {{ dialog.modelname }}
+                    {{ getHistoryModelMeta(dialog) }}
                   </div>
                 </el-tooltip>
-                <div class="dialog-date">{{ dialog.start_date }}</div>
+                <div class="dialog-date">{{ getHistoryDate(dialog) }}</div>
               </div>
             </div>
-            <el-popconfirm v-if="!isEditMode" title="确定要删除这个对话吗？" confirm-button-text="确定" cancel-button-text="取消"
-              @confirm="confirmSingleDelete(dialog.id)" @cancel.stop>
-              <template #reference>
-                <el-button v-if="!isEditMode" class="delete-btn" :icon="Delete" circle size="small" text @click.stop />
-              </template>
-            </el-popconfirm>
+            <div v-if="!isEditMode" class="history-row-actions">
+              <el-button
+                v-if="canMigrateHistory"
+                class="copy-to-v2-btn"
+                size="small"
+                text
+                @click.stop="migrateDialogsToV2([historyRowId(dialog)])"
+              >
+                复制
+              </el-button>
+              <el-popconfirm v-if="canDeleteHistory" title="确定要删除这个对话吗？" confirm-button-text="确定" cancel-button-text="取消"
+                @confirm="confirmSingleDelete(historyRowId(dialog))" @cancel.stop>
+                <template #reference>
+                  <el-button class="delete-btn" :icon="Delete" circle size="small" text @click.stop />
+                </template>
+              </el-popconfirm>
+            </div>
           </div>
-          <div v-if="formData.dialogHistory.length === 0" class="no-dialogs">
+          <div v-if="historyItems.length === 0" class="no-dialogs">
             暂无历史对话
           </div>
         </div>
@@ -295,8 +367,9 @@ import {
   UserFilled,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { chatAPI } from '@/services/api'
+import { chatAPI, conversationV2API } from '@/services/api'
 import { FormData } from '@/utils/main'
+import { normalizeModelList } from '@/utils/modelList'
 import 'highlight.js/styles/github-dark.css'
 import 'katex/dist/katex.min.css'
 import VersionService from '@/services/version'
@@ -325,6 +398,43 @@ const isKeyboardVisible = ref(false)
 
 // 使用从父组件传递过来的props访问formData，如果不存在则返回一个空对象
 const formData = (props.modelValue || {}) as FormData
+const isV2Mode = computed(() => formData.runtimeChatMode === 'v2')
+const canDeleteHistory = computed(() => true)
+const canMigrateHistory = computed(() => formData.runtimeChatMode === 'v1')
+const lastSelectedModels = ref<string[]>([])
+const historyItems = computed(() => {
+  return formData.runtimeChatMode === 'v2' ? (formData.v2Masters || []) : (formData.dialogHistory || [])
+})
+const selectedModelDescriptions = computed(() => {
+  if (!Array.isArray(formData.selectedModels)) return []
+  return formData.selectedModels
+    .map((modelId) => formData.models.find((m) => m.value === modelId))
+    .filter(Boolean) as Array<{ value: string, label: string, model_desc?: string }>
+})
+
+const historyRowId = (dialog: any): number => {
+  if (formData.runtimeChatMode === 'v2') return Number(dialog.id || 0)
+  return Number(dialog.id || 0)
+}
+
+const getHistoryTitle = (dialog: any): string => {
+  if (formData.runtimeChatMode === 'v2') return dialog.title || `会话 ${dialog.id}`
+  return dialog.dialog_name || `会话 ${dialog.id}`
+}
+
+const getHistoryModelMeta = (dialog: any): string => {
+  if (formData.runtimeChatMode === 'v2') {
+    const parsedModels = normalizeModelList(dialog.active_models)
+    const count = dialog.active_model_count || parsedModels.length
+    return `${count} 个模型`
+  }
+  return dialog.modelname || ''
+}
+
+const getHistoryDate = (dialog: any): string => {
+  if (formData.runtimeChatMode === 'v2') return dialog.updated_at || dialog.created_at || ''
+  return dialog.start_date || ''
+}
 
 // 添加对话历史管理的本地状态
 const isEditMode = ref(false)
@@ -588,6 +698,45 @@ const handleModelChange = (value: string) => {
   formData.selectedModelType = selectedModelObj?.model_type || 1
 }
 
+const handleMultiModelChange = (values: string[]) => {
+  const nextValues = Array.isArray(values) ? values : []
+  const hasImageModel = nextValues.some((modelId) => {
+    const model = formData.models.find((m) => m.value === modelId)
+    return (model?.model_type || 1) === 2
+  })
+  if (hasImageModel) {
+    formData.selectedModels = [...lastSelectedModels.value]
+    ElMessage.warning('多模型并行仅支持文本模型，图片模型请使用 V1 单模型模式')
+    return
+  }
+  if (nextValues.length > 3) {
+    formData.selectedModels = [...lastSelectedModels.value]
+    ElMessage.warning('最多同时选择 3 个模型')
+    return
+  }
+  formData.selectedModels = nextValues
+  lastSelectedModels.value = [...nextValues]
+}
+
+const removeSelectedModel = (modelId: string) => {
+  formData.selectedModels = (formData.selectedModels || []).filter((id) => id !== modelId)
+  lastSelectedModels.value = [...formData.selectedModels]
+}
+
+const activateImageModelFromV2 = (modelId: string) => {
+  const targetModel = formData.models.find((m) => m.value === modelId)
+  if (!targetModel) return
+  formData.chatApiMode = 'v1'
+  formData.runtimeChatMode = 'v1'
+  formData.v2Available = false
+  formData.providerValue = targetModel.group
+  formData.modelValue = targetModel.value
+  formData.selectedModel = targetModel.value
+  formData.selectedModelType = targetModel.model_type || 1
+  formData.currentModelDesc = targetModel.model_desc || ''
+  ElMessage.success('已切换到 V1 图片模型模式，可在右侧选择图片尺寸')
+}
+
 // 更新厂商列表
 const updateProviders = () => {
   // 从模型列表中提取厂商名称（基于模型值中的前缀）
@@ -615,6 +764,14 @@ const filteredModels = computed(() => {
     if (!a.recommend && b.recommend) return 1
     return 0
   })
+})
+
+const filteredTextModels = computed(() => {
+  return filteredModels.value.filter((m) => (m.model_type || 1) !== 2)
+})
+
+const filteredImageModels = computed(() => {
+  return filteredModels.value.filter((m) => (m.model_type || 1) === 2)
 })
 
 // 删除角色函数
@@ -841,22 +998,41 @@ const loadDialogHistory = async () => {
 
   formData.loadingHistory = true
   try {
-    const response: any = await chatAPI.getDialogHistory()
-    if (response && response.content) {
-      formData.dialogHistory = response.content
-      // 设置最新的对话ID为当前对话ID
-      if (response.content.length > 0) {
-        formData.currentDialogId = response.content[0].id
-        formData.dialogTitle = response.content[0].dialog_name || ''
+    if (formData.runtimeChatMode === 'v2') {
+      const response: any = await conversationV2API.listMaster(1, 50)
+      if (response?.success) {
+        formData.v2Masters = response.data?.list || []
+        if (formData.v2Masters.length > 0 && !formData.activeMasterId) {
+          formData.activeMasterId = formData.v2Masters[0].id
+          formData.v2MasterTitle = formData.v2Masters[0].title || ''
+        }
+      } else {
+        throw new Error(response?.msg || '加载V2会话失败')
       }
-      // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
     } else {
-      formData.dialogHistory = []
-      ElMessage.info('暂无历史对话')
+      const response: any = await chatAPI.getDialogHistory()
+      if (response && response.content) {
+        formData.dialogHistory = response.content
+        if (response.content.length > 0) {
+          formData.currentDialogId = response.content[0].id
+          formData.dialogTitle = response.content[0].dialog_name || ''
+        }
+      } else {
+        formData.dialogHistory = []
+        ElMessage.info('暂无历史对话')
+      }
     }
   } catch (error: any) {
     console.error('加载对话历史错误:', error)
-    ElMessage.error('加载对话历史失败')
+    if (formData.chatApiMode === 'v2' && formData.runtimeChatMode === 'v2') {
+      formData.runtimeChatMode = 'v1'
+      formData.v2Available = false
+      formData.chatApiMode = 'v1'
+      ElMessage.warning('V2接口不可用，已切换为单模型模式')
+      await loadDialogHistory()
+    } else {
+      ElMessage.error('加载对话历史失败')
+    }
   } finally {
     formData.loadingHistory = false
   }
@@ -865,8 +1041,17 @@ const loadDialogHistory = async () => {
 // 清空当前会话
 const clearCurrentSession = () => {
   // 清空对话标题和当前对话ID
-  formData.dialogTitle = ''
-  formData.currentDialogId = null
+  if (formData.runtimeChatMode === 'v2') {
+    formData.activeMasterId = null
+    formData.v2MasterTitle = ''
+    formData.v2Children = []
+    formData.v2Rounds = []
+    formData.v2Cells = []
+    formData.v2CellsMap = {}
+  } else {
+    formData.dialogTitle = ''
+    formData.currentDialogId = null
+  }
   ElMessage.success('已开启新会话')
 
   // 通知父组件或ChatContent组件清空消息
@@ -885,11 +1070,30 @@ const loadDialogContent = async (dialogId: number) => {
     formData.sidebarCollapsed = true
   }
 
+  if (formData.runtimeChatMode === 'v2') {
+    const detail: any = await conversationV2API.getMasterDetail(dialogId)
+    if (!detail?.success) {
+      throw new Error(detail?.msg || '加载V2会话详情失败')
+    }
+    const payload = detail.data || {}
+    formData.activeMasterId = dialogId
+    formData.v2MasterTitle = payload.master?.title || ''
+    formData.v2Children = payload.children || []
+    formData.v2Rounds = payload.rounds || []
+    formData.v2Cells = payload.cells || []
+    const cellsMap: Record<string, any> = {}
+    ;(payload.cells || []).forEach((cell: any) => {
+      cellsMap[`${cell.round_id}_${cell.child_id}`] = cell
+    })
+    formData.v2CellsMap = cellsMap
+    formData.v2ActiveChildId = formData.v2Children[0]?.child_id || null
+    emit('load-dialog', dialogId)
+    return
+  }
   const dialogItem = formData.dialogHistory.find(d => d.id === dialogId)
   if (dialogItem) {
     formData.dialogTitle = dialogItem.dialog_name
 
-    // 根据历史对话的模型信息更新当前模型选择
     if (dialogItem.modelname) {
       const targetModel = formData.models.find(model =>
         model.value === dialogItem.modelname ||
@@ -897,12 +1101,9 @@ const loadDialogContent = async (dialogId: number) => {
       )
 
       if (targetModel) {
-        // 更新供应商选择
         formData.providerValue = targetModel.group
-        // 更新模型选择
         formData.modelValue = targetModel.value
         formData.selectedModel = targetModel.value
-        // 更新模型描述
         formData.currentModelDesc = targetModel.model_desc || ''
         formData.selectedModelType = targetModel.model_type || 1
       } else {
@@ -1001,9 +1202,12 @@ const toggleSelectDialog = (dialogId: number) => {
 // 通用删除对话功能
 const deleteDialogs = async (dialogIds: number[]) => {
   try {
-    const response: any = await chatAPI.deleteDialogs(dialogIds)
+    const response: any = formData.runtimeChatMode === 'v2'
+      ? await conversationV2API.deleteMasters(dialogIds)
+      : await chatAPI.deleteDialogs(dialogIds)
     if (response && response.success) {
-      ElMessage.success(`${dialogIds.length === 1 ? '对话' : '批量'}删除成功，共删除 ${response.deleted_count} 条`)
+      const deletedCount = response.deleted_count ?? response?.data?.deleted_count ?? 0
+      ElMessage.success(`${dialogIds.length === 1 ? '对话' : '批量'}删除成功，共删除 ${deletedCount} 条`)
 
       // 如果是批量删除，退出编辑模式
       if (dialogIds.length > 1) {
@@ -1014,9 +1218,15 @@ const deleteDialogs = async (dialogIds: number[]) => {
       await loadDialogHistory()
 
       // 检查当前会话是否被删除，如果是则清空聊天内容
-      const currentDialog = formData.dialogHistory.find(d => d.dialog_name === formData.dialogTitle)
-      if (currentDialog && dialogIds.includes(currentDialog.id)) {
-        clearCurrentSession()
+      if (formData.runtimeChatMode === 'v2') {
+        if (formData.activeMasterId && dialogIds.includes(formData.activeMasterId)) {
+          clearCurrentSession()
+        }
+      } else {
+        const currentDialog = formData.dialogHistory.find(d => d.dialog_name === formData.dialogTitle)
+        if (currentDialog && dialogIds.includes(currentDialog.id)) {
+          clearCurrentSession()
+        }
       }
     } else {
       ElMessage.error(`${dialogIds.length === 1 ? '删除对话' : '批量删除'}失败`)
@@ -1040,6 +1250,37 @@ const confirmBatchDelete = async () => {
   }
 
   await deleteDialogs(selectedDialogs.value)
+}
+
+const migrateDialogsToV2 = async (dialogIds: number[]) => {
+  if (!dialogIds.length) {
+    ElMessage.warning('请先选择会话')
+    return
+  }
+  const targetModels = normalizeModelList(formData.selectedModels as any)
+  try {
+    const response: any = await conversationV2API.migrateLegacyDialogs({
+      dialog_ids: dialogIds,
+      target_models: targetModels,
+    })
+    if (response?.success) {
+      const migratedCount = response?.data?.migrated_count || 0
+      const failedCount = response?.data?.failed_count || 0
+      if (failedCount > 0) {
+        ElMessage.warning(`迁移完成：成功 ${migratedCount}，失败 ${failedCount}`)
+      } else {
+        ElMessage.success(`已复制 ${migratedCount} 条到多模型模式`)
+      }
+    } else {
+      ElMessage.error(response?.msg || '复制失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.message || '复制失败')
+  }
+}
+
+const confirmBatchMigrate = async () => {
+  await migrateDialogsToV2(selectedDialogs.value)
 }
 
 // 通用事件监听器管理函数
@@ -1173,6 +1414,7 @@ onMounted(async () => {
 
   // 自动加载历史会话
   await loadDialogHistory()
+  lastSelectedModels.value = Array.isArray(formData.selectedModels) ? [...formData.selectedModels] : []
 
   // 添加事件监听器
   addEventListeners()

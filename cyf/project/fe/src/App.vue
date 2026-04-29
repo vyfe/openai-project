@@ -30,8 +30,57 @@ onMounted(() => {
   -moz-osx-font-smoothing: grayscale;
   margin: 0;
   padding: 0;
-  height: 100vh;
+  min-height: 100vh;
+  background: transparent;
+  position: relative;
+  z-index: 1;
+}
+
+body {
+  position: relative;
+  min-height: 100vh;
   background: linear-gradient(135deg, #f0f7f9 0%, #e8f2f5 100%);
+  overflow-x: hidden;
+}
+
+/* 日夜主题动态背景层 */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.6s ease;
+}
+
+/* 日间模式：阳光半透明流动光晕 */
+body::before {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 85% 12%, rgba(255, 223, 128, 0.36) 0%, rgba(255, 223, 128, 0.16) 26%, rgba(255, 223, 128, 0) 55%),
+    radial-gradient(circle at 76% 18%, rgba(255, 240, 193, 0.22) 0%, rgba(255, 240, 193, 0) 44%),
+    radial-gradient(circle at 12% 78%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 42%);
+  animation: sunlight-drift 20s ease-in-out infinite alternate;
+}
+
+/* 夜间模式：星空半透明闪烁层 */
+body::after {
+  opacity: 0;
+  background:
+    radial-gradient(circle at 8% 16%, rgba(255, 255, 255, 0.72) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 22% 36%, rgba(222, 235, 255, 0.58) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 37% 12%, rgba(255, 255, 255, 0.66) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 54% 28%, rgba(209, 226, 255, 0.62) 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 68% 16%, rgba(255, 255, 255, 0.72) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 82% 33%, rgba(221, 235, 255, 0.62) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 16% 66%, rgba(255, 255, 255, 0.66) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 32% 82%, rgba(211, 229, 255, 0.58) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 51% 74%, rgba(255, 255, 255, 0.72) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 70% 86%, rgba(224, 238, 255, 0.58) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 88% 72%, rgba(255, 255, 255, 0.64) 0 1px, transparent 1.6px),
+    radial-gradient(ellipse at 80% -20%, rgba(122, 156, 204, 0.34) 0%, rgba(122, 156, 204, 0) 58%);
+  animation: starlight-twinkle 4.6s ease-in-out infinite alternate, starlight-drift 65s linear infinite;
 }
 
 /* 基础字体大小变量和Element Plus支持 */
@@ -53,6 +102,14 @@ onMounted(() => {
 body.dark-theme {
   background-color: #1a1a1a;
   color: #e0e0e0;
+}
+
+body.dark-theme::before {
+  opacity: 0;
+}
+
+body.dark-theme::after {
+  opacity: 0.78;
 }
 
 /* Element Plus 禁用状态 CSS 变量 - 夜间模式 */
@@ -307,5 +364,45 @@ body.dark-theme .admin-page .el-table__empty-block,
 body.dark-theme .admin-page .el-empty__description {
   background-color: #222222 !important;
   color: #9a9a9a !important;
+}
+
+@keyframes sunlight-drift {
+  0% {
+    transform: translate3d(-1.2%, 0, 0) scale(1);
+    filter: saturate(100%);
+  }
+  50% {
+    transform: translate3d(0.8%, -1%, 0) scale(1.03);
+    filter: saturate(108%);
+  }
+  100% {
+    transform: translate3d(1.5%, 1.2%, 0) scale(1.05);
+    filter: saturate(102%);
+  }
+}
+
+@keyframes starlight-twinkle {
+  0% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes starlight-drift {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none !important;
+  }
 }
 </style>

@@ -20,6 +20,7 @@ from openai import OpenAI, APIError, AuthenticationError, RateLimitError
 from openai.types.chat import ChatCompletionUserMessageParam
 
 import sqlitelog
+from routes.conversation_v2_routes import conversation_v2_bp, setup_conversation_v2
 
 # 添加数据库认证相关的导入
 from sqlitelog import user_exists_in_db, verify_user_password, get_user_api_key, get_all_active_users
@@ -623,8 +624,11 @@ def get_request_data():
         # 如果是JSON请求，从JSON数据中获取参数
         json_data = request.get_json(silent=True)
         if json_data:
-            # 使用字典推导式将第一层元素转换为文本格式
-            text_data = {key: str(value) for key, value in json_data.items()}
+            # 兼容：保留 list/dict 原始类型（例如 active_models），其余保持历史字符串行为
+            text_data = {
+                key: value if isinstance(value, (list, dict)) else str(value)
+                for key, value in json_data.items()
+            }
             return text_data
         else:
             # 如果JSON数据无效，回退到request.values
@@ -1871,6 +1875,10 @@ if admin_app:
             import traceback
             traceback.print_exc()
     print(f"成功注册 {rule_count} 个 admin 路由")
+
+# 注册会话V2路由（主会话/子会话/回合栅格）
+setup_conversation_v2(require_auth, get_request_data)
+app.register_blueprint(conversation_v2_bp)
 
 if __name__ == '__main__':
     # 上传文件夹初始化

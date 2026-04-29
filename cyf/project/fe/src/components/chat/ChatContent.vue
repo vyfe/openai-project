@@ -191,8 +191,9 @@
         </div>
       </el-drawer>
     </div>
-    <!-- 消息列表容器 - 关键滚动区域 -->
-    <div class="messages-container" :class="'font-size-' + fontSize" ref="messagesContainer">
+    <template v-if="!isV2Mode">
+      <!-- 消息列表容器 - 关键滚动区域 -->
+      <div class="messages-container" :class="'font-size-' + fontSize" ref="messagesContainer">
       <!-- 对话区域内嵌水印（用于长截图） -->
       <div class="message-author">
         <p v-if="formData.dialogTitle" class="conversation-title">{{ formData.dialogTitle }}</p>
@@ -208,7 +209,7 @@
         </div>
         <div class="message-content">
           <div class="message-header">
-            <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') + formData.modelValue}}</span>
+            <span class="message-author">{{ message.type === 'user' ? authStore.user : t('chat.AI') + formData.selectedModel}}</span>
             <span class="message-time">{{ message.time }}</span>
             <div class="message-actions">
               <el-checkbox
@@ -351,7 +352,92 @@
           <component :is="showMobileInput ? 'Hide' : 'View'" />
         </el-icon>
       </div> -->
-    </div>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="v2-session-header">
+        <div class="v2-session-title">{{ formData.v2MasterTitle || '新建多模型会话' }}</div>
+        <div class="v2-session-meta" v-if="activeChildren.length > 0">
+          {{ activeChildren.length }} 个模型并行
+        </div>
+      </div>
+      <div class="v2-grid-wrap">
+        <div v-if="formData.v2Rounds.length === 0" class="v2-empty">
+          发送第一条消息后将显示多模型并行结果
+        </div>
+        <div v-else class="v2-grid-table">
+          <div class="v2-grid-header" :style="{ gridTemplateColumns: v2GridColumns }">
+            <div class="v2-grid-header-cell v2-grid-header-prompt">Round / Prompt</div>
+            <div
+              v-for="child in activeChildren"
+              :key="`head_${child.child_id}`"
+              class="v2-grid-header-cell"
+            >
+              <div class="v2-head-title">{{ child.model_id }}</div>
+              <div class="v2-head-actions">
+                <el-button size="small" text @click="syncAllRoundsToChild(child)">同步主会话</el-button>
+                <el-button size="small" text type="danger" @click="removeV2ChildLocal(child)">移除</el-button>
+              </div>
+            </div>
+          </div>
+          <div
+            v-for="round in formData.v2Rounds"
+            :key="round.round_id"
+            class="v2-grid-row"
+            :style="{ gridTemplateColumns: v2GridColumns }"
+          >
+            <div class="v2-round-prompt">
+              <div class="v2-round-index">Round {{ round.round_index }}</div>
+              <div class="v2-round-text">{{ round.user_prompt }}</div>
+            </div>
+            <div
+              v-for="child in activeChildren"
+              :key="`${round.round_id}_${child.child_id}`"
+              class="v2-cell"
+            >
+              <div class="v2-cell-header">
+                <span class="v2-cell-model">{{ child.model_id }}</span>
+                <div class="v2-cell-actions">
+                  <el-button size="small" text @click="copyMasterPromptToCell(round, child)">复制主会话</el-button>
+                  <el-button
+                    v-if="getV2Cell(round.round_id, child.child_id)?.cell_status === 'failed'"
+                    size="small"
+                    text
+                    :loading="isV2CellLoading(round.round_id, child.child_id)"
+                    @click="retryV2Cell(round.round_id, child.child_id)"
+                  >
+                    重试
+                  </el-button>
+                </div>
+              </div>
+              <div class="v2-cell-body">
+                <template v-if="getV2Cell(round.round_id, child.child_id)?.cell_status === 'success'">
+                  <div
+                    class="message-text"
+                    v-html="renderMarkdown(getV2Cell(round.round_id, child.child_id)?.assistant_output || '')"
+                  />
+                </template>
+                <template v-else-if="getV2Cell(round.round_id, child.child_id)?.cell_status === 'failed'">
+                  <div class="v2-cell-error">
+                    {{ getV2Cell(round.round_id, child.child_id)?.error?.msg || '请求失败' }}
+                  </div>
+                </template>
+                <template v-else-if="getV2Cell(round.round_id, child.child_id)?.cell_status === 'streaming'">
+                  <div class="v2-cell-streaming">生成中...</div>
+                </template>
+                <template v-else-if="getV2Cell(round.round_id, child.child_id)?.cell_status === 'skipped'">
+                  <div class="v2-cell-skipped">该模型在此轮未参与</div>
+                </template>
+                <template v-else>
+                  <div class="v2-cell-idle">等待执行</div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
 
     <!-- 输入区域 -->
     <InputArea
@@ -359,8 +445,8 @@
       v-model="inputMessage"
       :send-preference="formData.sendPreference"
       :is-loading="isLoading"
-      :selected-model="formData.selectedModel"
-      :selected-model-type="formData.selectedModelType"
+      :selected-model="isV2Mode ? v2InputModel : formData.selectedModel"
+      :selected-model-type="isV2Mode ? 1 : formData.selectedModelType"
       :context-count="formData.contextCount"
       :enhanced-role-enabled="formData.enhancedRoleEnabled"
       :system-prompt="formData.systemPrompt"
@@ -374,7 +460,7 @@
       :is-scrolled-to-bottom="formData.isScrolledToBottom"
       :is-mobile="formData.isMobile"
       :font-size="fontSize"
-      @send-message="handleSendMessage"
+      @send-message="handleSendMessageDispatcher"
       @file-change="handleFileChange"
       @clear-file="clearFile"
       @stop-stream="handleStopStream"
@@ -410,10 +496,12 @@ import {
   Link,
   CaretRight,
   InfoFilled,
+  CopyDocument as CopyIcon,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { chatAPI } from '@/services/api'
+import { chatAPI, conversationV2API } from '@/services/api'
 import { FormData } from '@/utils/main'
+import { normalizeModelList } from '@/utils/modelList'
 import InputArea from './InputArea.vue' // 新增：导入InputArea组件
 import 'highlight.js/styles/github-dark.css'
 import katex from 'katex'
@@ -436,6 +524,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: any]
   'refresh-history': []
+  'dialog-created': [dialogId: number]
+  'update:current-dialog-id': [id: number | null]
 }>()
 
 // 添加加载对话内容的方法
@@ -592,6 +682,22 @@ const mathRenderer = {
 };
 
 const formData = (props.modelValue || {}) as FormData
+const isV2Mode = computed(() => formData.runtimeChatMode === 'v2')
+const activeChildren = computed(() => (formData.v2Children || []).filter((c: any) => c.status !== 'removed'))
+const selectedModelsNormalized = computed(() => normalizeModelList(formData.selectedModels as any))
+const v2InputModel = computed(() => {
+  const models = selectedModelsNormalized.value
+  return (
+    models[0] ||
+    activeChildren.value[0]?.model_id ||
+    formData.selectedModel ||
+    ''
+  )
+})
+const v2GridColumns = computed(() => {
+  const modelCols = `repeat(${Math.max(activeChildren.value.length, 1)}, minmax(340px, 1fr))`
+  return `minmax(280px, 320px) ${modelCols}`
+})
 
 const authStore = useAuthStore()
 // 使用formData中的状态，不再定义局部状态
@@ -687,10 +793,32 @@ const messagesContainer = ref<HTMLElement>()
 // 图片预览相关状态
 const previewImageUrl = ref('')
 const showImagePreview = ref(false)
+const v2CellStreamControllers = ref<Record<string, AbortController>>({})
+
+const buildCellKey = (roundId: number, childId: number) => `${roundId}_${childId}`
+const getV2Cell = (roundId: number, childId: number) => {
+  return formData.v2CellsMap?.[buildCellKey(roundId, childId)] || null
+}
+const setV2Cell = (cell: any) => {
+  if (!cell) return
+  const key = buildCellKey(cell.round_id, cell.child_id)
+  formData.v2CellsMap[key] = cell
+}
+
+const upsertV2Cell = (cell: any) => {
+  if (!cell) return
+  setV2Cell(cell)
+  const idx = (formData.v2Cells || []).findIndex((c: any) => c.round_id === cell.round_id && c.child_id === cell.child_id)
+  if (idx >= 0) formData.v2Cells[idx] = cell
+  else formData.v2Cells.push(cell)
+}
+const isV2CellLoading = (roundId: number, childId: number) => {
+  return !!formData.v2CellLoadingMap?.[buildCellKey(roundId, childId)]
+}
 
 // 当用户点击更新标题按钮时
 const updateDialogTitle = async () => {
-  if (!formData.currentDialogId) {
+  if (!formData.currentDialogId || isV2Mode.value) {
     ElMessage.warning('当前没有打开的对话，无法更新标题')
     return
   }
@@ -738,6 +866,16 @@ const handleFontSizeChange = (size: string) => {
 
 // 清空当前会话
 const clearCurrentSession = () => {
+  if (isV2Mode.value) {
+    formData.activeMasterId = null
+    formData.v2MasterTitle = ''
+    formData.v2Children = []
+    formData.v2Rounds = []
+    formData.v2Cells = []
+    formData.v2CellsMap = {}
+    ElMessage.success('已开启新会话')
+    return
+  }
   messages.splice(0, messages.length)
   messages.push({
     type: 'ai',
@@ -2122,6 +2260,269 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
   }
 }
 
+const ensureV2MasterIfNeeded = async (message: string) => {
+  console.log('[chat-debug][V2] ensureV2MasterIfNeeded start', {
+    activeMasterId: formData.activeMasterId,
+    selectedModels: formData.selectedModels,
+    selectedModel: formData.selectedModel,
+    activeChildren: activeChildren.value.map((c: any) => ({ child_id: c.child_id, model_id: c.model_id, status: c.status })),
+    messagePreview: (message || '').slice(0, 80),
+  })
+  if (formData.activeMasterId) return formData.activeMasterId
+  const models = (selectedModelsNormalized.value.length > 0)
+    ? selectedModelsNormalized.value
+    : (formData.selectedModel ? [formData.selectedModel] : [])
+  if (!models.length) {
+    console.warn('[chat-debug][V2] blocked: no models for createMaster')
+    throw new Error('请先至少选择一个模型')
+  }
+  const title = (message || '').trim().slice(0, 50) || '新建多模型会话'
+  const createResp: any = await conversationV2API.createMaster({
+    title,
+    session_type: models.length > 1 ? 'multi_compare' : 'single',
+    active_models: models
+  })
+  console.log('[chat-debug][V2] createMaster response', createResp)
+  if (!createResp?.success) {
+    throw new Error(createResp?.msg || '创建主会话失败')
+  }
+  const payload = createResp.data || {}
+  formData.activeMasterId = payload.master?.id || null
+  formData.v2MasterTitle = payload.master?.title || title
+  formData.v2Children = payload.children || []
+  console.log('[chat-debug][V2] ensureV2MasterIfNeeded done', {
+    activeMasterId: formData.activeMasterId,
+    v2MasterTitle: formData.v2MasterTitle,
+    childCount: (formData.v2Children || []).length,
+  })
+  return formData.activeMasterId
+}
+
+const generateCellRequestId = (roundId: number, childId: number) => {
+  return `v2_${roundId}_${childId}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+const streamOneV2Cell = async (roundId: number, child: any) => {
+  const childId = child.child_id
+  const key = buildCellKey(roundId, childId)
+  const requestId = generateCellRequestId(roundId, childId)
+  const abortController = new AbortController()
+  v2CellStreamControllers.value[key] = abortController
+
+  upsertV2Cell({
+    round_id: roundId,
+    child_id: childId,
+    assistant_output: '',
+    cell_status: 'streaming',
+    request_id: requestId,
+    error: null,
+  })
+
+  try {
+    await conversationV2API.streamCell({
+      round_id: roundId,
+      child_id: childId,
+      request_id: requestId,
+      system_prompt_id: formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,
+      max_response_tokens: Math.round(formData.maxResponseChars * 1.2 + 30),
+    }, (evt: any) => {
+      if (evt?.error) {
+        upsertV2Cell({
+          round_id: roundId,
+          child_id: childId,
+          assistant_output: '',
+          cell_status: 'failed',
+          request_id: requestId,
+          error: evt.error,
+        })
+        return
+      }
+
+      if (!evt?.done) {
+        const current = getV2Cell(roundId, childId)
+        const nextOutput = `${current?.assistant_output || ''}${evt?.content || ''}`
+        upsertV2Cell({
+          ...(current || {}),
+          round_id: roundId,
+          child_id: childId,
+          assistant_output: nextOutput,
+          cell_status: 'streaming',
+          request_id: requestId,
+        })
+        return
+      }
+
+      if (evt?.cell) {
+        upsertV2Cell(evt.cell)
+      } else {
+        const current = getV2Cell(roundId, childId)
+        upsertV2Cell({
+          ...(current || {}),
+          round_id: roundId,
+          child_id: childId,
+          cell_status: evt?.cancelled ? 'failed' : 'success',
+          request_id: requestId,
+          error: evt?.cancelled ? { msg: '已取消' } : null,
+        })
+      }
+    }, abortController.signal)
+  } catch (error: any) {
+    const current = getV2Cell(roundId, childId)
+    upsertV2Cell({
+      ...(current || {}),
+      round_id: roundId,
+      child_id: childId,
+      cell_status: 'failed',
+      error: { msg: error?.message || '流式请求失败' },
+      request_id: requestId,
+    })
+  } finally {
+    delete v2CellStreamControllers.value[key]
+  }
+}
+
+const copyMasterPromptToCell = (round: any, child: any) => {
+  const base = getV2Cell(round.round_id, child.child_id)
+  const composed = `${round.user_prompt || ''}\n\n${base?.assistant_output || ''}`.trim()
+  upsertV2Cell({
+    ...(base || {}),
+    round_id: round.round_id,
+    child_id: child.child_id,
+    assistant_output: composed,
+    cell_status: 'success',
+    error: null,
+  })
+  ElMessage.success('已复制主会话内容到当前模型格')
+}
+
+const syncAllRoundsToChild = (child: any) => {
+  ;(formData.v2Rounds || []).forEach((round: any) => {
+    copyMasterPromptToCell(round, child)
+  })
+  ElMessage.success(`已同步全部回合到 ${child.model_id}`)
+}
+
+const removeV2ChildLocal = (child: any) => {
+  const idx = (formData.v2Children || []).findIndex((c: any) => c.child_id === child.child_id)
+  if (idx >= 0) {
+    formData.v2Children[idx].status = 'removed'
+  }
+  ElMessage.success(`已移除模型 ${child.model_id}`)
+}
+
+const handleSendMessageV2 = async (message: string) => {
+  console.log('[chat-debug][V2] handleSendMessageV2 called', {
+    runtimeChatMode: formData.runtimeChatMode,
+    chatApiMode: formData.chatApiMode,
+    messageLength: message?.length || 0,
+    selectedModels: formData.selectedModels,
+    selectedModel: formData.selectedModel,
+    v2InputModel: v2InputModel.value,
+    activeMasterId: formData.activeMasterId,
+    activeChildren: activeChildren.value.map((c: any) => ({ child_id: c.child_id, model_id: c.model_id, status: c.status })),
+  })
+  if (!message.trim()) return
+  try {
+    isLoading.value = true
+    // 兜底同步：当selectedModels为空但当前会话已有子列时，自动回填可发送模型
+    formData.selectedModels = selectedModelsNormalized.value
+    if ((!formData.selectedModels || formData.selectedModels.length === 0) && activeChildren.value.length > 0) {
+      formData.selectedModels = activeChildren.value.map((c: any) => c.model_id).filter(Boolean)
+      console.log('[chat-debug][V2] selectedModels auto-filled from activeChildren', formData.selectedModels)
+    }
+    const hasImageModel = (formData.selectedModels || []).some((modelId) => {
+      const model = formData.models.find((m: any) => m.value === modelId)
+      return (model?.model_type || 1) === 2
+    })
+    if (hasImageModel) {
+      console.warn('[chat-debug][V2] blocked: hasImageModel in selectedModels', formData.selectedModels)
+      throw new Error('多模型并行仅支持文本模型，请切换到 V1 使用图片模型')
+    }
+    const masterId = await ensureV2MasterIfNeeded(message)
+    if (!masterId) {
+      console.warn('[chat-debug][V2] blocked: masterId empty after ensure')
+      throw new Error('主会话创建失败')
+    }
+    console.log('[chat-debug][V2] sendRound request', {
+      master_id: masterId,
+      user_prompt_preview: (message || '').slice(0, 80),
+      system_prompt_id: formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,
+      max_response_tokens: Math.round(formData.maxResponseChars * 1.2 + 30),
+    })
+    const roundResp: any = await conversationV2API.createRound({
+      master_id: masterId,
+      user_prompt: message,
+      attachments: [],
+      system_prompt_id: formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,
+      max_response_tokens: Math.round(formData.maxResponseChars * 1.2 + 30)
+    })
+    console.log('[chat-debug][V2] createRound response', roundResp)
+    if (!roundResp?.success) {
+      throw new Error(roundResp?.msg || '发送失败')
+    }
+    const data = roundResp.data || {}
+    const round = data.round
+    if (round) {
+      formData.v2Rounds = [...(formData.v2Rounds || []), round]
+    }
+    const children = data.children || activeChildren.value
+    await Promise.all(children.map((child: any) => streamOneV2Cell(round.round_id, child)))
+    emit('refresh-history')
+  } catch (error: any) {
+    console.error('[chat-debug][V2] handleSendMessageV2 error', error)
+    ElMessage.error(error?.message || 'V2发送失败')
+    if (formData.chatApiMode === 'v2') {
+      formData.runtimeChatMode = 'v1'
+      formData.chatApiMode = 'v1'
+      ElMessage.warning('V2发送失败，已切换为单模型模式')
+    }
+  } finally {
+    console.log('[chat-debug][V2] handleSendMessageV2 finally', {
+      isLoadingBeforeReset: isLoading.value,
+    })
+    isLoading.value = false
+  }
+}
+
+const handleSendMessageV2Proxy = async (message: string, file?: File, imageSize?: string) => {
+  console.log('[chat-debug][V2] proxy receive send-message event', {
+    messageLength: message?.length || 0,
+    hasFile: !!file,
+    imageSize,
+  })
+  await handleSendMessageV2(message)
+}
+
+const handleSendMessageDispatcher = async (message: string, file?: File, imageSize?: string) => {
+  console.log('[chat-debug] dispatcher', {
+    isV2Mode: isV2Mode.value,
+    messageLength: message?.length || 0,
+    hasFile: !!file,
+    imageSize,
+  })
+  if (isV2Mode.value) {
+    await handleSendMessageV2Proxy(message, file, imageSize)
+  } else {
+    await handleSendMessage(message, file, imageSize)
+  }
+}
+
+const retryV2Cell = async (roundId: number, childId: number) => {
+  const key = buildCellKey(roundId, childId)
+  formData.v2CellLoadingMap[key] = true
+  try {
+    const child = activeChildren.value.find((c: any) => c.child_id === childId)
+    if (!child) {
+      throw new Error('子会话不存在')
+    }
+    await streamOneV2Cell(roundId, child)
+  } catch (error: any) {
+    ElMessage.error(error?.message || '重试失败')
+  } finally {
+    formData.v2CellLoadingMap[key] = false
+  }
+}
+
 // 重试发送特定AI消息（重新发送该消息所属的上下文）
 const retryMessage = async (index: number) => {
   if (index < 0 || index >= messages.length || messages[index].type !== 'ai') {
@@ -2403,6 +2804,11 @@ onMounted(() => {
 // 组件卸载时移除事件监听器
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
+  Object.values(v2CellStreamControllers.value).forEach((controller) => {
+    try {
+      controller.abort()
+    } catch {}
+  })
 })
 
 // 在组件挂载时应用主题
@@ -2517,6 +2923,7 @@ const isImageUrl = (url: string): boolean => {
 
 // 监听对话ID变化，当ID变化时自动加载对话内容
 watch(() => formData.currentDialogId, async (newDialogId) => {
+  if (isV2Mode.value) return
   if (newDialogId !== null && newDialogId !== undefined) {
     await loadDialogContent(newDialogId)
   }

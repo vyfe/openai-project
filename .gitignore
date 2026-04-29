@@ -11,4 +11,4 @@
 .codex/
 .idea/
 .joycode/
-/__pycache__/
+**/__pycache__/

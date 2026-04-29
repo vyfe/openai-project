@@ -228,9 +228,19 @@ onUnmounted(() => {
 
 // 方法
 const sendMessage = () => {
+  console.log('[chat-debug][InputArea] sendMessage called', {
+    isLoading: props.isLoading,
+    selectedModel: props.selectedModel,
+    selectedModelType: props.selectedModelType,
+    isMobile: props.isMobile,
+    inputLength: inputMessage.value?.length || 0,
+    uploadedFilesCount: uploadedFiles.value.length,
+    pastedFilesCount: pastedFiles.value.length,
+  })
   if (!inputMessage.value.trim() && uploadedFiles.value.length === 0 && pastedFiles.value.length === 0) return
 
   if (!props.selectedModel) {
+    console.warn('[chat-debug][InputArea] blocked: selectedModel empty')
     ElMessage.warning('请先选择一个模型')
     return
   }
@@ -256,6 +266,11 @@ const sendMessage = () => {
     messageToSend = `${messageToSend}\n[IMAGE_SIZE:${selectedImageSize.value}]`
   }
 
+  console.log('[chat-debug][InputArea] emit send-message', {
+    finalMessageLength: messageToSend?.length || 0,
+    isImageModel: isImageModel.value,
+    selectedImageSize: selectedImageSize.value,
+  })
   emit('send-message', messageToSend, uploadedFile.value || undefined)
 
   // 清空输入框和文件

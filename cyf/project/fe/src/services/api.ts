@@ -196,4 +196,133 @@ export const chatAPI = {
   getBrowserConf: () => api.post('/never_guess_my_usage/browser_conf/get', {})
 }
 
+export type ChatApiMode = 'v1' | 'v2'
+export type RuntimeChatMode = 'v1' | 'v2'
+
+export const conversationV2API = {
+  createMaster: (payload: {
+    title: string
+    session_type: 'single' | 'multi_compare'
+    active_models: string[]
+  }) => api.post('/never_guess_my_usage/conversation/master/create', payload),
+
+  listMaster: (page: number = 1, pageSize: number = 50) => api.post('/never_guess_my_usage/conversation/master/list', {
+    page,
+    page_size: pageSize
+  }),
+
+  getMasterDetail: (masterId: number) => api.post('/never_guess_my_usage/conversation/master/detail', {
+    master_id: masterId
+  }),
+
+  addModel: (masterId: number, modelId: string) => api.post('/never_guess_my_usage/conversation/master/add_model', {
+    master_id: masterId,
+    model_id: modelId
+  }),
+
+  removeModel: (masterId: number, modelId: string) => api.post('/never_guess_my_usage/conversation/master/remove_model', {
+    master_id: masterId,
+    model_id: modelId
+  }),
+
+  deleteMasters: (masterIds: number[]) => api.post('/never_guess_my_usage/conversation/master/delete', {
+    master_ids: masterIds
+  }),
+
+  sendRound: (payload: {
+    master_id: number
+    user_prompt: string
+    attachments?: any[]
+    system_prompt_id?: number
+    max_response_tokens?: number
+  }) => api.post('/never_guess_my_usage/conversation/round/send', payload),
+
+  createRound: (payload: {
+    master_id: number
+    user_prompt: string
+    attachments?: any[]
+    system_prompt_id?: number
+    max_response_tokens?: number
+  }) => api.post('/never_guess_my_usage/conversation/round/create', payload),
+
+  streamCell: async (
+    payload: {
+      round_id: number
+      child_id: number
+      system_prompt_id?: number
+      max_response_tokens?: number
+      request_id?: string
+    },
+    onChunk: (evt: any) => void,
+    signal?: AbortSignal
+  ): Promise<void> => {
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/conversation/cell/stream`, {
+      method: 'POST',
+      headers: {
+        Accept: 'text/event-stream',
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        ...headers
+      },
+      body: JSON.stringify(payload),
+      signal
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error('No reader available')
+    const decoder = new TextDecoder()
+    let buffer = ''
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const dataStr = line.slice(6)
+          if (!dataStr.trim()) continue
+          const parsedData = JSON.parse(dataStr)
+          onChunk(parsedData)
+          if (parsedData.done) return
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  },
+
+  cancelStreamCell: (requestId: string) => api.post('/never_guess_my_usage/conversation/cell/stream_cancel', {
+    request_id: requestId
+  }),
+
+  retryCell: (payload: {
+    round_id: number
+    child_id: number
+    system_prompt_id?: number
+    max_response_tokens?: number
+  }) => api.post('/never_guess_my_usage/conversation/cell/retry', payload),
+
+  migrateLegacyDialogs: (payload: {
+    dialog_ids: number[]
+    target_models?: string[]
+  }) => api.post('/never_guess_my_usage/conversation/legacy/migrate', payload)
+}
+
+export const chatModeAPI = {
+  probeV2: async (): Promise<boolean> => {
+    try {
+      const response: any = await conversationV2API.listMaster(1, 1)
+      return !!response?.success
+    } catch {
+      return false
+    }
+  }
+}
+
 export default api

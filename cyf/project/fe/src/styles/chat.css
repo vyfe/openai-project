@@ -145,6 +145,14 @@
   gap: 8px;
 }
 
+.chat-mode-switch {
+  width: 90px;
+}
+
+.chat-mode-switch :deep(.el-input__wrapper) {
+  border-radius: 10px;
+}
+
 /* 移动端按钮样式优化 */
 @media (max-width: 768px) {
   .header-left {

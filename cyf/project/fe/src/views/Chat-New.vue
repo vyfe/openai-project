@@ -83,6 +83,16 @@
         </div>
       </div>
       <div class="header-right">
+        <el-select
+          v-model="formData.chatApiMode"
+          class="chat-mode-switch"
+          size="small"
+          @change="handleHeaderChatModeChange"
+        >
+          <el-option label="多模型：否" value="v1" />
+          <el-option label="多模型：是" value="v2" />
+        </el-select>
+
         <!-- 语言切换按钮 -->
         <el-button
           @click="toggleLanguage"
@@ -137,18 +147,7 @@
 
       <!-- 聊天内容区域 -->
       <ChatContent
-        :selected-model="formData.selectedModel"
-        :selected-model-type="formData.selectedModelType"
-        :context-count="formData.contextCount"
-        :max-response-chars="formData.maxResponseChars"
-        :stream-enabled="formData.streamEnabled"
-        :system-prompt="formData.systemPrompt"
-        :send-preference="formData.sendPreference"
-        :current-dialog-id="formData.currentDialogId"
-        :is-mobile="formData.isMobile"
-        @dialog-created="handleDialogCreated"
         @refresh-history="refreshHistory"
-        @update:current-dialog-id="updateCurrentDialogId"
         v-model="formData"
       />
     </div>
@@ -232,6 +231,8 @@ import { chatAPI } from '../services/api'
 import NotificationPanel from '../components/NotificationPanel.vue'
 import { useNotifications } from '@/composables/useNotifications'
 import { useThemeManager } from '@/composables/useThemeManager'
+import { chatModeAPI, conversationV2API, type ChatApiMode, type RuntimeChatMode } from '@/services/api'
+import { normalizeModelList } from '@/utils/modelList'
 
 // 国际化和认证
 const { t, locale } = useI18n()
@@ -244,6 +245,7 @@ const formData = reactive({
   isDarkTheme: JSON.parse(localStorage.getItem('isDarkTheme') || 'false'),
   currentDialogId: ref<number | null>(null),
   selectedModel: localStorage.getItem('selectedModel') || '',
+  selectedModels: normalizeModelList(localStorage.getItem('selectedModels') || '[]'),
   selectedModelType: parseInt(localStorage.getItem('selectedModelType') || '1'),
   // 上下文字数
   contextCount: parseInt(localStorage.getItem('contextCount') || '10'),
@@ -281,6 +283,18 @@ const formData = reactive({
   selectedEnhancedRole: localStorage.getItem('selectedEnhancedRole') || '',
   rolePresets: [] as Array<{ id: string, name: string, prompt: string }>,
   activeRoleId: localStorage.getItem('activeRoleId') || 'default',
+  chatApiMode: (localStorage.getItem('chatApiMode') || 'v1') as ChatApiMode,
+  runtimeChatMode: (localStorage.getItem('runtimeChatMode') || 'v1') as RuntimeChatMode,
+  v2Available: false,
+  activeMasterId: null as number | null,
+  v2MasterTitle: '',
+  v2Masters: [] as any[],
+  v2Children: [] as any[],
+  v2Rounds: [] as any[],
+  v2Cells: [] as any[],
+  v2CellsMap: {} as Record<string, any>,
+  v2CellLoadingMap: {} as Record<string, boolean>,
+  v2ActiveChildId: null as number | null,
 })
 
 // 添加语言切换相关的响应式变量
@@ -311,6 +325,7 @@ watch(() => formData.contextCount, (val) => localStorage.setItem('contextCount',
 watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxResponseChars', val.toString()))
 watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
+watch(() => formData.selectedModels, (val) => localStorage.setItem('selectedModels', JSON.stringify(val || [])), { deep: true })
 watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
 watch(() => formData.systemPrompt, (val) => localStorage.setItem('systemPrompt', val))
@@ -320,6 +335,8 @@ watch(() => formData.activeEnhancedGroup, (val) => localStorage.setItem('activeE
 watch(() => formData.selectedEnhancedRole, (val) => localStorage.setItem('selectedEnhancedRole', val))
 watch(() => formData.activeRoleId, (val) => localStorage.setItem('activeRoleId', val))
 watch(() => formData.fontSize, (val) => localStorage.setItem('fontSize', val))
+watch(() => formData.chatApiMode, (val) => localStorage.setItem('chatApiMode', val))
+watch(() => formData.runtimeChatMode, (val) => localStorage.setItem('runtimeChatMode', val))
 watch(isDarkTheme, (val) => {
   formData.isDarkTheme = val
 }, { immediate: true })
@@ -351,6 +368,10 @@ const updateCurrentDialogId = (id: number | null) => {
 
 // 加载对话
 const loadDialog = (dialogId: number) => {
+  if (formData.runtimeChatMode === 'v2') {
+    formData.activeMasterId = dialogId
+    return
+  }
   formData.currentDialogId = dialogId
   // 实际加载逻辑会在ChatContent中处理
 }
@@ -379,16 +400,32 @@ const loadDialogHistory = async () => {
 
   formData.loadingHistory = true
   try {
-    const response: any = await chatAPI.getDialogHistory()
-    if (response && response.content) {
-      formData.dialogHistory = response.content
-      // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)
+    if (formData.runtimeChatMode === 'v2') {
+      const response: any = await conversationV2API.listMaster(1, 50)
+      if (response?.success) {
+        formData.v2Masters = response.data?.list || []
+      } else {
+        throw new Error(response?.msg || '加载V2历史失败')
+      }
     } else {
-      formData.dialogHistory = []
-      ElMessage.info('暂无历史对话')
+      const response: any = await chatAPI.getDialogHistory()
+      if (response && response.content) {
+        formData.dialogHistory = response.content
+      } else {
+        formData.dialogHistory = []
+        ElMessage.info('暂无历史对话')
+      }
     }
   } catch (error: any) {
-    ElMessage.error(t('chat.loadHistoryFailed'))
+    if (formData.chatApiMode === 'v2' && formData.runtimeChatMode === 'v2') {
+      formData.runtimeChatMode = 'v1'
+      formData.v2Available = false
+      formData.chatApiMode = 'v1'
+      ElMessage.warning('V2历史加载失败，已切换为单模型模式')
+      await loadDialogHistory()
+    } else {
+      ElMessage.error(t('chat.loadHistoryFailed'))
+    }
   } finally {
     formData.loadingHistory = false
   }
@@ -456,6 +493,38 @@ const handleResize = () => {
 
 const clearSession = () => {
   formData.currentDialogId = null
+  formData.activeMasterId = null
+}
+
+const handleHeaderChatModeChange = async (mode: ChatApiMode) => {
+  if (mode === 'v1') {
+    formData.runtimeChatMode = 'v1'
+    formData.v2Available = false
+    await loadDialogHistory()
+    return
+  }
+  const v2Ready = await chatModeAPI.probeV2()
+  formData.v2Available = v2Ready
+  formData.runtimeChatMode = v2Ready ? 'v2' : 'v1'
+  if (!v2Ready) {
+    formData.chatApiMode = 'v1'
+    ElMessage.warning('当前环境不支持多模型模式，已保持单模型')
+  }
+  await loadDialogHistory()
+}
+
+const resolveRuntimeChatMode = async () => {
+  if (formData.chatApiMode === 'v1') {
+    formData.runtimeChatMode = 'v1'
+    formData.v2Available = false
+    return
+  }
+  const v2Ready = await chatModeAPI.probeV2()
+  formData.v2Available = v2Ready
+  formData.runtimeChatMode = v2Ready ? 'v2' : 'v1'
+  if (!v2Ready) {
+    formData.chatApiMode = 'v1'
+  }
 }
 
 // 组件挂载
@@ -510,6 +579,11 @@ onMounted(() => {
   }
 
   fetchNotifications()
+
+  resolveRuntimeChatMode().catch(() => {
+    formData.runtimeChatMode = 'v1'
+    formData.v2Available = false
+  })
 })
 
 // 组件卸载
