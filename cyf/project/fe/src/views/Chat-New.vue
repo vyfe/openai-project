@@ -258,6 +258,11 @@ type ChatTab = {
   dialogId: number | null
   loading: boolean
   unread: boolean
+  selectedModel: string
+  selectedModelType: number
+  providerValue: string
+  modelValue: string
+  currentModelDesc: string
 }
 
 // 组件间共享状态
@@ -312,7 +317,43 @@ const showNotificationPanel = ref(false)
 const showUserSettings = ref(false)
 
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
-const chatTabs = ref<ChatTab[]>([{ key: `tab_${Date.now()}`, title: '新会话', dialogId: null, loading: false, unread: false }])
+const getModelStateByModelName = (modelName?: string) => {
+  const modelKey = (modelName || '').trim()
+  const fallback = {
+    selectedModel: formData.selectedModel || '',
+    selectedModelType: Number(formData.selectedModelType || 1),
+    providerValue: formData.providerValue || '',
+    modelValue: formData.modelValue || formData.selectedModel || '',
+    currentModelDesc: formData.currentModelDesc || '',
+  }
+  if (!modelKey) {
+    return fallback
+  }
+  const modelInfo = formData.models.find((item) => item.value === modelKey || item.label === modelKey)
+  if (!modelInfo) {
+    return {
+      ...fallback,
+      selectedModel: modelKey,
+      modelValue: modelKey,
+    }
+  }
+  return {
+    selectedModel: modelInfo.value,
+    selectedModelType: Number(modelInfo.model_type || 1),
+    providerValue: modelInfo.group || '',
+    modelValue: modelInfo.value,
+    currentModelDesc: modelInfo.model_desc || '',
+  }
+}
+
+const chatTabs = ref<ChatTab[]>([{
+  key: `tab_${Date.now()}`,
+  title: '新会话',
+  dialogId: null,
+  loading: false,
+  unread: false,
+  ...getModelStateByModelName(formData.selectedModel || ''),
+}])
 const activeTabKey = ref(chatTabs.value[0].key)
 
 const openNotifications = () => {
@@ -379,15 +420,22 @@ const syncFormDataFromActiveTab = () => {
   if (!tab) return
   formData.currentDialogId = tab.dialogId
   formData.dialogTitle = tab.title === '新会话' ? '' : tab.title
+  formData.selectedModel = tab.selectedModel
+  formData.selectedModelType = tab.selectedModelType
+  formData.providerValue = tab.providerValue
+  formData.modelValue = tab.modelValue
+  formData.currentModelDesc = tab.currentModelDesc
 }
 
-const createChatTab = (dialogId: number | null = null, title: string = '新会话') => {
+const createChatTab = (dialogId: number | null = null, title: string = '新会话', modelName?: string) => {
+  const modelState = getModelStateByModelName(modelName)
   const tab: ChatTab = {
     key: `tab_${Date.now()}_${Math.random().toString(16).slice(2)}`,
     title,
     dialogId,
     loading: false,
     unread: false,
+    ...modelState,
   }
   chatTabs.value.push(tab)
   activeTabKey.value = tab.key
@@ -404,7 +452,7 @@ const loadDialog = (dialogId: number) => {
   }
   const historyItem = formData.dialogHistory.find((item: any) => item.id === dialogId)
   const title = historyItem?.dialog_name || `对话 ${dialogId}`
-  createChatTab(dialogId, title)
+  createChatTab(dialogId, title, historyItem?.modelname || '')
 }
 
 // 处理模型变化
@@ -633,6 +681,19 @@ watch(() => formData.currentDialogId, (newId) => {
   if (!tab) return
   tab.dialogId = newId === null ? null : Number(newId)
 })
+
+watch(
+  () => [formData.selectedModel, formData.selectedModelType, formData.providerValue, formData.modelValue, formData.currentModelDesc],
+  ([selectedModel, selectedModelType, providerValue, modelValue, currentModelDesc]) => {
+    const tab = getActiveTab()
+    if (!tab) return
+    tab.selectedModel = selectedModel || ''
+    tab.selectedModelType = Number(selectedModelType || 1)
+    tab.providerValue = providerValue || ''
+    tab.modelValue = modelValue || ''
+    tab.currentModelDesc = currentModelDesc || ''
+  }
+)
 
 watch(() => formData.dialogTitle, (newTitle) => {
   const tab = getActiveTab()

@@ -235,7 +235,7 @@
               </el-popconfirm>
             </div>
           </div>
-          <div class="message-text" v-html="message.type === 'user' ? renderLatexOnly(getTextContent(message.content)) : renderMarkdown(getTextContent(message.content))"></div>
+          <div class="message-text" v-html="renderRichText(getTextContent(message.content))"></div>
           <!-- TODO(human): 验证中文引号粗体修复 - 测试包含中文引号的**"文本"**是否能正确显示为粗体 -->
           <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
           <!-- 图片预览 - 支持从消息url字段和内容中提取，避免重复显示 -->
@@ -419,6 +419,7 @@ import 'highlight.js/styles/github-dark.css'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { highlightCode } from '@/utils/highlight.js'
 
 // 配置 marked 启用 GFM（GitHub Flavored Markdown）支持
@@ -1212,280 +1213,122 @@ const exportSelectedMessages = async () => {
   }
 }
 
-// 仅渲染LaTeX数学公式的函数
-const renderLatexOnly = (content: string) => {
-  if (!content) return '';
+const decodeMathEntities = (text: string) =>
+  text
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
 
-  let resultContent = content;
+const renderMathInPlainTextSegment = (text: string) => {
+  const decodedText = decodeMathEntities(text)
+  let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
+    return mathRenderer.displayMath(String(math || '').trim())
+  })
 
-  // 处理显示数学公式 $$...$$
-  // 先将内容按HTML标签分割，但只匹配真正的HTML标签
-  const htmlTagRegex = /<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g;
-
-  // 使用正则表达式找到所有HTML标签的位置
-  const parts: { content: string, isHtml: boolean }[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = htmlTagRegex.exec(resultContent)) !== null) {
-    // 添加标签前的文本（非HTML部分）
-    if (match.index > lastIndex) {
-      parts.push({
-        content: resultContent.substring(lastIndex, match.index),
-        isHtml: false
-      });
+  processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
+    const mathText = String(math || '')
+    if (mathText.includes('katex') || mathText.includes('class="katex')) {
+      return `$${mathText}$`
     }
-
-    // 添加HTML标签
-    parts.push({
-      content: match[0],
-      isHtml: true
-    });
-
-    lastIndex = htmlTagRegex.lastIndex;
-  }
-
-  // 添加最后剩余的文本
-  if (lastIndex < resultContent.length) {
-    parts.push({
-      content: resultContent.substring(lastIndex),
-      isHtml: false
-    });
-  }
-
-  // 对每个非HTML部分处理数学公式
-  let finalContent = '';
-  for (const part of parts) {
-    if (part.isHtml) {
-      // HTML标签部分直接添加
-      finalContent += part.content;
-    } else {
-      // 非HTML部分处理数学公式
-      let modifiedPart = part.content;
-
-      // 在处理数学公式前，先将HTML实体临时解码，让KaTeX能正确识别
-      const decodeMathEntities = (text: string) => {
-        return text
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&') // 同时处理 & 符号
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'");
-      };
-
-      // 解码数学相关的HTML实体，便于KaTeX识别
-      const decodedText = decodeMathEntities(modifiedPart);
-
-      // 处理显示数学公式 $$...$$
-      let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-        // 去除首尾空白但保留内部格式
-        const trimmedMath = math.trim();
-        return mathRenderer.displayMath(trimmedMath);
-      });
-
-      // 处理内联数学公式 $...$
-      processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
-        // 避免对已经渲染的数学公式再次处理
-        if (math.includes('katex') || math.includes('class="katex')) {
-          return `$${math}$`; // 返回原始内容
-        }
-        // 检查是否是价格格式，例如 $50、$100 等
-        const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
-        if (pricePattern.test(math)) {
-          return `$${math}$`; // 价格格式，不处理为数学公式
-        }
-        return mathRenderer.inlineMath(math.trim());
-      });
-
-      finalContent += processedText;
+    // 价格文本不按数学公式渲染
+    const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/
+    if (pricePattern.test(mathText)) {
+      return `$${mathText}$`
     }
-  }
+    return mathRenderer.inlineMath(mathText.trim())
+  })
 
-  return finalContent;
-};
-
-// 解析包含数学公式的Markdown内容
-const renderMarkdownWithMath = (content: string) => {
-  // 预处理：处理包含中文引号的粗体标记
-  // marked在解析**"文本"**这种模式时会失败，需要预处理
-  let preprocessedContent = content;
-
-  // 调试：输出原始内容，检查**标记
-  console.log('[Markdown Debug] Original content:', content);
-
-  // 预处理：将 **“文本”** 转换为 **中文文本**
-  // 这是一个临时解决方案，因为marked无法正确解析包含中文引号的粗体
-  preprocessedContent = preprocessedContent.replace(/\*\*“([^”]*?)”\*\*/g, '**$1**');
-  console.log('[Markdown Debug] Preprocessed content:', preprocessedContent);
-
-  // 首先解析 Markdown，这样代码块会被正确识别和处理
-  let result: string;
-  try {
-    // marked.parse 应该是同步函数，但如果它返回Promise，我们处理这种情况
-    const parsedContent = marked.parse(preprocessedContent || '');
-    if (parsedContent instanceof Promise) {
-      // 如果是Promise，我们无法在此同步上下文中处理它，使用原始内容
-      result = preprocessedContent || '';
-    } else {
-      result = typeof parsedContent === 'string' ? parsedContent.trim() : String(parsedContent);
-    }
-
-    // 调试：输出解析后的内容
-    console.log('[Markdown Debug] Parsed content:', result);
-  } catch (error) {
-    console.error('Markdown parsing error:', error);
-    result = preprocessedContent || '';
-  }
-
-  // 保存代码块内容（pre标签和code标签），防止其中的数学公式被错误处理
-  const preBlockPlaceholders: string[] = [];
-  const codeBlockPlaceholders: string[] = [];
-
-  // 提取并替换 <pre><code> 块
-  let processedResult = result.replace(/<pre><code[^>]*>[\s\S]*?<\/code><\/pre>/g, (match) => {
-    preBlockPlaceholders.push(match);
-    return `__PRE_BLOCK_PLACEHOLDER_${preBlockPlaceholders.length - 1}__`;
-  });
-
-  // 提取并替换 <code> 块（行内代码）
-  processedResult = processedResult.replace(/<code[^>]*>[\s\S]*?<\/code>/g, (match) => {
-    codeBlockPlaceholders.push(match);
-    return `__INLINE_CODE_PLACEHOLDER_${codeBlockPlaceholders.length - 1}__`;
-  });
-
-  // 首先处理显示数学公式 $$...$$，支持跨多行的公式
-  // 先将内容按HTML标签分割，但只匹配真正的HTML标签
-  let resultContent = processedResult;
-
-  // 匹配HTML标签的正则表达式：只匹配由字母数字和连字符组成的标签名
-  // 这样可以避免将 x < y 或 y > x 误匹配为HTML标签
-  const htmlTagRegex = /<\/?([a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g;
-
-  // 使用正则表达式找到所有HTML标签的位置
-  const parts: { content: string, isHtml: boolean }[] = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = htmlTagRegex.exec(resultContent)) !== null) {
-    // 添加标签前的文本（非HTML部分）
-    if (match.index > lastIndex) {
-      parts.push({
-        content: resultContent.substring(lastIndex, match.index),
-        isHtml: false
-      });
-    }
-
-    // 添加HTML标签
-    parts.push({
-      content: match[0],
-      isHtml: true
-    });
-
-    lastIndex = htmlTagRegex.lastIndex;
-  }
-
-  // 添加最后剩余的文本
-  if (lastIndex < resultContent.length) {
-    parts.push({
-      content: resultContent.substring(lastIndex),
-      isHtml: false
-    });
-  }
-
-  // 对每个非HTML部分处理数学公式
-  let finalContent = '';
-  for (const part of parts) {
-    if (part.isHtml) {
-      // HTML标签部分直接添加
-      finalContent += part.content;
-    } else {
-      // 非HTML部分处理数学公式
-      let modifiedPart = part.content;
-
-      // 在处理数学公式前，先将HTML实体临时解码，让KaTeX能正确识别
-      // 注意：我们只解码数学相关的实体，其他实体保持不变
-      const decodeMathEntities = (text: string) => {
-        return text
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&') // 同时处理 & 符号
-          .replace(/&quot;/g, '"')
-          .replace(/&#39;/g, "'");
-      };
-
-      // 解码数学相关的HTML实体，便于KaTeX识别
-      const decodedText = decodeMathEntities(modifiedPart);
-
-      // 处理显示数学公式 $$...$$
-      let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-        // 去除首尾空白但保留内部格式
-        const trimmedMath = math.trim();
-        return mathRenderer.displayMath(trimmedMath);
-      });
-
-      // 处理内联数学公式 $...$
-      processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
-        // 避免对已经渲染的数学公式再次处理
-        if (math.includes('katex') || math.includes('class="katex')) {
-          return `$${math}$`; // 返回原始内容
-        }
-        // 检查是否是价格格式，例如 $50、$100 等
-        const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/; // 匹配 $数字 格式，如 $50 或 $12.34
-        if (pricePattern.test(math)) {
-          return `$${math}$`; // 价格格式，不处理为数学公式
-        }
-        return mathRenderer.inlineMath(math.trim());
-      });
-
-      finalContent += processedText;
-    }
-  }
-
-  resultContent = finalContent;
-
-  // 将 <pre><code> 块内容还原回去
-  for (let i = 0; i < preBlockPlaceholders.length; i++) {
-    resultContent = resultContent.replace(
-      `__PRE_BLOCK_PLACEHOLDER_${i}__`,
-      preBlockPlaceholders[i]
-    );
-  }
-
-  // 将 <code> 块内容还原回去
-  for (let i = 0; i < codeBlockPlaceholders.length; i++) {
-    resultContent = resultContent.replace(
-      `__INLINE_CODE_PLACEHOLDER_${i}__`,
-      codeBlockPlaceholders[i]
-    );
-  }
-
-  // 处理有序列表的start属性，确保连续编号能正确显示
-  // 使用正则表达式匹配 <ol start="n"> 或 <ol start=n> 标签并确保CSS支持该属性
-  resultContent = resultContent.replace(/<ol(\s+(?:[^>]*?\s+)?start\s*=\s*["']?(\d+)["']?(?:\s+[^>]*)?|\s+[^>]*?)>/gi, (match, attributes, startNum) => {
-    if (startNum) {
-      const num = parseInt(startNum);
-      // 修正开始数字（由于CSS counter的特性，我们需要减1来获得正确的起始值）
-      const cssCounterValue = num - 1;
-      // 在属性中加入CSS变量和class，保留其他所有属性
-      const cleanedAttributes = attributes.replace(/\s*start\s*=\s*["']?\d+["']?\s*/i, '').trim();
-      return `<ol${cleanedAttributes} start="${num}" style="--ol-start: ${cssCounterValue};" class="ordered-list-with-start">`;
-    } else {
-      // 如果没有start属性，保留原始标签
-      return match;
-    }
-  });
-
-  // 为Markdown生成的图片添加CSS类
-  resultContent = resultContent.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />');
-
-  // 应用语法高亮
-  resultContent = highlightCode(resultContent);
-
-  return resultContent;
+  return processedText
 }
 
-const renderMarkdown = (content: string) => {
-  return renderMarkdownWithMath(content);
+const renderMathOutsideHtmlTags = (html: string) => {
+  const htmlTagRegex = /<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g
+  const parts: Array<{ content: string; isHtml: boolean }> = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = htmlTagRegex.exec(html)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ content: html.substring(lastIndex, match.index), isHtml: false })
+    }
+    parts.push({ content: match[0], isHtml: true })
+    lastIndex = htmlTagRegex.lastIndex
+  }
+
+  if (lastIndex < html.length) {
+    parts.push({ content: html.substring(lastIndex), isHtml: false })
+  }
+
+  return parts.map((part) => (part.isHtml ? part.content : renderMathInPlainTextSegment(part.content))).join('')
+}
+
+const patchOrderedListStart = (html: string) => {
+  return html.replace(
+    /<ol(\s+(?:[^>]*?\s+)?start\s*=\s*["']?(\d+)["']?(?:\s+[^>]*)?|\s+[^>]*?)>/gi,
+    (match, attributes, startNum) => {
+      if (!startNum) return match
+      const num = parseInt(startNum, 10)
+      const cssCounterValue = num - 1
+      const cleanedAttributes = String(attributes || '').replace(/\s*start\s*=\s*["']?\d+["']?\s*/i, '').trim()
+      return `<ol${cleanedAttributes} start="${num}" style="--ol-start: ${cssCounterValue};" class="ordered-list-with-start">`
+    }
+  )
+}
+
+const parseMarkdownToHtml = (content: string) => {
+  const preprocessedContent = (content || '').replace(/\*\*“([^”]*?)”\*\*/g, '**$1**')
+  try {
+    const parsed = marked.parse(preprocessedContent)
+    if (parsed instanceof Promise) {
+      return preprocessedContent
+    }
+    return typeof parsed === 'string' ? parsed.trim() : String(parsed)
+  } catch (error) {
+    console.error('Markdown parsing error:', error)
+    return preprocessedContent
+  }
+}
+
+const protectCodeBlocks = (html: string) => {
+  const protectedBlocks: string[] = []
+  const protectedHtml = html.replace(/<pre><code[^>]*>[\s\S]*?<\/code><\/pre>|<code[^>]*>[\s\S]*?<\/code>/g, (match) => {
+    protectedBlocks.push(match)
+    return `__CODE_BLOCK_PLACEHOLDER_${protectedBlocks.length - 1}__`
+  })
+  return { protectedHtml, protectedBlocks }
+}
+
+const restoreCodeBlocks = (html: string, protectedBlocks: string[]) => {
+  let restoredHtml = html
+  for (let i = 0; i < protectedBlocks.length; i++) {
+    restoredHtml = restoredHtml.replace(`__CODE_BLOCK_PLACEHOLDER_${i}__`, protectedBlocks[i])
+  }
+  return restoredHtml
+}
+
+const sanitizeRichHtml = (html: string) => {
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden'],
+  })
+}
+
+const renderRichText = (content: string) => {
+  if (!content) return ''
+
+  let html = parseMarkdownToHtml(content)
+  html = patchOrderedListStart(html)
+
+  const { protectedHtml, protectedBlocks } = protectCodeBlocks(html)
+  let rendered = renderMathOutsideHtmlTags(protectedHtml)
+  rendered = restoreCodeBlocks(rendered, protectedBlocks)
+
+  // 为 Markdown 图片追加预览样式
+  rendered = rendered.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />')
+  rendered = highlightCode(rendered)
+
+  return sanitizeRichHtml(rendered)
 }
 
 function getCurrentTime() {
