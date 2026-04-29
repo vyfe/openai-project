@@ -135,22 +135,35 @@
         v-model="formData"
       />
 
-      <!-- 聊天内容区域 -->
-      <ChatContent
-        :selected-model="formData.selectedModel"
-        :selected-model-type="formData.selectedModelType"
-        :context-count="formData.contextCount"
-        :max-response-chars="formData.maxResponseChars"
-        :stream-enabled="formData.streamEnabled"
-        :system-prompt="formData.systemPrompt"
-        :send-preference="formData.sendPreference"
-        :current-dialog-id="formData.currentDialogId"
-        :is-mobile="formData.isMobile"
-        @dialog-created="handleDialogCreated"
-        @refresh-history="refreshHistory"
-        @update:current-dialog-id="updateCurrentDialogId"
-        v-model="formData"
-      />
+      <div class="chat-workspace">
+        <div class="chat-tabs-wrap">
+          <el-tabs v-model="activeTabKey" type="card" class="chat-tabs" @tab-remove="removeChatTab">
+            <el-tab-pane
+              v-for="tab in chatTabs"
+              :key="tab.key"
+              :name="tab.key"
+              :closable="chatTabs.length > 1 && !tab.loading"
+            >
+              <template #label>
+                <span class="chat-tab-label">
+                  <el-icon v-if="tab.loading" class="is-loading chat-tab-loading"><Loading /></el-icon>
+                  <span class="chat-tab-title">{{ tab.title || '新会话' }}</span>
+                  <span v-if="tab.unread && !tab.loading" class="chat-tab-unread-dot"></span>
+                </span>
+              </template>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+
+        <!-- 聊天内容区域 -->
+        <ChatContent
+          :session-key="activeTabKey"
+          @refresh-history="refreshHistory"
+          @loading-change="handleTabLoadingChange"
+          @session-dialog-created="handleSessionDialogCreated"
+          v-model="formData"
+        />
+      </div>
     </div>
 
     <!-- 侧边栏遮罩层（移动端） -->
@@ -239,6 +252,14 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { isDarkTheme, initThemeManager, setThemeManually } = useThemeManager()
 
+type ChatTab = {
+  key: string
+  title: string
+  dialogId: number | null
+  loading: boolean
+  unread: boolean
+}
+
 // 组件间共享状态
 const formData = reactive({
   isDarkTheme: JSON.parse(localStorage.getItem('isDarkTheme') || 'false'),
@@ -291,6 +312,8 @@ const showNotificationPanel = ref(false)
 const showUserSettings = ref(false)
 
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
+const chatTabs = ref<ChatTab[]>([{ key: `tab_${Date.now()}`, title: '新会话', dialogId: null, loading: false, unread: false }])
+const activeTabKey = ref(chatTabs.value[0].key)
 
 const openNotifications = () => {
   showNotificationPanel.value = true
@@ -349,10 +372,39 @@ const updateCurrentDialogId = (id: number | null) => {
   formData.currentDialogId = id
 }
 
+const getActiveTab = () => chatTabs.value.find(tab => tab.key === activeTabKey.value)
+
+const syncFormDataFromActiveTab = () => {
+  const tab = getActiveTab()
+  if (!tab) return
+  formData.currentDialogId = tab.dialogId
+  formData.dialogTitle = tab.title === '新会话' ? '' : tab.title
+}
+
+const createChatTab = (dialogId: number | null = null, title: string = '新会话') => {
+  const tab: ChatTab = {
+    key: `tab_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    title,
+    dialogId,
+    loading: false,
+    unread: false,
+  }
+  chatTabs.value.push(tab)
+  activeTabKey.value = tab.key
+  syncFormDataFromActiveTab()
+}
+
 // 加载对话
 const loadDialog = (dialogId: number) => {
-  formData.currentDialogId = dialogId
-  // 实际加载逻辑会在ChatContent中处理
+  const existing = chatTabs.value.find(tab => tab.dialogId === dialogId)
+  if (existing) {
+    activeTabKey.value = existing.key
+    syncFormDataFromActiveTab()
+    return
+  }
+  const historyItem = formData.dialogHistory.find((item: any) => item.id === dialogId)
+  const title = historyItem?.dialog_name || `对话 ${dialogId}`
+  createChatTab(dialogId, title)
 }
 
 // 处理模型变化
@@ -363,6 +415,57 @@ const handleModelChange = (model: string) => {
 // 处理对话创建
 const handleDialogCreated = (dialogId: number) => {
   formData.currentDialogId = dialogId
+}
+
+const handleTabLoadingChange = (payload: { sessionKey: string, loading: boolean }) => {
+  const tab = chatTabs.value.find(item => item.key === payload.sessionKey)
+  if (!tab) return
+  const wasLoading = tab.loading
+  tab.loading = payload.loading
+  if (payload.loading) {
+    tab.unread = false
+    return
+  }
+  if (wasLoading && payload.sessionKey !== activeTabKey.value) {
+    tab.unread = true
+  }
+}
+
+const handleSessionDialogCreated = (payload: { sessionKey: string, dialogId: number }) => {
+  const tab = chatTabs.value.find(item => item.key === payload.sessionKey)
+  if (!tab) return
+  tab.dialogId = payload.dialogId
+  if (!tab.title || tab.title === '新会话') {
+    tab.title = `对话 ${payload.dialogId}`
+  }
+  if (payload.sessionKey === activeTabKey.value) {
+    formData.currentDialogId = payload.dialogId
+    if (!formData.dialogTitle || formData.dialogTitle === '新会话') {
+      formData.dialogTitle = tab.title
+    }
+  }
+}
+
+const removeChatTab = (targetKey: string | number) => {
+  const key = String(targetKey)
+  const target = chatTabs.value.find(tab => tab.key === key)
+  if (!target) return
+  if (target.loading) {
+    ElMessage.warning('会话进行中，暂不支持关闭该标签')
+    return
+  }
+  const index = chatTabs.value.findIndex(tab => tab.key === key)
+  if (index < 0) return
+  chatTabs.value.splice(index, 1)
+  if (chatTabs.value.length === 0) {
+    createChatTab(null, '新会话')
+    return
+  }
+  if (activeTabKey.value === key) {
+    const next = chatTabs.value[index] || chatTabs.value[index - 1] || chatTabs.value[0]
+    activeTabKey.value = next.key
+  }
+  syncFormDataFromActiveTab()
 }
 
 // 刷新历史
@@ -455,7 +558,7 @@ const handleResize = () => {
 }
 
 const clearSession = () => {
-  formData.currentDialogId = null
+  createChatTab(null, '新会话')
 }
 
 // 组件挂载
@@ -515,6 +618,26 @@ onMounted(() => {
 // 组件卸载
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+})
+
+watch(activeTabKey, () => {
+  const tab = getActiveTab()
+  if (tab) {
+    tab.unread = false
+  }
+  syncFormDataFromActiveTab()
+})
+
+watch(() => formData.currentDialogId, (newId) => {
+  const tab = getActiveTab()
+  if (!tab) return
+  tab.dialogId = newId === null ? null : Number(newId)
+})
+
+watch(() => formData.dialogTitle, (newTitle) => {
+  const tab = getActiveTab()
+  if (!tab) return
+  tab.title = (newTitle || '').trim() || (tab.dialogId ? `对话 ${tab.dialogId}` : '新会话')
 })
 </script>
 
@@ -639,6 +762,198 @@ body:not(.screenshot-mode) .user-name {
   filter: blur(15px);
   z-index: -1;
   animation: techGlow 3s ease-in-out infinite;
+}
+
+.chat-workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-tabs-wrap {
+  position: relative;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--el-border-color-light, #d9e0ef);
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.2);
+  background: transparent;
+}
+
+:deep(.dark-theme) .chat-tabs-wrap,
+:deep(body.dark) .chat-tabs-wrap {
+  background: transparent;
+  border-bottom-color: rgba(148, 163, 184, 0.42);
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.16);
+}
+
+.chat-tabs-wrap :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__nav) {
+  border: none !important;
+  background: transparent !important;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__item) {
+  height: 36px;
+  line-height: 36px;
+  border: 1.5px solid rgba(99, 102, 241, 0.62) !important;
+  border-radius: 12px 12px 0 0;
+  margin-right: 8px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 6px 20px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  transition: all 0.2s ease;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__item:hover) {
+  color: #0f172a;
+  border-color: rgba(37, 99, 235, 0.86) !important;
+  transform: translateY(-1px);
+  box-shadow:
+    0 8px 24px rgba(37, 99, 235, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    inset 0 0 0 1px rgba(59, 130, 246, 0.22);
+}
+
+.chat-tabs-wrap :deep(.el-tabs__item.is-active) {
+  color: #0f172a;
+  border-color: rgba(37, 99, 235, 1) !important;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.9), rgba(219, 234, 254, 0.65));
+  box-shadow:
+    0 10px 26px rgba(37, 99, 235, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 0 0 1px rgba(59, 130, 246, 0.3);
+  animation: activeTabGlowLight 2.6s ease-in-out infinite;
+}
+
+:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item),
+:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item) {
+  color: #e2e8f0;
+  background: linear-gradient(135deg, rgba(67, 56, 84, 0.58), rgba(47, 54, 72, 0.62));
+  border: 1.5px solid rgba(192, 132, 252, 0.72) !important;
+  box-shadow:
+    0 6px 20px rgba(2, 6, 23, 0.34),
+    inset 0 1px 0 rgba(196, 181, 253, 0.16),
+    inset 0 0 0 1px rgba(167, 139, 250, 0.2);
+}
+
+:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item:hover),
+:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item:hover) {
+  color: #f8fafc;
+  border-color: rgba(216, 180, 254, 0.92) !important;
+  box-shadow: 0 8px 22px rgba(67, 56, 202, 0.24), inset 0 1px 0 rgba(221, 214, 254, 0.18);
+}
+
+:deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item.is-active),
+:deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
+  color: #f8fafc;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.46), rgba(76, 82, 118, 0.7));
+  border-color: rgba(233, 213, 255, 1) !important;
+  box-shadow: 0 10px 28px rgba(88, 28, 135, 0.36), inset 0 1px 0 rgba(243, 232, 255, 0.2);
+  animation: activeTabGlowDark 2.6s ease-in-out infinite;
+}
+
+@keyframes activeTabGlowLight {
+  0%, 100% {
+    box-shadow:
+      0 10px 26px rgba(37, 99, 235, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.82),
+      inset 0 0 0 1px rgba(59, 130, 246, 0.28);
+  }
+  50% {
+    box-shadow:
+      0 12px 30px rgba(37, 99, 235, 0.34),
+      0 0 0 1px rgba(59, 130, 246, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 0 0 1px rgba(59, 130, 246, 0.42);
+  }
+}
+
+@keyframes activeTabGlowDark {
+  0%, 100% {
+    box-shadow:
+      0 10px 28px rgba(88, 28, 135, 0.34),
+      inset 0 1px 0 rgba(243, 232, 255, 0.2),
+      inset 0 0 0 1px rgba(216, 180, 254, 0.22);
+  }
+  50% {
+    box-shadow:
+      0 12px 32px rgba(126, 34, 206, 0.44),
+      0 0 0 1px rgba(233, 213, 255, 0.36),
+      inset 0 1px 0 rgba(243, 232, 255, 0.26),
+      inset 0 0 0 1px rgba(233, 213, 255, 0.36);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-tabs-wrap :deep(.el-tabs__item.is-active),
+  :deep(.dark-theme) .chat-tabs-wrap :deep(.el-tabs__item.is-active),
+  :deep(body.dark) .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
+    animation: none !important;
+  }
+}
+
+.chat-tab-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  min-width: 0;
+}
+
+.chat-tab-title {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tab-loading {
+  font-size: 12px;
+  color: #2563eb;
+}
+
+.chat-tab-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.78);
+  flex-shrink: 0;
+}
+
+:deep(.dark-theme) .chat-tab-unread-dot,
+:deep(body.dark) .chat-tab-unread-dot {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.85);
+}
+
+@media (max-width: 768px) {
+  .chat-tabs-wrap {
+    padding: 8px 8px 6px;
+  }
+
+  .chat-tab-label {
+    max-width: 170px;
+  }
+
+  .chat-tabs-wrap :deep(.el-tabs__item) {
+    margin-right: 6px;
+    padding: 0 10px;
+    height: 32px;
+    line-height: 32px;
+    border-radius: 10px 10px 0 0;
+  }
 }
 
 /* 科技感按钮基础样式 */

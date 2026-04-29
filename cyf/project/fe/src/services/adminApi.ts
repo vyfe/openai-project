@@ -10,7 +10,9 @@ export const modelMetaAPI = {
   get: (id: number) => adminApi.get(`/never_guess_my_usage/model_meta/get/${id}`),
   create: (data: any) => adminApi.post('/never_guess_my_usage/model_meta/create', data),
   update: (data: any) => adminApi.post('/never_guess_my_usage/model_meta/update', data),
-  delete: (id: number) => adminApi.post('/never_guess_my_usage/model_meta/delete', { id })
+  delete: (id: number) => adminApi.post('/never_guess_my_usage/model_meta/delete', { id }),
+  batchUpdate: (data: { ids: number[]; recommend?: boolean; status_valid?: boolean; model_grp?: string }) =>
+    adminApi.post('/never_guess_my_usage/model_meta/batch_update', data)
 }
 
 export const systemPromptAPI = {

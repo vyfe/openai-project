@@ -20,6 +20,8 @@ interface ModelMeta {
   status_valid: boolean
 }
 
+type BatchAction = 'recommend' | 'unrecommend' | 'enable' | 'disable' | 'setGroup'
+
 const {
   items: models,
   loading,
@@ -30,6 +32,9 @@ const {
   changePage: handlePageChange,
   changePageSize: handlePageSizeChange
 } = useAdminPagedList<ModelMeta, { page?: number; page_size?: number; keyword?: string }>(modelMetaAPI.list)
+
+const selectedRows = ref<ModelMeta[]>([])
+const batchGroupName = ref('')
 
 const createEmptyForm = () => ({
   id: 0,
@@ -94,6 +99,39 @@ const deleteModel = async (row: ModelMeta) => {
   ).catch(() => undefined)
 }
 
+const handleSelectionChange = (rows: ModelMeta[]) => {
+  selectedRows.value = rows
+}
+
+const runBatchAction = async (action: BatchAction) => {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning(t('admin.selectAtLeastOne'))
+    return
+  }
+
+  const ids = selectedRows.value.map((item) => item.id)
+  const payload: { ids: number[]; recommend?: boolean; status_valid?: boolean; model_grp?: string } = { ids }
+
+  if (action === 'recommend') payload.recommend = true
+  if (action === 'unrecommend') payload.recommend = false
+  if (action === 'enable') payload.status_valid = true
+  if (action === 'disable') payload.status_valid = false
+  if (action === 'setGroup') {
+    payload.model_grp = batchGroupName.value.trim()
+  }
+
+  await runAction(
+    async () => modelMetaAPI.batchUpdate(payload),
+    {
+      successText: t('admin.batchActionSuccess'),
+      errorFallbackText: 'admin.executeFailed',
+      onSuccess: async () => {
+        await fetchModels()
+      }
+    }
+  ).catch(() => undefined)
+}
+
 onMounted(() => {
   fetchModels().catch((error: any) => {
     ElMessage.error(error.response?.data?.msg || error.message || t('admin.loading'))
@@ -123,13 +161,32 @@ onMounted(() => {
       </div>
     </div>
 
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+      <el-tag type="info">{{ t('admin.selectedCount', { count: selectedRows.length }) }}</el-tag>
+      <el-button size="small" @click="() => runBatchAction('recommend')">{{ t('admin.batchRecommend') }}</el-button>
+      <el-button size="small" @click="() => runBatchAction('unrecommend')">{{ t('admin.batchUnrecommend') }}</el-button>
+      <el-button size="small" @click="() => runBatchAction('enable')">{{ t('admin.batchEnable') }}</el-button>
+      <el-button size="small" @click="() => runBatchAction('disable')">{{ t('admin.batchDisable') }}</el-button>
+      <el-input
+        v-model="batchGroupName"
+        clearable
+        :placeholder="t('admin.batchGroupPlaceholder')"
+        style="width: 200px"
+      />
+      <el-button size="small" type="primary" @click="() => runBatchAction('setGroup')">
+        {{ t('admin.batchSetGroup') }}
+      </el-button>
+    </div>
+
     <el-table
       v-loading="loading"
       :data="models"
       stripe
       border
       style="width: 100%"
+      @selection-change="handleSelectionChange"
     >
+      <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="model_name" :label="t('admin.modelName')" min-width="150" />
       <el-table-column prop="model_desc" :label="t('admin.modelDesc')" min-width="200" />

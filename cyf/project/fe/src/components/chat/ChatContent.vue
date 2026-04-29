@@ -431,22 +431,31 @@ marked.use({
 // 定义 props 和 emits
 const props = defineProps<{
   modelValue: FormData
+  sessionKey?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: any]
   'refresh-history': []
+  'loading-change': [payload: { sessionKey: string, loading: boolean }]
+  'session-dialog-created': [payload: { sessionKey: string, dialogId: number }]
 }>()
 
 // 添加加载对话内容的方法
-const loadDialogContent = async (dialogId: number) => {
+const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) => {
   if (!useAuthStore().user) {
     ElMessage.warning('请先登录')
     return
   }
 
+  const targetSessionKey = sessionKeyOverride || getSessionKey()
+
   try {
     const response: any = await chatAPI.getDialogContent(dialogId)
+    // 若请求期间已切换到其他会话，直接丢弃结果，避免覆盖当前 tab
+    if (targetSessionKey !== getSessionKey()) {
+      return
+    }
     if (response && response.content) {
       // 将消息数组替换为历史对话内容
       messages.splice(0, messages.length) // 清空现有消息
@@ -562,6 +571,57 @@ const messages = reactive<Array<{
     time: getCurrentTime()
   }
 ])
+const sessionMessageStore = ref<Record<string, any[]>>({})
+const sessionLoadingStore = ref<Record<string, boolean>>({})
+const getSessionKey = () => props.sessionKey || 'default'
+
+const saveMessagesToSession = (sessionKey: string) => {
+  sessionMessageStore.value[sessionKey] = messages.map((msg) => ({ ...msg }))
+}
+
+const restoreMessagesFromSession = (sessionKey: string) => {
+  const saved = sessionMessageStore.value[sessionKey]
+  messages.splice(0, messages.length)
+  if (Array.isArray(saved) && saved.length > 0) {
+    saved.forEach((msg) => messages.push({ ...msg }))
+    return
+  }
+  messages.push({
+    type: 'ai',
+    content: t('chat.aiWelcomeMessage'),
+    time: getCurrentTime()
+  })
+}
+
+const getSessionMessages = (sessionKey: string) => {
+  if (sessionKey === getSessionKey()) return messages
+  if (!Array.isArray(sessionMessageStore.value[sessionKey])) {
+    sessionMessageStore.value[sessionKey] = [{
+      type: 'ai',
+      content: t('chat.aiWelcomeMessage'),
+      time: getCurrentTime()
+    }]
+  }
+  return sessionMessageStore.value[sessionKey]
+}
+
+const mutateSessionMessages = (sessionKey: string, mutator: (arr: any[]) => void) => {
+  const target = getSessionMessages(sessionKey)
+  mutator(target)
+  if (sessionKey === getSessionKey()) {
+    saveMessagesToSession(sessionKey)
+  } else {
+    sessionMessageStore.value[sessionKey] = target.map((item: any) => ({ ...item }))
+  }
+}
+
+const setSessionLoading = (sessionKey: string, loading: boolean) => {
+  sessionLoadingStore.value[sessionKey] = loading
+  emit('loading-change', { sessionKey, loading })
+  if (sessionKey === getSessionKey()) {
+    isLoading.value = loading
+  }
+}
 
 // 自定义 renderer 用于处理数学公式
 const mathRenderer = {
@@ -599,11 +659,11 @@ const inputMessage = ref('')
 const uploadRef = ref()
 const isLoading = ref(false)
 const uploadedFile = ref<File | null>(null)
-const activeStreamAbortController = ref<AbortController | null>(null)
-const activeRequestId = ref<string | null>(null)
-const activeAiMessageIndex = ref<number | null>(null)
-const waitingChoiceTimeoutId = ref<number | null>(null)
-const hasShownWaitingChoice = ref(false)
+const sessionAbortControllers = ref<Record<string, AbortController | null>>({})
+const sessionRequestIds = ref<Record<string, string | null>>({})
+const sessionAiIndexes = ref<Record<string, number | null>>({})
+const sessionWaitingTimers = ref<Record<string, number | null>>({})
+const sessionWaitingShown = ref<Record<string, boolean>>({})
 
 // 添加字体大小控制 对话框
 const fontSize = computed({
@@ -748,6 +808,7 @@ const clearCurrentSession = () => {
   formData.dialogTitle = ''
   formData.currentDialogId = null
   ElMessage.success('已开启新会话')
+  saveMessagesToSession(getSessionKey())
 }
 
 // 切换单条消息的选中状态
@@ -1575,18 +1636,21 @@ const generateRequestId = () => {
 }
 
 const clearWaitingChoiceTimer = () => {
-  if (waitingChoiceTimeoutId.value) {
-    clearTimeout(waitingChoiceTimeoutId.value)
-    waitingChoiceTimeoutId.value = null
+  const sessionKey = getSessionKey()
+  const timerId = sessionWaitingTimers.value[sessionKey]
+  if (timerId) {
+    clearTimeout(timerId)
+    sessionWaitingTimers.value[sessionKey] = null
   }
 }
 
 const startWaitingChoiceTimer = () => {
+  const sessionKey = getSessionKey()
   clearWaitingChoiceTimer()
-  hasShownWaitingChoice.value = false
-  waitingChoiceTimeoutId.value = window.setTimeout(async () => {
-    if (!isLoading.value || hasShownWaitingChoice.value) return
-    hasShownWaitingChoice.value = true
+  sessionWaitingShown.value[sessionKey] = false
+  sessionWaitingTimers.value[sessionKey] = window.setTimeout(async () => {
+    if (!sessionLoadingStore.value[sessionKey] || sessionWaitingShown.value[sessionKey]) return
+    sessionWaitingShown.value[sessionKey] = true
     try {
       await ElMessageBox.confirm(
         t('chat.streamWaitTimeoutMessage'),
@@ -1605,13 +1669,15 @@ const startWaitingChoiceTimer = () => {
 }
 
 const handleStopStream = async (reason: 'user' | 'timeout' = 'user') => {
-  if (!activeStreamAbortController.value) {
+  const sessionKey = getSessionKey()
+  const activeController = sessionAbortControllers.value[sessionKey]
+  if (!activeController) {
     return
   }
-  const requestId = activeRequestId.value
-  activeStreamAbortController.value.abort()
-  activeStreamAbortController.value = null
-  activeRequestId.value = null
+  const requestId = sessionRequestIds.value[sessionKey]
+  activeController.abort()
+  sessionAbortControllers.value[sessionKey] = null
+  sessionRequestIds.value[sessionKey] = null
   clearWaitingChoiceTimer()
 
   try {
@@ -1622,8 +1688,9 @@ const handleStopStream = async (reason: 'user' | 'timeout' = 'user') => {
     console.error('终止流式请求失败:', error)
   }
 
-  if (activeAiMessageIndex.value !== null && messages[activeAiMessageIndex.value]) {
-    const message = messages[activeAiMessageIndex.value]
+  const activeAiIdx = sessionAiIndexes.value[sessionKey]
+  if (activeAiIdx !== null && activeAiIdx !== undefined && messages[activeAiIdx]) {
+    const message = messages[activeAiIdx]
     message.isError = true
     if (!message.content) {
       message.content = t('chat.streamStopped')
@@ -1650,8 +1717,9 @@ const callApi = async (
 ) => {
   const { isRetry = false, originalIndex, isContinue = false, imageSize = '1024x1024' } = options;
   let wasUserAborted = false;
+  const requestSessionKey = getSessionKey()
 
-  isLoading.value = true;
+  setSessionLoading(requestSessionKey, true)
 
   try {
     // 检查是否是图像生成模型
@@ -1770,9 +1838,9 @@ const callApi = async (
 
         const requestId = generateRequestId()
         const abortController = new AbortController()
-        activeStreamAbortController.value = abortController
-        activeRequestId.value = requestId
-        activeAiMessageIndex.value = aiMessageIndex
+        sessionAbortControllers.value[requestSessionKey] = abortController
+        sessionRequestIds.value[requestSessionKey] = requestId
+        sessionAiIndexes.value[requestSessionKey] = aiMessageIndex
         startWaitingChoiceTimer()
 
         // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
@@ -1782,33 +1850,48 @@ const callApi = async (
           formData.selectedModel,
           userMessage.content,
           (content, done, finishReason, response) => {
-            messages[aiMessageIndex].content += content;
+            mutateSessionMessages(requestSessionKey, (targetMessages) => {
+              if (!targetMessages[aiMessageIndex]) {
+                targetMessages[aiMessageIndex] = {
+                  type: 'ai',
+                  content: '',
+                  time: getCurrentTime()
+                }
+              }
+              targetMessages[aiMessageIndex].content = `${targetMessages[aiMessageIndex].content || ''}${content || ''}`
+            })
             if (done) {
-              isLoading.value = false;
+              setSessionLoading(requestSessionKey, false)
               clearWaitingChoiceTimer()
-              activeStreamAbortController.value = null
-              activeRequestId.value = null
-              activeAiMessageIndex.value = null
-              if (finishReason === 'length') {
-                messages[aiMessageIndex].finishReason = 'length';
-                messages[aiMessageIndex].isTruncated = true;
-              }
-              // 如果内容仍然为空，说明出现了问题
-              else if (messages[aiMessageIndex].content === '') {
-                messages[aiMessageIndex].isError = true;
-              }
+              sessionAbortControllers.value[requestSessionKey] = null
+              sessionRequestIds.value[requestSessionKey] = null
+              sessionAiIndexes.value[requestSessionKey] = null
+              mutateSessionMessages(requestSessionKey, (targetMessages) => {
+                if (!targetMessages[aiMessageIndex]) return
+                if (finishReason === 'length') {
+                  targetMessages[aiMessageIndex].finishReason = 'length';
+                  targetMessages[aiMessageIndex].isTruncated = true;
+                } else if (targetMessages[aiMessageIndex].content === '') {
+                  targetMessages[aiMessageIndex].isError = true;
+                }
+              })
 
               // 检查并更新对话ID（如果后端返回了新的对话ID）
-              if (response && response.dialog_id && !formData.currentDialogId) {
-                formData.currentDialogId = response.dialog_id;
-                // 如果没有设置标题，使用新对话的ID作为标题
-                if (!formData.dialogTitle.trim()) {
-                  formData.dialogTitle = `对话 ${response.dialog_id}`;
+              if (response && response.dialog_id) {
+                emit('session-dialog-created', {
+                  sessionKey: requestSessionKey,
+                  dialogId: Number(response.dialog_id)
+                })
+                if (requestSessionKey === getSessionKey() && !formData.currentDialogId) {
+                  formData.currentDialogId = response.dialog_id;
+                  if (!formData.dialogTitle.trim()) {
+                    formData.dialogTitle = `对话 ${response.dialog_id}`;
+                  }
                 }
               }
             }
             // 在每次更新内容后滚动到底部
-            if (formData.isScrolledToBottom) {
+            if (requestSessionKey === getSessionKey() && formData.isScrolledToBottom) {
               nextTick(() => {
                 scrollToBottom();
               });
@@ -1858,26 +1941,36 @@ const callApi = async (
         );
 
         // 更新AI消息内容
-        messages[aiMessageIndex].content = response.content;
-        if (response.finish_reason === 'length') {
-          messages[aiMessageIndex].finishReason = response.finish_reason as 'length';
-          messages[aiMessageIndex].isTruncated = true;
-        }
+        mutateSessionMessages(requestSessionKey, (targetMessages) => {
+          if (!targetMessages[aiMessageIndex]) return
+          targetMessages[aiMessageIndex].content = response.content
+          if (response.finish_reason === 'length') {
+            targetMessages[aiMessageIndex].finishReason = response.finish_reason as 'length';
+            targetMessages[aiMessageIndex].isTruncated = true;
+          }
+        })
 
         // 检查并更新对话ID（如果后端返回了新的对话ID）
-        if (response.dialog_id && !formData.currentDialogId) {
-          formData.currentDialogId = response.dialog_id;
-          // 如果没有设置标题，使用新对话的ID作为标题
-          if (!formData.dialogTitle.trim()) {
-            formData.dialogTitle = `对话 ${response.dialog_id}`;
+        if (response.dialog_id) {
+          emit('session-dialog-created', {
+            sessionKey: requestSessionKey,
+            dialogId: Number(response.dialog_id)
+          })
+          if (requestSessionKey === getSessionKey() && !formData.currentDialogId) {
+            formData.currentDialogId = response.dialog_id;
+            if (!formData.dialogTitle.trim()) {
+              formData.dialogTitle = `对话 ${response.dialog_id}`;
+            }
           }
         }
 
-        isLoading.value = false;
+        setSessionLoading(requestSessionKey, false)
         // 滚动到底部
-        nextTick(() => {
-          scrollToBottom();
-        });
+        if (requestSessionKey === getSessionKey()) {
+          nextTick(() => {
+            scrollToBottom();
+          });
+        }
       }
     }
   } catch (error: any) {
@@ -1926,11 +2019,11 @@ const callApi = async (
       });
     }
   } finally {
-    isLoading.value = false;
+    setSessionLoading(requestSessionKey, false)
     clearWaitingChoiceTimer()
-    activeStreamAbortController.value = null
-    activeRequestId.value = null
-    activeAiMessageIndex.value = null
+    sessionAbortControllers.value[requestSessionKey] = null
+    sessionRequestIds.value[requestSessionKey] = null
+    sessionAiIndexes.value[requestSessionKey] = null
     await nextTick();
     scrollToBottomOnNewMessage();
 
@@ -2438,6 +2531,7 @@ onMounted(() => {
       }
     }
   });
+  restoreMessagesFromSession(getSessionKey())
 })
 
 // 组件卸载时移除事件监听器
@@ -2454,6 +2548,7 @@ onUnmounted(() => {
 // 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
 // 使用 getter 监听器，只在消息数量变化时触发，避免选中状态变化导致滚动
 watch(() => messages.length, () => {
+  saveMessagesToSession(getSessionKey())
   nextTick(() => {
     if (formData.isScrolledToBottom) {
       scrollToBottomOnNewMessage();
@@ -2518,16 +2613,31 @@ const isImageUrl = (url: string): boolean => {
 // 监听对话ID变化，当ID变化时自动加载对话内容
 watch(() => formData.currentDialogId, async (newDialogId) => {
   if (newDialogId !== null && newDialogId !== undefined) {
-    await loadDialogContent(newDialogId)
+    const currentSessionKey = getSessionKey()
+    await loadDialogContent(newDialogId, currentSessionKey)
+    saveMessagesToSession(getSessionKey())
   }
 })
 
 // 监听消息数组长度变化，当有新消息时自动滚动到底部
 watch(() => messages.length, () => {
+  saveMessagesToSession(getSessionKey())
   nextTick(() => {
     scrollToBottomOnNewMessage();
   });
 });
+
+watch(() => props.sessionKey, (newKey, oldKey) => {
+  if (oldKey) {
+    saveMessagesToSession(oldKey)
+  }
+  const currentSessionKey = newKey || 'default'
+  restoreMessagesFromSession(currentSessionKey)
+  if (formData.currentDialogId !== null && formData.currentDialogId !== undefined) {
+    loadDialogContent(formData.currentDialogId, currentSessionKey)
+  }
+  isLoading.value = !!sessionLoadingStore.value[currentSessionKey]
+})
 
 // 监听暗色主题变化
 watch(() => formData.isDarkTheme, (newVal) => {

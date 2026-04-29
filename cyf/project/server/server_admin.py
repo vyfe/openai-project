@@ -6,6 +6,7 @@ from datetime import datetime
 from peewee import DoesNotExist, IntegrityError
 import configparser
 import importlib
+import json
 import sys
 import sqlitelog
 from sqlitelog import ModelMeta, SystemPrompt, TestLimit, User, Notification
@@ -273,6 +274,60 @@ def model_meta_update():
         return error_response("模型名称已存在")
     except Exception as e:
         return error_response(f"更新模型失败: {str(e)}")
+
+@app.route('/model_meta/batch_update', methods=['POST'])
+@require_admin_auth
+def model_meta_batch_update():
+    """批量更新模型元数据（推荐/状态/分组）"""
+    try:
+        data = get_request_data()
+        raw_ids = data.get('ids')
+        if raw_ids is None:
+            return error_response("模型ID列表不能为空")
+
+        if isinstance(raw_ids, str):
+            raw_ids = raw_ids.strip()
+            if not raw_ids:
+                return error_response("模型ID列表不能为空")
+            try:
+                parsed_ids = json.loads(raw_ids)
+            except Exception:
+                parsed_ids = [item.strip() for item in raw_ids.split(',') if item.strip()]
+        else:
+            parsed_ids = raw_ids
+
+        if not isinstance(parsed_ids, list) or not parsed_ids:
+            return error_response("模型ID列表不能为空")
+
+        model_ids = []
+        for item in parsed_ids:
+            try:
+                model_ids.append(int(item))
+            except (ValueError, TypeError):
+                return error_response("模型ID列表格式不正确")
+
+        updates = {}
+        if 'recommend' in data:
+            updates['recommend'] = to_bool(data.get('recommend'))
+        if 'status_valid' in data:
+            updates['status_valid'] = to_bool(data.get('status_valid'))
+        if 'model_grp' in data:
+            updates['model_grp'] = str(data.get('model_grp') or '').strip()
+
+        if not updates:
+            return error_response("至少需要一个可更新字段")
+
+        affected_rows = (ModelMeta
+                         .update(**updates)
+                         .where(ModelMeta.id.in_(model_ids))
+                         .execute())
+        get_server_module().invalidate_model_cache("model_meta_batch_update")
+        return success_response(
+            data={"updated": affected_rows, "ids": model_ids},
+            msg=f"批量更新成功，共更新 {affected_rows} 条模型记录"
+        )
+    except Exception as e:
+        return error_response(f"批量更新模型失败: {str(e)}")
 
 @app.route('/model_meta/delete', methods=['POST'])
 @require_admin_auth

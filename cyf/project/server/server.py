@@ -896,13 +896,11 @@ def get_grouped_models():
 
         #         if prefix_models:  # 只有当该前缀有匹配的模型时才添加到结果中
         #             grouped_models[prefix] = prefix_models
-        other_models = []
         for model in models_response:
-            if model['model_grp'] == '':
-                other_models.append(model)
-            else:
-                grouped_models.setdefault(model['model_grp'], []).append(model)
-        grouped_models['其他厂商'] = other_models
+            model_grp = str(model.get('model_grp', '') or '').strip()
+            if not model_grp:
+                continue
+            grouped_models.setdefault(model_grp, []).append(model)
         return grouped_models
     except Exception as e:
         app.logger.error(f"获取分组模型列表失败: {str(e)}")
