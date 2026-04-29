@@ -265,6 +265,38 @@
   border-radius: 4px; /* 圆角效果 */
 }
 
+.message-text :deep(.code-block-wrapper) {
+  position: relative;
+}
+
+.message-text :deep(.code-copy-btn) {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  background: rgba(255, 255, 255, 0.9);
+  color: #334155;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.message-text :deep(.code-copy-btn:hover) {
+  background: rgba(241, 245, 249, 0.95);
+}
+
+.message-text :deep(pre.ascii-diagram),
+.message-text :deep(pre.ascii-diagram code) {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Mono', 'Menlo', 'Monaco', 'Consolas', monospace !important;
+  white-space: pre !important;
+  tab-size: 4;
+  -moz-tab-size: 4;
+  letter-spacing: 0;
+  font-variant-ligatures: none;
+}
+
 /*  */
 
 .message-text blockquote {
@@ -839,6 +871,16 @@ body.dark-theme .message-text :deep(h5) {
 
 body.dark-theme .message-text :deep(h6) {
   color: #6c737a;
+}
+
+body.dark-theme .message-text :deep(.code-copy-btn) {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(30, 41, 59, 0.86);
+  color: #e2e8f0;
+}
+
+body.dark-theme .message-text :deep(.code-copy-btn:hover) {
+  background: rgba(51, 65, 85, 0.9);
 }
 
 

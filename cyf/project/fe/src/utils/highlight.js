@@ -47,7 +47,8 @@ export const highlightCode = (html) => {
       }
     }
 
-    return `<pre><code class="hljs ${classStr || ''}">${highlightedCode}</code></pre>`;
+    const encodedCode = encodeURIComponent(code);
+    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" data-code="${encodedCode}">复制</button><pre><code class="hljs ${classStr || ''}">${highlightedCode}</code></pre></div>`;
   });
 };
 

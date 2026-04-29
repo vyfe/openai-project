@@ -1310,7 +1310,7 @@ const restoreCodeBlocks = (html: string, protectedBlocks: string[]) => {
 
 const sanitizeRichHtml = (html: string) => {
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden'],
+    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden', 'data-code', 'type'],
   })
 }
 
@@ -1323,12 +1323,34 @@ const renderRichText = (content: string) => {
   const { protectedHtml, protectedBlocks } = protectCodeBlocks(html)
   let rendered = renderMathOutsideHtmlTags(protectedHtml)
   rendered = restoreCodeBlocks(rendered, protectedBlocks)
+  rendered = normalizeAsciiDiagramBlocks(rendered)
 
   // 为 Markdown 图片追加预览样式
   rendered = rendered.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />')
   rendered = highlightCode(rendered)
 
   return sanitizeRichHtml(rendered)
+}
+
+const normalizeAsciiDiagramBlocks = (html: string) => {
+  if (!html) return html
+  return html.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
+    const text = String(inner || '')
+    if (!text.includes('\t') && text.indexOf('  ') === -1) {
+      return match
+    }
+    const normalized = text
+      .replace(/\t/g, '    ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/&nbsp;/g, ' ')
+      .trim()
+    const lines = normalized.split('\n')
+    const looksLikeDiagram = lines.length >= 2 && lines.some((line) => /[+\-|│┌┐└┘├┤┬┴┼]/.test(line))
+    if (!looksLikeDiagram) {
+      return match
+    }
+    return `<pre class="ascii-diagram"><code>${normalized}</code></pre>`
+  })
 }
 
 function getCurrentTime() {
@@ -1371,6 +1393,22 @@ const copyMessageContent = async (content: string) => {
       ElMessage.error('复制失败，请手动选择内容');
     }
   }
+}
+
+const handleMessageContainerClick = async (event: Event) => {
+  const target = event.target as HTMLElement | null
+  if (!target) return
+  const copyBtn = target.closest('.code-copy-btn') as HTMLElement | null
+  if (!copyBtn) return
+  event.preventDefault()
+  const encoded = copyBtn.getAttribute('data-code') || ''
+  let rawCode = encoded
+  try {
+    rawCode = decodeURIComponent(encoded)
+  } catch {
+    rawCode = encoded
+  }
+  await copyMessageContent(rawCode)
 }
 
 
@@ -2359,6 +2397,7 @@ onMounted(() => {
   const container = messagesContainer.value
   if (container) {
     container.addEventListener('scroll', debouncedHandleScroll)
+    container.addEventListener('click', handleMessageContainerClick)
   }
 
   // 组件挂载后立即滚动到底部
@@ -2385,6 +2424,7 @@ onUnmounted(() => {
   const container = messagesContainer.value
   if (container) {
     container.removeEventListener('scroll', debouncedHandleScroll)
+    container.removeEventListener('click', handleMessageContainerClick)
   }
 })
 
