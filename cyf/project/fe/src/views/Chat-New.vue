@@ -348,7 +348,7 @@ const getModelStateByModelName = (modelName?: string) => {
 
 const chatTabs = ref<ChatTab[]>([{
   key: `tab_${Date.now()}`,
-  title: '新会话',
+  title: '',
   dialogId: null,
   loading: false,
   unread: false,
@@ -414,12 +414,13 @@ const updateCurrentDialogId = (id: number | null) => {
 }
 
 const getActiveTab = () => chatTabs.value.find(tab => tab.key === activeTabKey.value)
+const isDraftTab = (tab?: ChatTab | null) => !!tab && tab.dialogId === null && !tab.loading
 
 const syncFormDataFromActiveTab = () => {
   const tab = getActiveTab()
   if (!tab) return
   formData.currentDialogId = tab.dialogId
-  formData.dialogTitle = tab.title === '新会话' ? '' : tab.title
+  formData.dialogTitle = tab.title || ''
   formData.selectedModel = tab.selectedModel
   formData.selectedModelType = tab.selectedModelType
   formData.providerValue = tab.providerValue
@@ -427,7 +428,7 @@ const syncFormDataFromActiveTab = () => {
   formData.currentModelDesc = tab.currentModelDesc
 }
 
-const createChatTab = (dialogId: number | null = null, title: string = '新会话', modelName?: string) => {
+const createChatTab = (dialogId: number | null = null, title: string = '', modelName?: string) => {
   const modelState = getModelStateByModelName(modelName)
   const tab: ChatTab = {
     key: `tab_${Date.now()}_${Math.random().toString(16).slice(2)}`,
@@ -483,14 +484,8 @@ const handleSessionDialogCreated = (payload: { sessionKey: string, dialogId: num
   const tab = chatTabs.value.find(item => item.key === payload.sessionKey)
   if (!tab) return
   tab.dialogId = payload.dialogId
-  if (!tab.title || tab.title === '新会话') {
-    tab.title = `对话 ${payload.dialogId}`
-  }
   if (payload.sessionKey === activeTabKey.value) {
     formData.currentDialogId = payload.dialogId
-    if (!formData.dialogTitle || formData.dialogTitle === '新会话') {
-      formData.dialogTitle = tab.title
-    }
   }
 }
 
@@ -506,7 +501,7 @@ const removeChatTab = (targetKey: string | number) => {
   if (index < 0) return
   chatTabs.value.splice(index, 1)
   if (chatTabs.value.length === 0) {
-    createChatTab(null, '新会话')
+    createChatTab(null, '')
     return
   }
   if (activeTabKey.value === key) {
@@ -606,7 +601,22 @@ const handleResize = () => {
 }
 
 const clearSession = () => {
-  createChatTab(null, '新会话')
+  const activeTab = getActiveTab()
+  if (isDraftTab(activeTab)) {
+    activeTab!.title = ''
+    syncFormDataFromActiveTab()
+    return
+  }
+
+  const rightmostTab = chatTabs.value[chatTabs.value.length - 1]
+  if (isDraftTab(rightmostTab)) {
+    activeTabKey.value = rightmostTab!.key
+    rightmostTab!.title = ''
+    syncFormDataFromActiveTab()
+    return
+  }
+
+  createChatTab(null, '')
 }
 
 // 组件挂载
@@ -677,9 +687,35 @@ watch(activeTabKey, () => {
 })
 
 watch(() => formData.currentDialogId, (newId) => {
-  const tab = getActiveTab()
-  if (!tab) return
-  tab.dialogId = newId === null ? null : Number(newId)
+  const activeTab = getActiveTab()
+  if (!activeTab) return
+
+  if (newId === null || newId === undefined) {
+    activeTab.dialogId = null
+    return
+  }
+
+  const targetDialogId = Number(newId)
+  if (!Number.isFinite(targetDialogId) || targetDialogId <= 0) {
+    return
+  }
+
+  if (activeTab.dialogId === targetDialogId) {
+    return
+  }
+
+  const existingTab = chatTabs.value.find(tab => tab.dialogId === targetDialogId)
+  if (existingTab) {
+    if (existingTab.key !== activeTabKey.value) {
+      activeTabKey.value = existingTab.key
+      syncFormDataFromActiveTab()
+    }
+    return
+  }
+
+  const historyItem = formData.dialogHistory.find((item: any) => item.id === targetDialogId)
+  const title = historyItem?.dialog_name || ''
+  createChatTab(targetDialogId, title, historyItem?.modelname || '')
 })
 
 watch(
@@ -698,7 +734,7 @@ watch(
 watch(() => formData.dialogTitle, (newTitle) => {
   const tab = getActiveTab()
   if (!tab) return
-  tab.title = (newTitle || '').trim() || (tab.dialogId ? `对话 ${tab.dialogId}` : '新会话')
+  tab.title = (newTitle || '').trim()
 })
 </script>
 

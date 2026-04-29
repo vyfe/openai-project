@@ -603,18 +603,17 @@ const updateProviders = () => {
 const filteredModels = computed(() => {
   if (!formData.providerValue) return []
   // 根据当前选择的厂商过滤模型，并按推荐状态排序
+  // 优先按显式分组精准匹配，避免名称包含关系导致串组（如 gpt 误匹配到其他分组模型）
   const providerModels = formData.models.filter(model => {
-    // 检查模型值是否包含厂商名称
+    if (model.group) {
+      return model.group === formData.providerValue
+    }
+    // 仅在缺少显式分组字段时，才退化为名称包含匹配
     return model.value.toLowerCase().includes(formData.providerValue.toLowerCase()) ||
-           model.label.toLowerCase().includes(formData.providerValue.toLowerCase())
+      model.label.toLowerCase().includes(formData.providerValue.toLowerCase())
   })
-
-  // 按推荐状态排序：推荐的模型在前面
-  return providerModels.sort((a, b) => {
-    if (a.recommend && !b.recommend) return -1
-    if (!a.recommend && b.recommend) return 1
-    return 0
-  })
+  // 前端不再进行排序，直接使用后端返回顺序
+  return providerModels
 })
 
 // 删除角色函数

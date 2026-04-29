@@ -831,6 +831,8 @@ def get_cached_models():
 
         # 构建元数据映射 (model_name -> meta)
         meta_map = {meta['model_name'].lower(): meta for meta in model_meta_list}
+        # 使用 ModelMeta.id 倒序作为最终输出顺序，保证“新插入模型优先”
+        meta_order_map = {meta['model_name'].lower(): int(meta.get('id') or 0) for meta in model_meta_list}
 
         # 增强模型列表：添加元数据字段，过滤无效模型
         enhanced_models = []
@@ -853,6 +855,17 @@ def get_cached_models():
         # ========== 新增结束 ==========
 
         # 更新缓存
+        # 排序规则：
+        # 1) recommend=true 置顶
+        # 2) 同 recommend 分组内按 ModelMeta.id 倒序（近似按入库时间倒序）
+        enhanced_models.sort(
+            key=lambda m: (
+                1 if m.get('recommend', False) else 0,
+                meta_order_map.get(str(m.get('id', '')).lower(), 0),
+            ),
+            reverse=True
+        )
+
         MODEL_CACHE['models'] = enhanced_models
         CACHE_EXPIRY_TIME['models'] = current_time + cache_ttl
 

@@ -145,12 +145,6 @@ def init_model_meta_data():
                 if existing_model.model_desc != model_desc:
                     existing_model.model_desc = model_desc
                     changed = True
-                if existing_model.recommend != recommend:
-                    existing_model.recommend = recommend
-                    changed = True
-                if existing_model.status_valid != status_valid:
-                    existing_model.status_valid = status_valid
-                    changed = True
 
                 if changed:
                     existing_model.save()
