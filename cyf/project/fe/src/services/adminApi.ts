@@ -11,7 +11,7 @@ export const modelMetaAPI = {
   create: (data: any) => adminApi.post('/never_guess_my_usage/model_meta/create', data),
   update: (data: any) => adminApi.post('/never_guess_my_usage/model_meta/update', data),
   delete: (id: number) => adminApi.post('/never_guess_my_usage/model_meta/delete', { id }),
-  batchUpdate: (data: { ids: number[]; recommend?: boolean; status_valid?: boolean; model_grp?: string }) =>
+  batchUpdate: (data: { ids: number[]; recommend?: boolean; allow_net?: boolean; status_valid?: boolean; model_grp?: string }) =>
     adminApi.post('/never_guess_my_usage/model_meta/batch_update', data)
 }
 

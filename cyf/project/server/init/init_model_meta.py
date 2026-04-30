@@ -137,6 +137,7 @@ def init_model_meta_data():
 
             model_desc = str(model_data.get('desc_zh') or model_data.get('model_desc') or 'No description available')
             recommend = bool(model_data.get('recommend', False))
+            allow_net = bool(model_data.get('allow_net', False))
             status_valid = bool(model_data.get('exists', model_data.get('status_valid', True)))
 
             try:
@@ -147,6 +148,7 @@ def init_model_meta_data():
                         model_name=model_name,
                         model_desc=model_desc,
                         recommend=recommend,
+                        allow_net=allow_net,
                         status_valid=status_valid
                     )
                     print(f"成功添加新模型: {model_name}")

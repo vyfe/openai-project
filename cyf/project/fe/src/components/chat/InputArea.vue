@@ -47,7 +47,7 @@
             <!-- 将按钮放入编组容器中 -->
             <div class="button-group">
             <!-- 文件上传按钮移到输入框上方，右侧 -->
-            <el-popover placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
+            <el-popover v-if="canUploadAttachment" placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
               <template #reference>
                 <el-button class="upload-trigger-btn" :icon="Plus" size="large" />
               </template>
@@ -191,6 +191,8 @@ const isImageModel = computed(() => {
   return props.selectedModelType === 2
 })
 
+const canUploadAttachment = computed(() => props.selectedModelAllowNet !== false)
+
 // 添加键盘可见性检测
 const isKeyboardVisible = ref(false)
 const originalViewportHeight = ref(window.innerHeight)
@@ -234,6 +236,13 @@ const sendMessage = () => {
 
   if (!props.selectedModel) {
     ElMessage.warning('请先选择一个模型')
+    return
+  }
+
+  if (!canUploadAttachment.value && (uploadedFiles.value.length > 0 || pastedFiles.value.length > 0 || uploadedFile.value)) {
+    ElMessage.warning('当前模型不支持联网，已禁用附件上传')
+    clearFile()
+    pastedFiles.value = []
     return
   }
 
@@ -381,6 +390,13 @@ const clearFile = () => {
     uploadRef.value.clearFiles()
   }
 }
+
+watch(canUploadAttachment, (allowNet) => {
+  if (allowNet) return
+  showUploadPopover.value = false
+  clearFile()
+  pastedFiles.value = []
+})
 
 // 判断是否为图片
 const isImageUrl = (url: string): boolean => {

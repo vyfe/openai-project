@@ -51,6 +51,7 @@ def get_cached_models(logger=None):
             if meta and not meta.get("status_valid", True):
                 continue
             model["recommend"] = meta.get("recommend", False) if meta else False
+            model["allow_net"] = meta.get("allow_net", True) if meta else True
             model["model_desc"] = meta.get("model_desc", "") if meta else ""
             model["model_type"] = meta.get("model_type", 1) if meta else 1
             model["model_grp"] = meta.get("model_grp", "") if meta else ""

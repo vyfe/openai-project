@@ -2,13 +2,13 @@ import threading
 
 from conf.runtime import runtime_state
 from model.db import init_db
-from model.entities import ALL_MODELS, User
+from model.entities import ALL_MODELS, ModelMeta, User
 from service.host_service import start_blacklist_cleanup_thread
 from service.model_service import invalidate_model_cache, seconds_until_next
 
 
 def initialize_database():
-    init_db(ALL_MODELS, User)
+    init_db(ALL_MODELS, User, ModelMeta)
 
 
 def run_model_meta_refresh(logger, reason: str):

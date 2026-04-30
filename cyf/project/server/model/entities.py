@@ -38,6 +38,7 @@ class ModelMeta(BaseModel):
     model_desc = CharField()
     model_type = IntegerField(default=1)
     recommend = BooleanField()
+    allow_net = BooleanField(default=True)
     status_valid = BooleanField()
     model_grp = CharField(default="")
 
@@ -52,6 +53,7 @@ class ModelMeta(BaseModel):
             "model_desc": self.model_desc,
             "model_type": self.model_type,
             "recommend": self.recommend,
+            "allow_net": self.allow_net,
             "status_valid": self.status_valid,
             "model_grp": self.model_grp,
         }

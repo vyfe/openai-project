@@ -17,10 +17,11 @@ interface ModelMeta {
   model_type: number
   model_grp: string
   recommend: boolean
+  allow_net: boolean
   status_valid: boolean
 }
 
-type BatchAction = 'recommend' | 'unrecommend' | 'enable' | 'disable' | 'setGroup'
+type BatchAction = 'recommend' | 'unrecommend' | 'allowNet' | 'disallowNet' | 'enable' | 'disable' | 'setGroup'
 
 const {
   items: models,
@@ -43,6 +44,7 @@ const createEmptyForm = () => ({
   model_type: 1,
   model_grp: '',
   recommend: false,
+  allow_net: true,
   status_valid: true
 })
 
@@ -110,10 +112,12 @@ const runBatchAction = async (action: BatchAction) => {
   }
 
   const ids = selectedRows.value.map((item) => item.id)
-  const payload: { ids: number[]; recommend?: boolean; status_valid?: boolean; model_grp?: string } = { ids }
+  const payload: { ids: number[]; recommend?: boolean; allow_net?: boolean; status_valid?: boolean; model_grp?: string } = { ids }
 
   if (action === 'recommend') payload.recommend = true
   if (action === 'unrecommend') payload.recommend = false
+  if (action === 'allowNet') payload.allow_net = true
+  if (action === 'disallowNet') payload.allow_net = false
   if (action === 'enable') payload.status_valid = true
   if (action === 'disable') payload.status_valid = false
   if (action === 'setGroup') {
@@ -165,6 +169,8 @@ onMounted(() => {
       <el-tag type="info">{{ t('admin.selectedCount', { count: selectedRows.length }) }}</el-tag>
       <el-button size="small" @click="() => runBatchAction('recommend')">{{ t('admin.batchRecommend') }}</el-button>
       <el-button size="small" @click="() => runBatchAction('unrecommend')">{{ t('admin.batchUnrecommend') }}</el-button>
+      <el-button size="small" @click="() => runBatchAction('allowNet')">{{ t('admin.batchAllowNet') }}</el-button>
+      <el-button size="small" @click="() => runBatchAction('disallowNet')">{{ t('admin.batchDisallowNet') }}</el-button>
       <el-button size="small" @click="() => runBatchAction('enable')">{{ t('admin.batchEnable') }}</el-button>
       <el-button size="small" @click="() => runBatchAction('disable')">{{ t('admin.batchDisable') }}</el-button>
       <el-input
@@ -202,6 +208,13 @@ onMounted(() => {
         <template #default="{ row }">
           <el-tag :type="row.recommend ? 'warning' : 'info'" size="small">
             {{ row.recommend ? t('admin.yes') : t('admin.no') }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="allow_net" :label="t('admin.allowNet')" width="110">
+        <template #default="{ row }">
+          <el-tag :type="row.allow_net ? 'success' : 'danger'" size="small">
+            {{ row.allow_net ? t('admin.yes') : t('admin.no') }}
           </el-tag>
         </template>
       </el-table-column>
@@ -261,6 +274,9 @@ onMounted(() => {
         </el-form-item>
         <el-form-item :label="t('admin.recommend')">
           <el-switch v-model="formData.recommend" />
+        </el-form-item>
+        <el-form-item :label="t('admin.allowNet')">
+          <el-switch v-model="formData.allow_net" />
         </el-form-item>
         <el-form-item :label="t('admin.statusValid')">
           <el-switch v-model="formData.status_valid" />

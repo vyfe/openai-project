@@ -361,6 +361,7 @@
       :is-loading="isLoading"
       :selected-model="formData.selectedModel"
       :selected-model-type="formData.selectedModelType"
+      :selected-model-allow-net="formData.selectedModelAllowNet"
       :context-count="formData.contextCount"
       :enhanced-role-enabled="formData.enhancedRoleEnabled"
       :system-prompt="formData.systemPrompt"

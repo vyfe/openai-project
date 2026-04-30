@@ -233,6 +233,7 @@ type ChatTab = {
   unread: boolean
   selectedModel: string
   selectedModelType: number
+  selectedModelAllowNet: boolean
   providerValue: string
   modelValue: string
   currentModelDesc: string
@@ -244,6 +245,7 @@ const formData = reactive({
   currentDialogId: ref<number | null>(null),
   selectedModel: localStorage.getItem('selectedModel') || '',
   selectedModelType: parseInt(localStorage.getItem('selectedModelType') || '1'),
+  selectedModelAllowNet: localStorage.getItem('selectedModelAllowNet') !== 'false',
   // 上下文字数
   contextCount: parseInt(localStorage.getItem('contextCount') || '10'),
   // 侧边栏折叠状态
@@ -266,7 +268,7 @@ const formData = reactive({
   isScrolledToBottom: true,
 
   // 模型相关
-  models: [] as Array<{ group: string, label: string, value: string, recommend?: boolean, model_desc?: string }>,
+  models: [] as Array<{ group: string, label: string, value: string, recommend?: boolean, allow_net?: boolean, model_desc?: string, model_type?: number }>,
   groupedModels: {} as Record<string, any[]>,
   providers: [] as string[],
   providerValue: '',
@@ -295,6 +297,7 @@ const getModelStateByModelName = (modelName?: string) => {
   const fallback = {
     selectedModel: formData.selectedModel || '',
     selectedModelType: Number(formData.selectedModelType || 1),
+    selectedModelAllowNet: formData.selectedModelAllowNet !== false,
     providerValue: formData.providerValue || '',
     modelValue: formData.modelValue || formData.selectedModel || '',
     currentModelDesc: formData.currentModelDesc || '',
@@ -313,6 +316,7 @@ const getModelStateByModelName = (modelName?: string) => {
   return {
     selectedModel: modelInfo.value,
     selectedModelType: Number(modelInfo.model_type || 1),
+    selectedModelAllowNet: modelInfo.allow_net !== false,
     providerValue: modelInfo.group || '',
     modelValue: modelInfo.value,
     currentModelDesc: modelInfo.model_desc || '',
@@ -349,6 +353,7 @@ watch(() => formData.maxResponseChars, (val) => localStorage.setItem('maxRespons
 watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCollapsed', JSON.stringify(val)))
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
 watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
+watch(() => formData.selectedModelAllowNet, (val) => localStorage.setItem('selectedModelAllowNet', val ? 'true' : 'false'))
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
 watch(() => formData.systemPrompt, (val) => localStorage.setItem('systemPrompt', val))
 watch(() => formData.sendPreference, (val) => localStorage.setItem('sendPreference', val))
@@ -396,6 +401,7 @@ const syncFormDataFromActiveTab = () => {
   formData.dialogTitle = tab.title || ''
   formData.selectedModel = tab.selectedModel
   formData.selectedModelType = tab.selectedModelType
+  formData.selectedModelAllowNet = tab.selectedModelAllowNet !== false
   formData.providerValue = tab.providerValue
   formData.modelValue = tab.modelValue
   formData.currentModelDesc = tab.currentModelDesc
@@ -692,12 +698,13 @@ watch(() => formData.currentDialogId, (newId) => {
 })
 
 watch(
-  () => [formData.selectedModel, formData.selectedModelType, formData.providerValue, formData.modelValue, formData.currentModelDesc],
-  ([selectedModel, selectedModelType, providerValue, modelValue, currentModelDesc]) => {
+  () => [formData.selectedModel, formData.selectedModelType, formData.selectedModelAllowNet, formData.providerValue, formData.modelValue, formData.currentModelDesc],
+  ([selectedModel, selectedModelType, selectedModelAllowNet, providerValue, modelValue, currentModelDesc]) => {
     const tab = getActiveTab()
     if (!tab) return
     tab.selectedModel = selectedModel || ''
     tab.selectedModelType = Number(selectedModelType || 1)
+    tab.selectedModelAllowNet = selectedModelAllowNet !== false
     tab.providerValue = providerValue || ''
     tab.modelValue = modelValue || ''
     tab.currentModelDesc = currentModelDesc || ''

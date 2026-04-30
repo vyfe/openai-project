@@ -46,6 +46,11 @@
               <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
                 <span>{{ model.label }}</span>
                 <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
+                <el-tooltip :content="model.allow_net !== false ? t('chat.allowNet') : t('chat.disallowNet')"">
+                  <el-tag size="small" :type="model.allow_net !== false ? 'success' : 'info'" class="ml-2">
+                    <el-icon class="mr-1"><Connection /></el-icon>
+                  </el-tag>
+                </el-tooltip>
               </el-option>
             </el-select>
           </div>
@@ -294,6 +299,7 @@ import {
   EditPen,
   Loading,
   InfoFilled,
+  Connection,
   Monitor,
   Clock,
   Setting,
@@ -579,6 +585,7 @@ const handleProviderChange = (value: string) => {
   // 如果值被清空，也清空selectedModel
   if (!value) {
     formData.selectedModel = ''
+    formData.selectedModelAllowNet = true
   }
 }
 
@@ -591,6 +598,7 @@ const handleModelChange = (value: string) => {
   const selectedModelObj = formData.models.find(model => model.value === value)
   formData.currentModelDesc = selectedModelObj?.model_desc || ''
   formData.selectedModelType = selectedModelObj?.model_type || 1
+  formData.selectedModelAllowNet = selectedModelObj?.allow_net !== false
 }
 
 // 更新厂商列表
@@ -909,6 +917,7 @@ const loadDialogContent = async (dialogId: number) => {
         // 更新模型描述
         formData.currentModelDesc = targetModel.model_desc || ''
         formData.selectedModelType = targetModel.model_type || 1
+        formData.selectedModelAllowNet = targetModel.allow_net !== false
       } else {
         console.warn(`未找到匹配的模型: ${dialogItem.modelname}`)
       }
@@ -1096,6 +1105,7 @@ onMounted(async () => {
             label: `${prefix}: ${model.label || model.id}`,
             value: model.id,
             recommend: model.recommend || false,
+            allow_net: model.allow_net !== false,
             model_desc: model.model_desc || '',
             model_type: model.model_type || 1,
           });
@@ -1106,9 +1116,11 @@ onMounted(async () => {
       const normalResponse: any = await chatAPI.getModels();
       if (normalResponse && normalResponse.success && normalResponse.models) {
         formData.models = normalResponse.models.map((model: any) => ({
+          group: model.model_grp || '',
           label: model.label,
           value: model.id,
           recommend: model.recommend || false,
+          allow_net: model.allow_net !== false,
           model_desc: model.model_desc || '',
           model_type: model.model_type || 1,
         }));
@@ -1116,9 +1128,9 @@ onMounted(async () => {
         console.error('获取模型列表失败:', response?.msg || normalResponse?.msg)
         // 设置默认模型列表作为备选
         formData.models = [
-          { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '', model_type: 1 },
-          { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '', model_type: 1 },
-          { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '', model_type: 1 }
+          { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, allow_net: true, model_desc: '', model_type: 1 },
+          { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, allow_net: true, model_desc: '', model_type: 1 },
+          { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, allow_net: true, model_desc: '', model_type: 1 }
         ]
       }
     }
@@ -1126,9 +1138,9 @@ onMounted(async () => {
     console.error('加载模型列表时出错:', error)
     // 设置默认模型列表作为备选
     formData.models = [
-      { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, model_desc: '' },
-      { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, model_desc: '' },
-      { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, model_desc: '' }
+      { group: "gpt", label: 'GPT-4o mini', value: 'gpt-4o-mini', recommend: false, allow_net: true, model_desc: '', model_type: 1 },
+      { group: "gpt", label: 'GPT-4o', value: 'gpt-4o', recommend: false, allow_net: true, model_desc: '', model_type: 1 },
+      { group: "gpt", label: 'GPT-3.5-turbo', value: 'gpt-3.5-turbo', recommend: false, allow_net: true, model_desc: '', model_type: 1 }
     ]
   }
 
@@ -1145,6 +1157,8 @@ onMounted(async () => {
 
       // 设置当前模型描述
       formData.currentModelDesc = selectedModelInfo.model_desc || ''
+      formData.selectedModelType = selectedModelInfo.model_type || 1
+      formData.selectedModelAllowNet = selectedModelInfo.allow_net !== false
     }
   }
 

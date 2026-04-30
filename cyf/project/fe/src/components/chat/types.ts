@@ -78,6 +78,7 @@ export interface Props {
   enhancedRoleGroups?: Record<string, any[]>
   selectedModel?: string
   selectedModelType?: number  // 添加模型类型参数
+  selectedModelAllowNet?: boolean
   streamEnabled?: boolean
   maxResponseChars?: number
   dialogTitle?: string

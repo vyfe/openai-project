@@ -42,4 +42,4 @@ from model.repositories.user_repository import (
 
 
 def init_db():
-    _init_db(ALL_MODELS, User)
+    _init_db(ALL_MODELS, User, ModelMeta)

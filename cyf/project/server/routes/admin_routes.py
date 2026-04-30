@@ -113,6 +113,7 @@ def model_meta_create():
             model_type=model_type,
             model_grp=data.get("model_grp", "").strip(),
             recommend=to_bool(data.get("recommend", "false")),
+            allow_net=to_bool(data.get("allow_net", "true")),
             status_valid=to_bool(data.get("status_valid", "true")),
         )
         invalidate_model_cache("model_meta_create", logger=current_app.logger)
@@ -142,6 +143,8 @@ def model_meta_update():
             model.model_grp = data["model_grp"].strip()
         if "recommend" in data:
             model.recommend = to_bool(data["recommend"])
+        if "allow_net" in data:
+            model.allow_net = to_bool(data["allow_net"])
         if "status_valid" in data:
             model.status_valid = to_bool(data["status_valid"])
         model.save()
@@ -179,6 +182,8 @@ def model_meta_batch_update():
         updates = {}
         if "recommend" in data:
             updates["recommend"] = to_bool(data.get("recommend"))
+        if "allow_net" in data:
+            updates["allow_net"] = to_bool(data.get("allow_net"))
         if "status_valid" in data:
             updates["status_valid"] = to_bool(data.get("status_valid"))
         if "model_grp" in data:
