@@ -31,10 +31,21 @@ class Settings:
     api_param_mode: str
     enable_sql_execute: bool
     users_raw: str
+    quant_sqlite3_file: str
+    quant_bundle_dir: str
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
+    if not conf.has_section(section):
+        return fallback.lower() in ("1", "true", "yes", "on")
     return conf.get(section, option, fallback=fallback).lower() in ("1", "true", "yes", "on")
+
+
+def _get_str(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "") -> str:
+    if not conf.has_section(section):
+        return fallback
+    value = conf.get(section, option, fallback=fallback)
+    return value if str(value).strip() else fallback
 
 
 def load_settings(conf_path: Optional[str] = None) -> Settings:
@@ -71,6 +82,8 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         api_param_mode=conf.get("api", "api_param_mode", fallback="default"),
         enable_sql_execute=_get_bool(conf, "admin", "enable_sql_execute", fallback="false"),
         users_raw=conf.get("common", "users", fallback=""),
+        quant_sqlite3_file=_get_str(conf, "quant", "sqlite3_file", fallback=os.path.join(BASE_DIR, "quant.db")),
+        quant_bundle_dir=_get_str(conf, "quant", "bundle_dir", fallback=os.path.join(BASE_DIR, "quant_bundles")),
     )
 
 

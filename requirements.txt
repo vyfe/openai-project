@@ -4,6 +4,11 @@ Flask-sock==0.7.0
 requests
 openai
 peewee
+pandas
+akshare
+baostock
+apscheduler
+exchange_calendars
 cryptography
 customtkinter
 gunicorn

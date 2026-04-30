@@ -1,6 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Login from '@/views/Login.vue'
-import Chat from '@/views/Chat-New.vue'
 import VersionService from '@/services/version'
 import { useAuthStore } from '@/stores/auth'
 
@@ -14,18 +12,24 @@ const router = createRouter({
     {
       path: '/login',
       name: 'Login',
-      component: Login
+      component: () => import('@/views/Login.vue')
     },
     {
       path: '/chat',
       name: 'Chat',
-      component: Chat,
+      component: () => import('@/views/Chat-New.vue'),
       meta: { requiresAuth: true }
     },
     {
       path: '/admin',
       name: 'Admin',
       component: () => import('@/views/Admin.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/quant',
+      name: 'Quant',
+      component: () => import('@/views/Quant.vue'),
       meta: { requiresAuth: true, requiresAdmin: true }
     }
   ]

@@ -1,14 +1,22 @@
+import os
 import threading
 
 from conf.runtime import runtime_state
 from model.db import init_db
 from model.entities import ALL_MODELS, ModelMeta, User
+from quant.db import init_quant_db
+from quant.entities import QUANT_MODELS
 from service.host_service import start_blacklist_cleanup_thread
 from service.model_service import invalidate_model_cache, seconds_until_next
 
 
 def initialize_database():
     init_db(ALL_MODELS, User, ModelMeta)
+    init_quant_db(QUANT_MODELS)
+
+
+def ensure_quant_runtime_dirs():
+    os.makedirs(runtime_state.settings.quant_bundle_dir, exist_ok=True)
 
 
 def run_model_meta_refresh(logger, reason: str):
@@ -49,6 +57,7 @@ def start_model_meta_scheduler(logger):
 
 def bootstrap_runtime(logger):
     initialize_database()
+    ensure_quant_runtime_dirs()
     runtime_state.build_clients()
     start_blacklist_cleanup_thread()
     start_model_meta_scheduler(logger)

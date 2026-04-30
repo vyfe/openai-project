@@ -101,7 +101,7 @@
         <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
         <div class="back-to-top-btn input-btn" @click="toggleMobileInput">
           <el-icon>
-            <component :is="showMobileInput ? 'View' : 'ChatDotSquare'" />
+            <component :is="showMobileInput ? View : ChatDotSquare" />
           </el-icon>
         </div>
         <el-button type="warning" size="default" @click="clearCurrentSession" class="back-to-top-btn new-session-btn">
@@ -110,7 +110,7 @@
               </el-icon>
               <!-- {{ t('chat.openAnotherSession') }} -->
             </el-button>
-        <el-button icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
+        <el-button :icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
       </div>
 
       <!-- 移动端抽屉菜单 -->
@@ -411,6 +411,9 @@ import {
   Link,
   CaretRight,
   InfoFilled,
+  Menu,
+  View,
+  ChatDotSquare,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'

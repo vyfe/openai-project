@@ -1,59 +1,101 @@
-import hljs from 'highlight.js';
+import hljs from 'highlight.js/lib/core'
+import bash from 'highlight.js/lib/languages/bash'
+import cpp from 'highlight.js/lib/languages/cpp'
+import csharp from 'highlight.js/lib/languages/csharp'
+import css from 'highlight.js/lib/languages/css'
+import go from 'highlight.js/lib/languages/go'
+import java from 'highlight.js/lib/languages/java'
+import javascript from 'highlight.js/lib/languages/javascript'
+import json from 'highlight.js/lib/languages/json'
+import markdown from 'highlight.js/lib/languages/markdown'
+import php from 'highlight.js/lib/languages/php'
+import python from 'highlight.js/lib/languages/python'
+import rust from 'highlight.js/lib/languages/rust'
+import sql from 'highlight.js/lib/languages/sql'
+import typescript from 'highlight.js/lib/languages/typescript'
+import xml from 'highlight.js/lib/languages/xml'
+import yaml from 'highlight.js/lib/languages/yaml'
+
+const LANGUAGE_REGISTRY = {
+  bash,
+  shell: bash,
+  sh: bash,
+  zsh: bash,
+  c: cpp,
+  cpp,
+  cxx: cpp,
+  cc: cpp,
+  csharp,
+  cs: csharp,
+  css,
+  go,
+  golang: go,
+  html: xml,
+  xml,
+  java,
+  javascript,
+  js: javascript,
+  json,
+  markdown,
+  md: markdown,
+  php,
+  python,
+  py: python,
+  rust,
+  rs: rust,
+  sql,
+  typescript,
+  ts: typescript,
+  tsx: typescript,
+  vue: xml,
+  yml: yaml,
+  yaml,
+}
+
+for (const [name, language] of Object.entries(LANGUAGE_REGISTRY)) {
+  hljs.registerLanguage(name, language)
+}
+
+const AUTO_DETECT_LANGUAGES = ['bash', 'cpp', 'css', 'go', 'java', 'javascript', 'json', 'markdown', 'php', 'python', 'rust', 'sql', 'typescript', 'xml', 'yaml']
+
+const escapeHtml = (code) => code
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
 
 // 为代码块添加语法高亮
 export const highlightCode = (html) => {
-  if (!html) return html;
+  if (!html) return html
 
-  // 找到所有的 pre 和 code 标签，并应用语法高亮
   return html.replace(/<pre><code(?:\s+class="([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g, (match, classStr, code) => {
-    // 解码 HTML 实体
-    code = code
+    const decodedCode = code
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
+      .replace(/&#39;/g, "'")
 
-    let language = '';
-    if (classStr) {
-      // 提取语言标识符 (如: language-python -> python)
-      const langMatch = classStr.match(/language-(\w+)/);
-      if (langMatch) {
-        language = langMatch[1];
+    const langMatch = classStr?.match(/language-([\w-]+)/)
+    const language = langMatch?.[1]?.toLowerCase() || ''
+
+    let highlightedCode = escapeHtml(decodedCode)
+    try {
+      if (language && hljs.getLanguage(language)) {
+        highlightedCode = hljs.highlight(decodedCode, { language }).value
+      } else {
+        highlightedCode = hljs.highlightAuto(decodedCode, AUTO_DETECT_LANGUAGES).value
       }
+    } catch (error) {
+      highlightedCode = escapeHtml(decodedCode)
     }
 
-    let highlightedCode = code;
-    if (language && hljs.getLanguage(language)) {
-      // 如果指定了有效的语言，则使用该语言进行高亮
-      try {
-        highlightedCode = hljs.highlight(code, { language }).value;
-      } catch (e) {
-        // 如果高亮失败，使用自动检测
-        try {
-          highlightedCode = hljs.highlightAuto(code).value;
-        } catch (autoErr) {
-          // 如果都失败了，返回原始代码
-          highlightedCode = code;
-        }
-      }
-    } else {
-      // 如果没有指定语言或语言无效，则使用自动检测
-      try {
-        highlightedCode = hljs.highlightAuto(code).value;
-      } catch (e) {
-        // 如果自动检测失败，返回原始代码
-        highlightedCode = code;
-      }
-    }
+    const encodedCode = encodeURIComponent(decodedCode)
+    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" data-code="${encodedCode}">复制</button><pre><code class="hljs ${classStr || ''}">${highlightedCode}</code></pre></div>`
+  })
+}
 
-    const encodedCode = encodeURIComponent(code);
-    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" data-code="${encodedCode}">复制</button><pre><code class="hljs ${classStr || ''}">${highlightedCode}</code></pre></div>`;
-  });
-};
-
-// 初始化 highlight.js 样式
 export const initHighlight = () => {
-  // 可以在这里添加任何初始化代码
-  // 目前只需要确保 highlight.js 的样式被加载
-};
+  // 目前仅保留兼容导出，实际不需要额外初始化
+}
