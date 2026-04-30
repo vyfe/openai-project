@@ -43,7 +43,7 @@ onMounted(() => {
 <template>
   <div class="runtime-overview p-4">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+      <h2 class="text-lg font-semibold">
         {{ t('admin.observability') }}
       </h2>
       <el-button type="primary" size="small" :loading="loading" @click="fetchOverview">

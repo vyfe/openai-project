@@ -3,101 +3,102 @@
     class="login-page login-page-v2 min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-amber-100 via-stone-100 to-emerald-50 relative overflow-hidden"
     :class="{ 'login-dark': isDarkTheme }"
   >
-    <!-- Favicon 飞行动画背景 -->
-    <div class="favicon-sky" aria-hidden="true">
-      <span
-        v-for="flyer in faviconFlyers"
-        :key="flyer.id"
-        class="favicon-flyer"
-        :style="getFlyerStyle(flyer)"
-      />
-    </div>
-
-    <div class="login-shell relative z-10 flex items-center justify-center">
-      <div class="login-card bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-amber-200/30 w-96 max-w-[90%]">
-        <div class="login-head text-center mb-8">
-          <h1 class="login-title text-2xl font-bold text-amber-700 mb-2">{{ t('login.title') }}</h1>
-          <p class="login-subtitle text-stone-500">{{ t('login.subtitle') }}</p>
+    <div class="login-shell relative z-10">
+      <section class="login-hero" aria-hidden="true">
+        <div class="hero-vector hero-vector-main" />
+        <div class="hero-vector hero-vector-grid" />
+        <div class="hero-vector hero-vector-wave" />
+        <div class="hero-copy">
+          <p class="hero-copy-label">{{ t('login.subtitle') }}</p>
+          <h2 class="hero-copy-title">{{ t('login.description') }}</h2>
         </div>
+      </section>
 
-        <el-form
-          ref="loginFormRef"
-          :model="loginForm"
-          :rules="loginRules"
-          class="login-form mt-5"
-          @submit.prevent="handleLogin"
-        >
-          <el-form-item prop="username" class="mb-5">
-            <el-input
-              v-model="loginForm.username"
-              :placeholder="t('login.usernamePlaceholder')"
-              :prefix-icon="User"
-              size="large"
-              class="rounded-lg"
-              autocomplete="new-password"
-            />
-          </el-form-item>
+      <section class="login-panel">
+        <div class="login-card bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-amber-200/30 w-96 max-w-[90%]">
+          <div class="login-head text-center mb-8">
+            <h1 class="login-title text-2xl font-bold text-amber-700 mb-2">{{ t('login.title') }}</h1>
+            <p class="login-subtitle text-stone-500">{{ t('login.subtitle') }}</p>
+          </div>
 
-          <el-form-item prop="password" class="mb-5">
-            <el-input
-              v-model="loginForm.password"
-              type="password"
-              :placeholder="t('login.passwordPlaceholder')"
-              :prefix-icon="Lock"
-              size="large"
-              show-password
-              class="rounded-lg"
-              autocomplete="new-password"
-            />
-          </el-form-item>
+          <el-form
+            ref="loginFormRef"
+            :model="loginForm"
+            :rules="loginRules"
+            class="login-form mt-5"
+            @submit.prevent="handleLogin"
+          >
+            <el-form-item prop="username" class="mb-5">
+              <el-input
+                v-model="loginForm.username"
+                :placeholder="t('login.usernamePlaceholder')"
+                :prefix-icon="User"
+                size="large"
+                class="rounded-lg"
+                autocomplete="new-password"
+              />
+            </el-form-item>
 
-          <el-form-item class="w-full">
+            <el-form-item prop="password" class="mb-5">
+              <el-input
+                v-model="loginForm.password"
+                type="password"
+                :placeholder="t('login.passwordPlaceholder')"
+                :prefix-icon="Lock"
+                size="large"
+                show-password
+                class="rounded-lg"
+                autocomplete="new-password"
+              />
+            </el-form-item>
+
+            <el-form-item class="w-full">
+              <el-button
+                type="primary"
+                size="large"
+                :loading="loading"
+                class="login-primary-btn w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
+                @click="handleLogin"
+              >
+                {{ t('login.submitButton') }}
+              </el-button>
+            </el-form-item>
+          </el-form>
+
+          <!-- 注册链接按钮 -->
+          <div class="text-center mt-4">
             <el-button
-              type="primary"
-              size="large"
-              :loading="loading"
-              class="login-primary-btn w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
-              @click="handleLogin"
+              type="info"
+              plain
+              size="small"
+              @click="showRegisterModal = true"
+              :icon="CirclePlus"
+              class="login-secondary-btn text-amber-700 hover:text-amber-700"
             >
-              {{ t('login.submitButton') }}
+              {{ t('login.goToRegister') }}
             </el-button>
-          </el-form-item>
-        </el-form>
+          </div>
 
-        <!-- 注册链接按钮 -->
-        <div class="text-center mt-4">
-          <el-button
-            type="info"
-            plain
-            size="small"
-            @click="showRegisterModal = true"
-            :icon="CirclePlus"
-            class="login-secondary-btn text-amber-700 hover:text-amber-700"
-          >
-            {{ t('login.goToRegister') }}
-          </el-button>
-        </div>
-
-        <!-- 通知按钮 -->
-        <div class="mt-4 flex justify-end">
-          <div class="notification-button-wrapper">
-          <el-button
-            type="info"
-            plain
-            size="small"
-            @click="openNotifications"
-            :icon="Bell"
-          >
-            {{ t('login.viewNotifications') }}
-          </el-button>
-            <span v-if="hasNewNotifications" class="notification-dot" />
+          <!-- 通知按钮 -->
+          <div class="mt-4 flex justify-end">
+            <div class="notification-button-wrapper">
+            <el-button
+              type="info"
+              plain
+              size="small"
+              @click="openNotifications"
+              :icon="Bell"
+            >
+              {{ t('login.viewNotifications') }}
+            </el-button>
+              <span v-if="hasNewNotifications" class="notification-dot" />
+            </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
 
     <div class="login-footer mt-8 text-center">
-      <p class="login-footer-desc text-stone-500">{{ t('login.description') }}</p>
       <p class="mt-2.5 flex items-center justify-center gap-1">
         <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer" class="login-footer-link text-stone-500 text-sm font-medium flex items-center gap-1 hover:text-amber-700 hover:underline">
           <el-icon><Link /></el-icon> {{ t('login.githubLink') }}
@@ -283,23 +284,6 @@ const registerForm = reactive({
   apiKey: ''
 })
 
-const faviconFlyers = [
-  { id: 1, startY: '16%', midY: '-34px', endY: '-8px', delay: '0s', duration: '24s', scale: '0.92', opacity: '0.11' },
-  { id: 2, startY: '34%', midY: '-46px', endY: '-16px', delay: '6s', duration: '28s', scale: '1.08', opacity: '0.13' },
-  { id: 3, startY: '58%', midY: '-24px', endY: '3px', delay: '12s', duration: '26s', scale: '0.98', opacity: '0.12' },
-  { id: 4, startY: '78%', midY: '-38px', endY: '-12px', delay: '18s', duration: '30s', scale: '1.16', opacity: '0.10' }
-]
-
-const getFlyerStyle = (flyer: (typeof faviconFlyers)[number]) => ({
-  '--start-y': flyer.startY,
-  '--mid-y': flyer.midY,
-  '--end-y': flyer.endY,
-  '--delay': flyer.delay,
-  '--duration': flyer.duration,
-  '--scale': flyer.scale,
-  '--opacity': flyer.opacity
-})
-
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
 
 const openNotifications = () => {
@@ -439,68 +423,109 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
-.favicon-sky {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.favicon-flyer {
-  position: absolute;
-  left: -12vw;
-  top: var(--start-y);
-  width: 72px;
-  height: 72px;
-  background-image: url('/favicon-fly.png');
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-  opacity: 0;
-  transform: translate3d(0, 0, 0) scale(var(--scale));
-  filter: drop-shadow(0 10px 18px rgba(201, 122, 43, 0.16));
-  animation: favicon-flight var(--duration) cubic-bezier(0.38, 0, 0.22, 1) infinite;
-  animation-delay: var(--delay);
-}
-
-@keyframes favicon-flight {
-  0% {
-    transform: translate3d(-16vw, 0, 0) scale(var(--scale));
-    opacity: 0;
-  }
-  10% {
-    opacity: var(--opacity);
-  }
-  55% {
-    transform: translate3d(52vw, var(--mid-y), 0) scale(calc(var(--scale) + 0.08));
-    opacity: calc(var(--opacity) + 0.08);
-  }
-  90% {
-    opacity: var(--opacity);
-  }
-  100% {
-    transform: translate3d(122vw, var(--end-y), 0) scale(calc(var(--scale) + 0.02));
-    opacity: 0;
-  }
-}
-
-/* =========================
-   Round 6: login calm style
-   ========================= */
 .login-page-v2 {
-  background: radial-gradient(1200px 520px at 50% -120px, color-mix(in srgb, var(--accent-1) 10%, transparent), transparent 70%),
-    linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 88%, var(--bg-2)));
+  background:
+    radial-gradient(900px 520px at 20% 16%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 72%),
+    radial-gradient(860px 540px at 88% 84%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 74%),
+    linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)));
 }
 
 .login-shell {
   width: 100%;
-  max-width: 960px;
-  padding: 20px 12px 8px;
+  max-width: 1160px;
+  padding: 34px 22px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  gap: 28px;
+  align-items: center;
+}
+
+.login-hero {
+  position: relative;
+  min-height: 520px;
+  border-radius: 24px;
+  border: 1px solid color-mix(in srgb, var(--line-1) 76%, transparent);
+  background: color-mix(in srgb, var(--overlay-1) 78%, transparent);
+  overflow: hidden;
+  padding: 36px 34px;
+  display: flex;
+  align-items: flex-end;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.hero-vector {
+  position: absolute;
+  pointer-events: none;
+}
+
+.hero-vector-main {
+  inset: -8% -16% auto auto;
+  width: 68%;
+  height: 68%;
+  border-radius: 42% 58% 52% 48%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-1) 36%, transparent),
+    color-mix(in srgb, var(--accent-2) 14%, transparent)
+  );
+  filter: blur(2px);
+  animation: hero-float 16s ease-in-out infinite;
+}
+
+.hero-vector-grid {
+  left: 8%;
+  top: 10%;
+  width: 76%;
+  height: 76%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--line-1) 66%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--line-1) 66%, transparent) 1px, transparent 1px);
+  background-size: 30px 30px;
+  mask-image: radial-gradient(circle at 38% 48%, black 30%, transparent 82%);
+  opacity: 0.24;
+}
+
+.hero-vector-wave {
+  inset: auto 0 0;
+  height: 42%;
+  background:
+    radial-gradient(120% 100% at 32% 82%, color-mix(in srgb, var(--accent-2) 22%, transparent), transparent 68%),
+    radial-gradient(100% 90% at 66% 86%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 68%);
+  transform-origin: center;
+  animation: hero-wave 20s ease-in-out infinite;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 540px;
+}
+
+.hero-copy-label {
+  margin: 0 0 12px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.hero-copy-title {
+  margin: 0;
+  font-size: clamp(34px, 4.2vw, 54px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text-1);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.login-panel {
+  display: flex;
+  justify-content: center;
 }
 
 .login-card {
-  width: min(460px, 94vw);
+  width: min(460px, 100%);
   margin: 0 auto;
   background: var(--overlay-1) !important;
   border: 1px solid var(--line-1) !important;
@@ -582,17 +607,36 @@ const handleRegister = async () => {
   color: var(--text-1) !important;
 }
 
-.favicon-sky {
-  opacity: 0.22;
+@keyframes hero-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    border-radius: 42% 58% 52% 48%;
+  }
+  50% {
+    transform: translate3d(-12px, 10px, 0) scale(1.04);
+    border-radius: 56% 44% 48% 52%;
+  }
 }
 
-.favicon-flyer {
-  animation-duration: 34s !important;
+@keyframes hero-wave {
+  0%, 100% {
+    transform: translateX(0) scaleY(1);
+  }
+  50% {
+    transform: translateX(2%) scaleY(1.06);
+  }
 }
 
 body.dark-theme .login-page-v2 {
-  background: radial-gradient(1200px 520px at 50% -120px, var(--accent-1-soft), transparent 70%),
+  background:
+    radial-gradient(900px 520px at 20% 16%, var(--accent-1-soft), transparent 72%),
+    radial-gradient(860px 540px at 88% 84%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 74%),
     linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)));
+}
+
+body.dark-theme .login-hero,
+.login-page.login-dark .login-hero {
+  background: color-mix(in srgb, var(--overlay-1) 84%, transparent);
 }
 
 body.dark-theme .login-card,
@@ -611,10 +655,17 @@ body.dark-theme .login-footer-contact {
 
 @media (max-width: 768px) {
   .login-shell {
-    padding: 10px 10px 6px;
+    display: flex;
+    justify-content: center;
+    padding: 12px 10px 6px;
+  }
+
+  .login-hero {
+    display: none;
   }
 
   .login-card {
+    width: min(460px, 94vw);
     padding: 20px 16px !important;
     border-radius: 16px !important;
   }

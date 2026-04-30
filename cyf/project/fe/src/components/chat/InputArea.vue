@@ -74,7 +74,7 @@
               {{ t('chat.stopStream') }}
             </el-button>
             <el-button
-              type="primary"
+              type="success"
               class="send-message-btn"
               :icon="Position"
               :disabled="(!inputMessage.trim() && uploadedFiles.length === 0 && pastedFiles.length === 0) || isLoading"

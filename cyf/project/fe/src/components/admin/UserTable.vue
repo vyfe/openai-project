@@ -165,7 +165,7 @@ onMounted(() => {
 <template>
   <div class="user-table">
     <div class="mb-4 flex justify-between items-center">
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+      <h2 class="text-lg font-semibold">
         {{ t('admin.userManagement') }}
       </h2>
       <div class="flex items-center gap-2">

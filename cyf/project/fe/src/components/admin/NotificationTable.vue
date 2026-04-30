@@ -116,7 +116,7 @@ onMounted(() => {
 <template>
   <div class="notification-table">
     <div class="mb-4 flex justify-between items-center">
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+      <h2 class="text-lg font-semibold">
         {{ t('admin.notificationManagement') }}
       </h2>
       <div class="flex items-center gap-2">

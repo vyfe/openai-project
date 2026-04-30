@@ -1,0 +1,732 @@
+/* 深色主题样式 */
+body.dark-theme .chat-container {
+  background: linear-gradient(135deg, var(--bg-0) 0%, var(--bg-2) 100%);
+  color: var(--text-1);
+}
+
+/* 深色主题下抽屉样式 */
+body.dark-theme .el-drawer {
+  --el-bg-color: var(--bg-2);
+  --el-text-color-primary: var(--text-1);
+  background-color: var(--bg-2);
+  color: var(--text-1);
+}
+
+/* 深色主题下移动端抽屉内容样式 */
+body.dark-theme .mobile-toolbar-content {
+  background-color: var(--bg-2);
+  color: var(--text-1);
+}
+
+body.dark-theme .mobile-form-label {
+  color: var(--text-1);
+}
+
+body.dark-theme .chat-header {
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--bg-0) 45%, transparent);
+  color: var(--text-1);
+}
+
+
+
+
+
+body.dark-theme .usage-content {
+  color: var(--text-1);
+}
+
+body.dark-theme .usage-item {
+  border-bottom: 1px solid var(--line-1);
+}
+
+body.dark-theme .usage-item .label {
+  color: var(--text-2);
+}
+
+body.dark-theme .usage-item .value {
+  color: var(--text-1);
+}
+
+body.dark-theme .usage-item.low-balance .value {
+  color: var(--el-color-danger);
+}
+
+body.dark-theme .chat-sidebar {
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .sidebar-close-btn {
+  background-color: var(--bg-2);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+}
+
+body.dark-theme .model-selector h3 {
+  color: var(--text-1);
+}
+
+body.dark-theme .dialog-history-section h3 {
+  color: var(--text-1);
+}
+
+body.dark-theme .dialog-list {
+  border: 1px solid var(--line-1);
+  background: color-mix(in srgb, var(--bg-2) 78%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .dialog-item {
+  background: color-mix(in srgb, var(--bg-2) 64%, transparent);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+}
+
+body.dark-theme .dialog-item.selected {
+  background: color-mix(in srgb, var(--accent-2-soft) 70%, var(--bg-2) 30%);
+  outline: 2px solid color-mix(in srgb, var(--accent-2) 68%, transparent);
+}
+
+body.dark-theme .dialog-item:hover {
+  background: color-mix(in srgb, var(--accent-2-soft) 52%, var(--bg-2) 48%);
+}
+
+body.dark-theme .dialog-title {
+  color: var(--text-1);
+}
+
+body.dark-theme .dialog-date {
+  color: var(--text-2);
+}
+
+body.dark-theme .no-dialogs {
+  color: var(--text-2);
+}
+
+body.dark-theme .delete-btn {
+  color: var(--text-1);
+}
+
+body.dark-theme .context-label {
+  color: var(--text-1);
+}
+
+body.dark-theme .system-prompt-section {
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .system-prompt-section h3 {
+  color: var(--text-1);
+}
+
+body.dark-theme .system-prompt-hint {
+  color: var(--text-2);
+}
+
+/* 深色主题下的系统提示输入框样式 */
+body.dark-theme .system-prompt-section :deep(.el-textarea__inner) {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+  padding: 12px; /* 保持一致的内边距 */
+}
+
+body.dark-theme .role-tabs {
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .role-tab {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+  border: 1px solid var(--line-1);
+  color: var(--text-1); /* 保持原有文字颜色 */
+  min-height: 28px;
+  box-sizing: border-box;
+}
+
+body.dark-theme .role-tab:hover {
+  background: color-mix(in srgb, var(--accent-1-soft) 72%, var(--bg-2) 28%);
+}
+
+body.dark-theme .role-tab.active {
+  background: color-mix(in srgb, var(--accent-1-soft) 85%, var(--bg-2) 15%);
+  border-bottom-color: transparent;
+  color: var(--text-1);
+}
+
+/* 为增强角色的tab文字添加深色样式（白色字） */
+body.dark-theme .role-tab.enhanced-role {
+  color: var(--text-1);
+}
+
+body.dark-theme .send-preference-section {
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .send-preference-hint {
+  color: var(--text-2);
+}
+
+body.dark-theme .chat-content {
+  background: color-mix(in srgb, var(--bg-1) 86%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .chat-toolbar {
+  background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .messages-container {
+  background-color: var(--bg-1);
+  color: var(--text-1);
+  overflow-x: auto; /* 添加横向滚动 */
+  -webkit-overflow-scrolling: touch; /* 启用触摸滚动 */
+  /* 确保横向滚动条样式与整体设计一致 */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent-1) 55%, transparent) transparent;
+}
+
+body.dark-theme .message-avatar {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 84%, var(--text-1) 16%) 0%, var(--bg-2) 100%);
+  color: var(--text-1);
+}
+
+body.dark-theme .message.user .message-avatar {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--bg-2) 84%, var(--text-1) 16%) 0%, var(--bg-2) 100%);
+}
+
+body.dark-theme .message-author {
+  color: var(--text-1);
+}
+
+body.dark-theme .message-time {
+  color: var(--text-2);
+}
+
+body.dark-theme .message-actions .el-button {
+  color: var(--text-2);
+}
+
+body.dark-theme .message-text {
+  background: color-mix(in srgb, var(--bg-2) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .message.user .message-text {
+  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+  border-color: var(--line-1);
+}
+
+body.dark-theme .message-text :deep(pre) {
+  background: color-mix(in srgb, var(--bg-2) 90%, var(--bg-0) 10%) !important;
+  color: var(--text-1) !important;
+}
+
+body.dark-theme .message-text :deep(*) {
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+
+body.dark-theme .message-text :deep(code) {
+  background: color-mix(in srgb, var(--bg-2) 72%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .message-text :deep(blockquote) {
+  border-left: 3px solid var(--accent-1);
+  color: var(--text-2);
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+
+/* 深色主题下移动端适配 */
+@media (max-width: 768px) {
+  body.dark-theme .toolbar-mobile {
+    background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  }
+
+  body.dark-theme .message-text :deep(pre) {
+    max-width: 100vw;
+    width: auto;
+    overflow-x: auto;
+    word-wrap: break-word;
+    white-space: pre;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.dark-theme .message-text :deep(code) {
+    max-width: 100vw;
+    overflow-x: auto;
+    word-wrap: break-word;
+    word-break: break-word;
+    box-sizing: border-box;
+  }
+
+  body.dark-theme .message-text :deep(table) {
+    max-width: 100%;
+    width: fit-content;
+    overflow-x: auto;
+    display: block;
+    table-layout: fixed;
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.dark-theme .message-text :deep(th),
+  body.dark-theme .message-text :deep(td) {
+    min-width: 40px;
+    max-width: 250px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    box-sizing: border-box;
+  }
+}
+
+/* 深色主题下更小屏幕的优化 */
+@media (max-width: 480px) {
+  body.dark-theme .message-text :deep(pre) {
+    font-size: 12px;
+    padding: 8px;
+    max-width: 100vw;
+  }
+
+  body.dark-theme .message-text :deep(th),
+  body.dark-theme .message-text :deep(td) {
+    min-width: 30px;
+    max-width: 150px;
+    padding: 6px 4px;
+    font-size: 12px;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+body.dark-theme .message-file {
+  background: color-mix(in srgb, var(--bg-2) 64%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .typing-placeholder {
+  color: var(--text-2);
+}
+
+body.dark-theme .typing-dot {
+  background: var(--text-2);
+}
+
+body.dark-theme .input-area {
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .message-input textarea {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+  padding: 12px; /* 保持一致的内边距 */
+}
+
+/* 深色主题下主输入区域textarea滚动条样式 */
+body.dark-theme .message-input textarea::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+}
+
+body.dark-theme .message-input textarea::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+body.dark-theme .message-input textarea::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-1) 72%, transparent);
+}
+
+body.dark-theme .message-input textarea:focus {
+  border-color: var(--accent-1);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-1) 22%, transparent);
+}
+
+body.dark-theme .upload-popover-content {
+  background-color: var(--bg-1);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+}
+
+body.dark-theme .upload-popover-header {
+  color: var(--text-1);
+}
+
+/* 深色主题下Android设备优化 */
+@media screen and (-webkit-device-pixel-ratio: 1.5), screen and (-webkit-device-pixel-ratio: 2), screen and (-webkit-device-pixel-ratio: 3) {
+  body.dark-theme .message-text :deep(pre) {
+    max-width: 100%;
+    width: 100%;
+    overflow-x: auto;
+    word-wrap: break-word;
+    white-space: pre;
+    word-break: break-word;
+    box-sizing: border-box;
+  }
+
+  body.dark-theme .message-text :deep(code) {
+    max-width: 100%;
+    overflow-x: auto;
+    word-wrap: break-word;
+    word-break: break-word;
+    box-sizing: border-box;
+  }
+
+  body.dark-theme .message-text :deep(table) {
+    max-width: 100%;
+    width: 100%;
+    overflow-x: auto;
+    display: block;
+    table-layout: fixed;
+    box-sizing: border-box;
+  }
+
+  body.dark-theme .message-text :deep(th),
+  body.dark-theme .message-text :deep(td) {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  body.dark-theme .messages-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+body.dark-theme .messages-container::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+}
+
+body.dark-theme .messages-container::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+body.dark-theme .messages-container::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-1) 72%, transparent);
+}
+
+body.dark-theme .dialog-list::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+}
+
+body.dark-theme .dialog-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+body.dark-theme .dialog-list::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-1) 72%, transparent);
+}
+
+body.dark-theme .chat-sidebar::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+}
+
+body.dark-theme .chat-sidebar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+}
+
+body.dark-theme .chat-sidebar::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent-1) 72%, transparent);
+}
+
+body.dark-theme .divider {
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--accent-1) 34%, transparent), transparent);
+}
+
+body.dark-theme .copyright-watermark-inline {
+  color: color-mix(in srgb, var(--text-1) 42%, transparent);
+  border-top: 1px dashed color-mix(in srgb, var(--accent-1) 34%, transparent);
+}
+
+body.dark-theme .github-link-inline {
+  color: color-mix(in srgb, var(--text-1) 60%, transparent);
+  border-top: 1px dotted color-mix(in srgb, var(--accent-1) 24%, transparent);
+}
+
+body.dark-theme .github-link-inline a {
+  color: color-mix(in srgb, var(--text-1) 82%, transparent);
+}
+
+body.dark-theme .github-link-inline a:hover {
+  color: var(--text-1);
+}
+
+body.dark-theme .back-to-top-btn,
+body.dark-theme .back-to-top-btn-normal {
+  background: color-mix(in srgb, var(--accent-1) 78%, var(--bg-0) 22%);
+  color: var(--text-1);
+}
+
+body.dark-theme .back-to-top-btn.input-btn {
+  background: color-mix(in srgb, var(--accent-2) 82%, var(--bg-0) 18%);
+}
+
+body.dark-theme .back-to-top-btn.new-session-btn {
+  background: color-mix(in srgb, var(--accent-1) 78%, var(--bg-0) 22%);
+}
+
+body.dark-theme .back-to-top-btn:hover,
+body.dark-theme .back-to-top-btn-normal:hover {
+  background: color-mix(in srgb, var(--accent-1) 88%, var(--bg-0) 12%);
+}
+
+body.dark-theme .back-to-top-btn.input-btn:hover {
+  background: color-mix(in srgb, var(--accent-2) 90%, var(--bg-0) 10%);
+}
+
+body.dark-theme .back-to-top-btn.new-session-btn:hover {
+  background: color-mix(in srgb, var(--accent-1) 88%, var(--bg-0) 12%);
+}
+
+body.dark-theme .message-attachments {
+  color: var(--text-1);
+}
+
+body.dark-theme .attachment-preview {
+  border: 1px solid var(--line-1);
+}
+
+body.dark-theme .attachment-preview:hover {
+  border-color: var(--accent-1);
+}
+
+body.dark-theme .attachment-link {
+  background: var(--bg-2);
+  border: 1px solid var(--line-1);
+  color: var(--text-2);
+}
+
+body.dark-theme .attachment-link:hover {
+  background: color-mix(in srgb, var(--bg-2) 86%, var(--text-1) 14%);
+  border-color: var(--accent-1);
+  color: var(--text-1);
+}
+
+/* 禁用状态的样式 */
+.role-tabs.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* 截断消息样式 */
+.truncated-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent-1-soft) 65%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.truncated-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.truncated-indicator .ellipsis {
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--el-color-warning);
+  letter-spacing: 2px;
+}
+
+.truncated-indicator .truncated-hint {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+@media (max-width: 768px) {
+  .truncated-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
+/* 主题切换按钮样式 */
+
+/* 移动端菜单按钮优化 */
+
+/* 模型描述样式 */
+.model-description {
+  margin-top: 10px;
+}
+
+
+/* 数学公式样式 */
+
+/* LaTeX 帮助对话框样式 */
+.latex-help-content h3,
+.latex-help-content h4 {
+  margin: 16px 0 8px 0;
+  color: var(--text-1);
+}
+
+.latex-help-content p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.latex-help-content code {
+  padding: 2px 4px;
+  margin: 0 2px;
+  border-radius: 3px;
+  background-color: var(--bg-2);
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.example-formulas {
+  background-color: var(--bg-2);
+  padding: 15px;
+  border-radius: 5px;
+  margin: 10px 0;
+}
+
+/* 深色主题下的 LaTeX 帮助对话框样式 */
+body.dark-theme .latex-help-content h3,
+body.dark-theme .latex-help-content h4 {
+  color: var(--text-1);
+}
+
+body.dark-theme .latex-help-content p {
+  color: var(--text-1);
+}
+
+body.dark-theme .latex-help-content code {
+  background-color: var(--line-1);
+  color: var(--text-1);
+}
+
+/* 修复ElDialog标题的夜间模式样式 - 使用CSS变量 */
+body.dark-theme {
+  --el-text-color-primary: var(--text-1);
+}
+
+body.dark-theme .example-formulas {
+  background-color: var(--bg-2);
+  color: var(--text-1);
+}
+
+/* 空响应操作按钮样式 */
+.empty-response-actions {
+  margin-top: 8px;
+}
+
+.empty-response-actions .el-alert {
+  margin-bottom: 8px;
+}
+
+.empty-response-actions .el-button {
+  margin-left: 0;
+}
+
+/* 深色主题下系统提示textarea滚动条样式 */
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar{
+  width: 6px;
+  height: 6px;
+}
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-track{
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+}
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb{
+  background: color-mix(in srgb, var(--accent-1) 55%, transparent);
+  border-radius: 3px;
+}
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-scrollbar-thumb:hover{
+  background: color-mix(in srgb, var(--accent-1) 72%, transparent);
+}
+body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-resizer{
+  width: 3px;
+  background: transparent;
+}
+
+/* 对话历史项目中模型名称样式 */
+.dialog-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.dialog-model {
+  flex: 0 1 auto;
+  min-width: 0;
+  background-color: color-mix(in srgb, var(--accent-1-soft) 72%, var(--bg-1) 28%);
+  color: var(--accent-1);
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+body.dark-theme .dialog-model {
+  background-color: color-mix(in srgb, var(--accent-2-soft) 55%, var(--bg-1) 45%);
+  color: var(--text-1);
+}
+
+body.dark-theme .custom-dark-tooltip {
+   background-color: var(--bg-1) !important;
+   border: 1px solid var(--line-1) !important;
+   color: var(--text-1) !important;
+}
+
+/* 移动端遮罩层样式 */
+.mobile-sidebar-mask {
+  /* position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: block; */
+  display: none; /* 空规则集会导致CSS解析问题，添加一个简单的声明 */
+}
+
+
+/* 通知按钮红点提示 */
+.notification-button-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  background: var(--el-color-danger);
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-1) 90%, transparent);
+  pointer-events: none;
+}

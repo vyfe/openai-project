@@ -52,7 +52,7 @@ watch(activeTab, (tab) => {
             @click="goBack"
             class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            <svg class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 " fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
@@ -60,7 +60,7 @@ watch(activeTab, (tab) => {
             {{ t('admin.title') }}
           </h1>
         </div>
-        <div class="text-sm text-gray-500 dark:text-gray-400">
+        <div class="text-sm">
           {{ authStore.user }}
         </div>
       </div>

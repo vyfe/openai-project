@@ -141,15 +141,6 @@ def init_model_meta_data():
 
             try:
                 existing_model = ModelMeta.get(ModelMeta.model_name == model_name)
-                changed = False
-                if existing_model.model_desc != model_desc:
-                    existing_model.model_desc = model_desc
-                    changed = True
-
-                if changed:
-                    existing_model.save()
-                    updated_count += 1
-                    print(f"成功更新模型: {model_name}")
             except ModelMeta.DoesNotExist:
                 try:
                     ModelMeta.create(

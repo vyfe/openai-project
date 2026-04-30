@@ -188,7 +188,8 @@
   }
 
   /* 确保发送按钮在移动端可见 */
-  .input-actions .el-button--primary {
+  .input-actions .el-button--primary,
+  .input-actions .el-button--success {
     min-width: 60px; /* 确保发送按钮有最小宽度 */
   }
 }
@@ -645,21 +646,21 @@
 }
 
 .send-message-btn {
-  background: var(--accent-1);
-  border-color: color-mix(in srgb, var(--accent-1) 70%, #000 30%) !important;
+  background: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 68%, #000 32%) !important;
   color: #fff;
 }
 
 .send-message-btn:hover:not(.is-disabled) {
-  background: color-mix(in srgb, var(--accent-1) 86%, #000 14%);
-  border-color: color-mix(in srgb, var(--accent-1) 58%, #000 42%) !important;
+  background: color-mix(in srgb, var(--accent-2) 84%, #000 16%);
+  border-color: color-mix(in srgb, var(--accent-2) 56%, #000 44%) !important;
   color: #fff;
 }
 
 .send-message-btn.is-disabled,
 .send-message-btn:disabled {
-  background: color-mix(in srgb, var(--accent-1) 25%, var(--bg-1) 75%);
-  border-color: color-mix(in srgb, var(--accent-1) 35%, var(--line-1) 65%) !important;
+  background: color-mix(in srgb, var(--accent-2) 24%, var(--bg-1) 76%);
+  border-color: color-mix(in srgb, var(--accent-2) 34%, var(--line-1) 66%) !important;
   color: color-mix(in srgb, var(--text-2) 72%, #fff 28%);
 }
 

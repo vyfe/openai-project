@@ -8,7 +8,7 @@
         <div class="dialog-title-editor">
           <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="small"/>
           <!-- 更新标题按钮：当有当前对话ID时显示 -->
-          <el-button v-if="formData.currentDialogId" type="primary" size="small" @click="updateDialogTitle"
+          <el-button v-if="formData.currentDialogId" type="success" size="small" @click="updateDialogTitle"
             class="update-title-btn" :disabled="!formData.dialogTitle.trim()">
             {{ t('chat.updateDialogTitle') }}
           </el-button>
@@ -122,7 +122,7 @@
             <span class="mobile-form-label">{{ t('chat.dialogTitle') }}</span>
             <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="default" />
             <!-- 更新标题按钮：当有当前对话ID时显示 -->
-            <el-button v-if="formData.currentDialogId" type="primary" size="default" @click="updateDialogTitle"
+            <el-button v-if="formData.currentDialogId" type="success" size="default" @click="updateDialogTitle"
               class="update-title-btn-mobile" :disabled="!formData.dialogTitle.trim()">
               {{ t('chat.updateDialogTitle') }}
             </el-button>
@@ -295,7 +295,7 @@
           <div v-if="message.type === 'ai' && message.content === '' && !message.isError && !isStreaming(index)"
             class="empty-response-actions">
             <el-alert :closable="false" :title="t('chat.aiTemporarilyNoReply')" type="info" show-icon />
-            <el-button type="primary" size="small" @click="retryMessage(index)">
+            <el-button type="success" size="small" @click="retryMessage(index)">
               <el-icon>
                 <RefreshLeft />
               </el-icon>
@@ -309,7 +309,7 @@
               <span class="ellipsis">...</span>
               <span class="truncated-hint">{{ t('chat.contentTruncated') }}</span>
             </div>
-            <el-button type="primary" size="small" @click="continueGeneration(index)" :disabled="formData.isLoading">
+            <el-button type="success" size="small" @click="continueGeneration(index)" :disabled="formData.isLoading">
               <el-icon>
                 <CaretRight />
               </el-icon>

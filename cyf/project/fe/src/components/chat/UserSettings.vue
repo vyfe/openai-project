@@ -62,7 +62,7 @@
       <div class="dialog-footer">
         <el-button @click="handleClose">{{ $t('chat.cancel') }}</el-button>
         <el-button
-          type="primary"
+          type="success"
           @click="handleSubmit"
           :loading="loading"
         >

@@ -1,6 +1,6 @@
 /* Admin页面样式 */
 .admin-page.admin-dark {
-  background: linear-gradient(135deg, #1a1a1a 0%, var(--bg-2) 100%);
+  background: linear-gradient(135deg, var(--bg-0) 0%, var(--bg-2) 100%);
   color: var(--text-1);
 }
 
@@ -10,7 +10,7 @@
 }
 
 .admin-page.admin-dark h1 {
-  color: #d89a60 !important;
+  color: var(--accent-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__header) {
@@ -22,11 +22,11 @@
 }
 
 .admin-page.admin-dark :deep(.el-tabs__item.is-active) {
-  color: #d89a60 !important;
+  color: var(--accent-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__active-bar) {
-  background-color: #d89a60 !important;
+  background-color: var(--accent-1) !important;
 }
 
 .admin-page.admin-dark :deep(.el-tabs__content) {
@@ -44,27 +44,27 @@
   padding: 0 20px;
   height: 48px;
   line-height: 48px;
-  color: var(--text-color, var(--bg-2));
+  color: var(--text-color, var(--text-2));
 }
 
 .admin-tabs :deep(.el-tabs__item.is-active) {
-  color: var(--primary-color, #c97a2b);
-  border-bottom-color: var(--primary-color, #c97a2b);
+  color: var(--primary-color, var(--accent-1));
+  border-bottom-color: var(--primary-color, var(--accent-1));
 }
 
 /* 深色主题适配 - 使用Tailwind的dark:类 */
-.dark .admin-tabs :deep(.el-tabs__nav) {
+body.dark-theme .admin-tabs :deep(.el-tabs__nav) {
   --tab-border-color: var(--bg-2);
-  --text-color: #9ca3af;
+  --text-color: var(--text-2);
 }
 
-.dark .admin-tabs :deep(.el-tabs__item.is-active) {
-  --primary-color: #c97a2b;
+body.dark-theme .admin-tabs :deep(.el-tabs__item.is-active) {
+  --primary-color: var(--accent-1);
 }
 
 /* 深色主题下的非激活标签 */
-.dark .admin-tabs :deep(.el-tabs__item:not(.is-active)) {
-  --text-color: #9ca3af;
+body.dark-theme .admin-tabs :deep(.el-tabs__item:not(.is-active)) {
+  --text-color: var(--text-2);
 }
 
 /* 移动端横向滚动标签 */
@@ -102,7 +102,7 @@
     border-radius: 2px;
   }
 
-  .dark .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-thumb) {
+  body.dark-theme .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar-thumb) {
     --scrollbar-thumb: var(--line-1);
   }
 }
@@ -139,7 +139,7 @@
   background-color: var(--table-header-bg, #f9fafb);
 }
 
-.dark :deep(.el-table__header-wrapper) {
+body.dark-theme :deep(.el-table__header-wrapper) {
   --table-header-bg: var(--bg-1);
 }
 
@@ -147,25 +147,25 @@
   background-color: var(--table-hover-bg, #f3f4f6) !important;
 }
 
-.dark :deep(.el-table__body tr:hover > td) {
+body.dark-theme :deep(.el-table__body tr:hover > td) {
   --table-hover-bg: var(--bg-2);
 }
 
 /* 表格文字颜色 */
 :deep(.el-table td) {
-  color: var(--table-text-color, var(--bg-1));
+  color: var(--table-text-color, var(--text-1));
 }
 
-.dark :deep(.el-table td) {
-  --table-text-color: #e5e7eb;
+body.dark-theme :deep(.el-table td) {
+  --table-text-color: var(--text-1);
 }
 
 :deep(.el-table th) {
   color: var(--table-header-text-color, #6b7280);
 }
 
-.dark :deep(.el-table th) {
-  --table-header-text-color: #9ca3af;
+body.dark-theme :deep(.el-table th) {
+  --table-header-text-color: var(--text-2);
 }
 
 /* 表格边框 */
@@ -174,8 +174,8 @@
   border-color: var(--table-border-color, #e5e7eb);
 }
 
-.dark :deep(.el-table--border td),
-.dark :deep(.el-table--border th) {
+body.dark-theme :deep(.el-table--border td),
+body.dark-theme :deep(.el-table--border th) {
   --table-border-color: var(--bg-2);
 }
 
@@ -223,7 +223,7 @@
   border-bottom-color: var(--dialog-border-color, #e5e7eb);
 }
 
-.dark :deep(.el-dialog__header) {
+body.dark-theme :deep(.el-dialog__header) {
   --dialog-border-color: var(--bg-2);
 }
 
@@ -235,26 +235,26 @@
   border-top-color: var(--dialog-border-color, #e5e7eb);
 }
 
-.dark :deep(.el-dialog__footer) {
+body.dark-theme :deep(.el-dialog__footer) {
   --dialog-border-color: var(--bg-2);
 }
 
 :deep(.el-dialog__title) {
-  color: var(--dialog-title-color, var(--bg-1));
+  color: var(--dialog-title-color, var(--text-1));
 }
 
-.dark :deep(.el-dialog__title) {
-  --dialog-title-color: #f3f4f6;
+body.dark-theme :deep(.el-dialog__title) {
+  --dialog-title-color: var(--text-1);
 }
 
 /* 表单样式优化 */
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: var(--form-label-color, var(--bg-2));
+  color: var(--form-label-color, var(--text-2));
 }
 
-.dark :deep(.el-form-item__label) {
-  --form-label-color: #d1d5db;
+body.dark-theme :deep(.el-form-item__label) {
+  --form-label-color: var(--text-2);
 }
 
 :deep(.el-input__wrapper) {
@@ -276,15 +276,15 @@
 }
 
 .admin-page.admin-dark :deep(.el-form-item__label) {
-  color: #d1d5db !important;
+  color: var(--text-2) !important;
 }
 
 :deep(.el-input__inner) {
-  color: var(--input-text-color, var(--bg-1));
+  color: var(--input-text-color, var(--text-1));
 }
 
-.dark :deep(.el-input__inner) {
-  --input-text-color: #e5e7eb;
+body.dark-theme :deep(.el-input__inner) {
+  --input-text-color: var(--text-1);
 }
 
 :deep(.el-input__wrapper) {
@@ -292,7 +292,7 @@
   border-color: var(--input-border, #d1d5db);
 }
 
-.dark :deep(.el-input__wrapper) {
+body.dark-theme :deep(.el-input__wrapper) {
   --input-bg: var(--bg-1);
   --input-border: var(--line-1);
 }
@@ -301,25 +301,25 @@
   border-radius: 6px;
   resize: vertical;
   background-color: var(--input-bg, #ffffff);
-  color: var(--input-text-color, var(--bg-1));
+  color: var(--input-text-color, var(--text-1));
 }
 
-.dark :deep(.el-textarea__inner) {
+body.dark-theme :deep(.el-textarea__inner) {
   --input-bg: var(--bg-1);
-  --input-text-color: #e5e7eb;
+  --input-text-color: var(--text-1);
 }
 
 /* 按钮样式优化 */
 :deep(.el-button--primary) {
-  background: linear-gradient(135deg, #c97a2b 0%, #5f8f63 100%);
+  background: linear-gradient(135deg, var(--accent-1) 0%, var(--accent-2) 100%);
   border: none;
   font-weight: 500;
 }
 
 :deep(.el-button--primary:hover) {
-  background: linear-gradient(135deg, #4f7753 0%, #67876c 100%);
+  background: linear-gradient(135deg, var(--el-color-success-dark-2) 0%, var(--el-color-success-light-3) 100%);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(201, 122, 43, 0.3);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-1) 30%, transparent);
 }
 
 :deep(.el-button--danger) {
@@ -337,16 +337,16 @@
   color: var(--btn-default-color, var(--bg-2));
 }
 
-.dark :deep(.el-button--default) {
+body.dark-theme :deep(.el-button--default) {
   --btn-default-border: var(--line-1);
-  --btn-default-color: #e5e7eb;
+  --btn-default-color: var(--text-1);
 }
 
 :deep(.el-button--default:hover) {
   background-color: var(--btn-default-hover, #f3f4f6);
 }
 
-.dark :deep(.el-button--default:hover) {
+body.dark-theme :deep(.el-button--default:hover) {
   --btn-default-hover: var(--bg-2);
 }
 
@@ -382,29 +382,29 @@
 }
 
 /* 深色模式下的标签 */
-.dark :deep(.el-tag--success) {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #34d399;
+body.dark-theme :deep(.el-tag--success) {
+  background-color: color-mix(in srgb, var(--accent-2) 20%, transparent);
+  color: var(--accent-2);
 }
 
-.dark :deep(.el-tag--info) {
-  background-color: rgba(201, 122, 43, 0.2);
-  color: #d89a60;
+body.dark-theme :deep(.el-tag--info) {
+  background-color: color-mix(in srgb, var(--accent-1) 20%, transparent);
+  color: var(--accent-1);
 }
 
-.dark :deep(.el-tag--warning) {
-  background-color: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
+body.dark-theme :deep(.el-tag--warning) {
+  background-color: color-mix(in srgb, var(--el-color-warning) 20%, transparent);
+  color: var(--el-color-warning);
 }
 
-.dark :deep(.el-tag--danger) {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #f87171;
+body.dark-theme :deep(.el-tag--danger) {
+  background-color: color-mix(in srgb, var(--el-color-danger) 20%, transparent);
+  color: var(--el-color-danger);
 }
 
-.dark :deep(.el-tag--primary) {
-  background-color: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
+body.dark-theme :deep(.el-tag--primary) {
+  background-color: color-mix(in srgb, var(--accent-1) 18%, transparent);
+  color: var(--accent-1);
 }
 
 /* 弹窗响应式 */
@@ -469,16 +469,16 @@
   color: var(--text-1) !important;
 }
 
-.dark :deep(.el-pagination button) {
+body.dark-theme :deep(.el-pagination button) {
   --pagination-bg: var(--bg-1);
-  --pagination-color: #e5e7eb;
+  --pagination-color: var(--text-1);
 }
 
 :deep(.el-pagination button:disabled) {
   color: var(--pagination-disabled, #9ca3af);
 }
 
-.dark :deep(.el-pagination button:disabled) {
+body.dark-theme :deep(.el-pagination button:disabled) {
   --pagination-disabled: #6b7280;
 }
 
@@ -487,7 +487,7 @@
   background-color: var(--switch-off-bg, #d1d5db);
 }
 
-.dark :deep(.el-switch__core) {
+body.dark-theme :deep(.el-switch__core) {
   --switch-off-bg: var(--line-1);
 }
 
@@ -495,6 +495,6 @@
   background-color: var(--switch-on-bg, #c97a2b);
 }
 
-.dark :deep(.el-switch.is-checked .el-switch__core) {
-  --switch-on-bg: #c97a2b;
+body.dark-theme :deep(.el-switch.is-checked .el-switch__core) {
+  --switch-on-bg: var(--accent-1);
 }

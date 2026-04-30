@@ -142,7 +142,7 @@ onMounted(() => {
 <template>
   <div class="model-meta-table">
     <div class="mb-4 flex justify-between items-center">
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+      <h2 class="text-lg font-semibold">
         {{ t('admin.modelManagement') }}
       </h2>
       <div class="flex items-center gap-2">
@@ -226,6 +226,7 @@ onMounted(() => {
 
     <div class="mt-4 flex justify-end">
       <el-pagination
+        class="my-custom-pagination"
         background
         layout="total, sizes, prev, pager, next"
         :total="pagination.total"
@@ -276,5 +277,8 @@ onMounted(() => {
 <style scoped>
 .model-meta-table {
   padding: 16px;
+}
+body.dark-theme, .my-custom-pagination {
+    --el-pagination-button-bg-color: var(--bg-1);
 }
 </style>

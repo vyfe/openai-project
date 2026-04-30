@@ -100,7 +100,7 @@ onMounted(() => {
 <template>
   <div class="sql-executor">
     <div class="mb-4">
-      <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
+      <h2 class="text-lg font-semibold mb-2">
         {{ t('admin.sqlExecute') }}
       </h2>
       <p class="text-sm text-gray-500 dark:text-gray-400">

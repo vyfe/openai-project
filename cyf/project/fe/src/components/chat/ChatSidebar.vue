@@ -1205,7 +1205,7 @@ const shouldShowTooltip = (text: string, type: 'title' | 'model') => {
   return false
 }
 
-const MAX_DIALOG_TITLE_LENGTH = 24
+const MAX_DIALOG_TITLE_LENGTH = 16
 
 const formatDialogTitle = (text?: string) => {
   if (!text) return ''
