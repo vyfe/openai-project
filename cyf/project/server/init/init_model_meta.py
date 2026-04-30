@@ -5,7 +5,6 @@ ModelMeta表数据初始化脚本
 从API接口获取模型数据并插入到SQLite数据库中
 """
 
-import sqlite3
 import requests
 import json
 import sys
@@ -14,7 +13,8 @@ import os
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sqlitelog import db, ModelMeta
+from model.db import db
+from model.entities import ModelMeta
 
 
 def fetch_models_data_from_api():
