@@ -26,6 +26,60 @@
   margin-left: 0.5rem; /* 对应 Tailwind 的 ml-2 */
 }
 
+.chat-sidebar :deep(.net-status-tag.el-tag) {
+  border-width: 1px;
+  border-style: solid;
+}
+
+.chat-sidebar :deep(.net-status-tag.net-online.el-tag) {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+.chat-sidebar :deep(.net-status-tag.net-offline.el-tag) {
+  color: #334155 !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+body.dark-theme .chat-sidebar :deep(.net-status-tag.net-online.el-tag) {
+  color: #6ee7b7 !important;
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: rgba(52, 211, 153, 0.7) !important;
+}
+
+body.dark-theme .chat-sidebar :deep(.net-status-tag.net-offline.el-tag) {
+  color: #cbd5e1 !important;
+  background: rgba(71, 85, 105, 0.4) !important;
+  border-color: rgba(148, 163, 184, 0.65) !important;
+}
+
+/* 下拉选项面板会 teleport 到 body，补一份全局 deep 规则确保暗色模式仍然区分 */
+:deep(.net-status-tag.net-online.el-tag) {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+:deep(.net-status-tag.net-offline.el-tag) {
+  color: #334155 !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+body.dark-theme :deep(.net-status-tag.net-online.el-tag) {
+  color: #6ee7b7 !important;
+  background: rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(52, 211, 153, 0.72) !important;
+}
+
+body.dark-theme :deep(.net-status-tag.net-offline.el-tag) {
+  color: #e2e8f0 !important;
+  background: rgba(71, 85, 105, 0.48) !important;
+  border-color: rgba(148, 163, 184, 0.7) !important;
+}
+
 /* 桌面端侧边栏样式 */
 .chat-sidebar:not(.sidebar-mobile) {
   --desktop-sidebar-width: 400px;

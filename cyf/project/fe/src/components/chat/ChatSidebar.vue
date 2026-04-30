@@ -46,8 +46,12 @@
               <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
                 <span>{{ model.label }}</span>
                 <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
-                <el-tooltip :content="model.allow_net !== false ? t('chat.allowNet') : t('chat.disallowNet')"">
-                  <el-tag size="small" :type="model.allow_net !== false ? 'success' : 'info'" class="ml-2">
+                <el-tooltip :content="model.allow_net !== false ? t('chat.allowNet') : t('chat.disallowNet')">
+                  <el-tag
+                    size="small"
+                    :type="model.allow_net !== false ? 'success' : 'info'"
+                    :class="['ml-2', 'net-status-tag', model.allow_net !== false ? 'net-online' : 'net-offline']"
+                  >
                     <el-icon class="mr-1"><Connection /></el-icon>
                   </el-tag>
                 </el-tooltip>

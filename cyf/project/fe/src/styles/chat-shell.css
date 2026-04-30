@@ -833,3 +833,27 @@ body.dark-theme .enhanced-role-group-btn.active {
   width: 100%;
 }
 
+/* 联网状态标签（全局，适配 teleport 到 body 的下拉项） */
+.net-status-tag.net-online.el-tag {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+}
+
+.net-status-tag.net-offline.el-tag {
+  color: #334155 !important;
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+body.dark-theme .net-status-tag.net-online.el-tag {
+  color: #6ee7b7 !important;
+  background: rgba(16, 185, 129, 0.22) !important;
+  border-color: rgba(52, 211, 153, 0.72) !important;
+}
+
+body.dark-theme .net-status-tag.net-offline.el-tag {
+  color: #e2e8f0 !important;
+  background: rgba(71, 85, 105, 0.48) !important;
+  border-color: rgba(148, 163, 184, 0.7) !important;
+}
