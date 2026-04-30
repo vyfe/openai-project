@@ -16,6 +16,9 @@ test_ip_default_limit=20
 test_exceed_msg=异常123
 [log]
 sqlite3_file=
+[quant]
+sqlite3_file=
+bundle_dir=
 [api]
 api_key=
 api_host=

@@ -16,6 +16,91 @@ declare global {
 // 在ES模块中获取当前目录路径
 const __dirname = resolve('.');
 
+const ELEMENT_PLUS_OVERLAY_COMPONENTS = new Set([
+  'dialog',
+  'drawer',
+  'dropdown',
+  'dropdown-item',
+  'dropdown-menu',
+  'popconfirm',
+  'popover',
+  'tooltip',
+])
+
+const ELEMENT_PLUS_FORM_COMPONENTS = new Set([
+  'checkbox',
+  'date-picker',
+  'form',
+  'form-item',
+  'input',
+  'input-number',
+  'option',
+  'radio',
+  'radio-group',
+  'select',
+  'slider',
+  'switch',
+  'upload',
+])
+
+const ELEMENT_PLUS_DATA_COMPONENTS = new Set([
+  'pagination',
+  'skeleton',
+  'table',
+  'table-column',
+  'tag',
+  'tabs',
+  'tab-pane',
+])
+
+const normalizeModuleId = (id: string) => id.replace(/\\/g, '/')
+
+const resolveElementChunk = (id: string) => {
+  const normalizedId = normalizeModuleId(id)
+
+  if (normalizedId.includes('/node_modules/@element-plus/icons-vue/')) {
+    return 'el-icons'
+  }
+
+  if (normalizedId.includes('/node_modules/@floating-ui/')) {
+    return 'el-overlay'
+  }
+
+  if (normalizedId.includes('/node_modules/async-validator/')) {
+    return 'el-form'
+  }
+
+  if (
+    normalizedId.includes('/node_modules/dayjs/') ||
+    normalizedId.includes('/node_modules/@vueuse/core/') ||
+    normalizedId.includes('/node_modules/@vueuse/shared/') ||
+    normalizedId.includes('/node_modules/lodash-unified/')
+  ) {
+    return 'el-shared'
+  }
+
+  if (!normalizedId.includes('/node_modules/element-plus/')) {
+    return null
+  }
+
+  const componentMatch = normalizedId.match(/\/element-plus\/es\/components\/([^/]+)\//)
+  const componentName = componentMatch?.[1]
+
+  if (componentName && ELEMENT_PLUS_OVERLAY_COMPONENTS.has(componentName)) {
+    return 'el-overlay'
+  }
+
+  if (componentName && ELEMENT_PLUS_FORM_COMPONENTS.has(componentName)) {
+    return 'el-form'
+  }
+
+  if (componentName && ELEMENT_PLUS_DATA_COMPONENTS.has(componentName)) {
+    return 'el-data'
+  }
+
+  return 'el-core'
+}
+
 export default defineConfig({
   plugins: [vue(),tailwindcss(),],
   resolve: {
@@ -43,19 +128,54 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // 手动代码分割策略
-        manualChunks: {
-          // Vue相关库打包在一起
-          'vue-vendor': ['vue', 'vue-router', 'pinia'],
-          // UI组件库
-          'ui-vendor': ['element-plus', '@element-plus/icons-vue'],
-          // 工具库
-          'utils-vendor': ['axios', 'highlight.js', 'marked', 'html-to-image'],
-          // 数学公式库
-          'math-vendor': ['katex'],
-          // 国际化
-          'i18n-vendor': ['vue-i18n'],
-          // Tailwind CSS
-          'tailwind-vendor': ['tailwindcss']
+        manualChunks(id) {
+          const normalizedId = normalizeModuleId(id)
+
+          if (!normalizedId.includes('/node_modules/')) {
+            return undefined
+          }
+
+          if (
+            normalizedId.includes('/node_modules/vue/') ||
+            normalizedId.includes('/node_modules/vue-router/') ||
+            normalizedId.includes('/node_modules/pinia/')
+          ) {
+            return 'vue-vendor'
+          }
+
+          if (normalizedId.includes('/node_modules/vue-i18n/')) {
+            return 'i18n-vendor'
+          }
+
+          if (normalizedId.includes('/node_modules/axios/')) {
+            return 'axios-vendor'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/marked/') ||
+            normalizedId.includes('/node_modules/dompurify/')
+          ) {
+            return 'markdown-vendor'
+          }
+
+          if (normalizedId.includes('/node_modules/highlight.js/')) {
+            return 'highlight-vendor'
+          }
+
+          if (normalizedId.includes('/node_modules/katex/')) {
+            return 'math-vendor'
+          }
+
+          if (normalizedId.includes('/node_modules/html-to-image/')) {
+            return 'image-export-vendor'
+          }
+
+          const elementChunk = resolveElementChunk(normalizedId)
+          if (elementChunk) {
+            return elementChunk
+          }
+
+          return 'vendor'
         },
         // 优化chunk大小，生成更多小文件
         chunkFileNames: 'assets/[name]-[hash].js',

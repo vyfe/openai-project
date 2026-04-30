@@ -82,6 +82,9 @@
               <el-dropdown-item v-if="authStore.isAdmin()" @click="goToAdmin" :icon="Setting">
                 {{ t('chat.adminPanel') }}
               </el-dropdown-item>
+              <el-dropdown-item v-if="authStore.isAdmin()" @click="goToQuant" :icon="DataBoard">
+                量化工作台
+              </el-dropdown-item>
               <el-dropdown-item @click="showUserSettings = true" :icon="Setting">
                 {{ t('chat.userSettings') }}
               </el-dropdown-item>
@@ -209,7 +212,7 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell, ArrowDown, Setting } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell, ArrowDown, Setting, DataBoard } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
 import UserSettings from '../components/chat/UserSettings.vue'
@@ -534,6 +537,10 @@ const logout = () => {
 // 跳转到管理面板
 const goToAdmin = () => {
   router.push('/admin')
+}
+
+const goToQuant = () => {
+  router.push('/quant')
 }
 
 // 处理密码更新后的行为
