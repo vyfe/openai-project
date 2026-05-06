@@ -880,12 +880,7 @@ const loadDialogHistory = async () => {
 
 // 清空当前会话
 const clearCurrentSession = () => {
-  // 清空对话标题和当前对话ID
-  formData.dialogTitle = ''
-  formData.currentDialogId = null
-  ElMessage.success('已开启新会话')
-
-  // 通知父组件或ChatContent组件清空消息
+  // 仅通知父组件决定是否新建tab，避免在子组件提前改 currentDialogId 干扰判定逻辑
   emit('clear-session', {})
 }
 

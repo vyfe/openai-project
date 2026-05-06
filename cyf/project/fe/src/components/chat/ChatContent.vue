@@ -439,6 +439,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: any]
   'refresh-history': []
+  'clear-session': []
   'loading-change': [payload: { sessionKey: string, loading: boolean }]
   'session-dialog-created': [payload: { sessionKey: string, dialogId: number }]
 }>()
@@ -800,17 +801,8 @@ const handleFontSizeChange = (size: string) => {
 
 // 清空当前会话
 const clearCurrentSession = () => {
-  messages.splice(0, messages.length)
-  messages.push({
-    type: 'ai',
-    content: t('chat.aiWelcomeMessage'),
-    time: getCurrentTime()
-  })
-  // 清空对话标题和当前对话ID
-  formData.dialogTitle = ''
-  formData.currentDialogId = null
-  ElMessage.success('已开启新会话')
-  saveMessagesToSession(getSessionKey())
+  // 统一交由父组件处理新建会话tab逻辑，避免子组件直接改 currentDialogId 导致tab行为不一致
+  emit('clear-session')
 }
 
 // 切换单条消息的选中状态
