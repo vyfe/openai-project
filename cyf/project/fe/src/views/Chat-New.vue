@@ -132,6 +132,7 @@
         <ChatContent
           :session-key="activeTabKey"
           @refresh-history="refreshHistory"
+          @clear-session="clearSession"
           @loading-change="handleTabLoadingChange"
           @session-dialog-created="handleSessionDialogCreated"
           v-model="formData"
@@ -580,18 +581,12 @@ const handleResize = () => {
 }
 
 const clearSession = () => {
-  const activeTab = getActiveTab()
-  if (isDraftTab(activeTab)) {
-    activeTab!.title = ''
-    syncFormDataFromActiveTab()
-    return
-  }
-
   const rightmostTab = chatTabs.value[chatTabs.value.length - 1]
   if (isDraftTab(rightmostTab)) {
     activeTabKey.value = rightmostTab!.key
     rightmostTab!.title = ''
     syncFormDataFromActiveTab()
+    ElMessage.info(t('chat.alreadyNewSessionWindow'))
     return
   }
 
@@ -694,6 +689,22 @@ watch(() => formData.currentDialogId, (newId) => {
 
   const historyItem = formData.dialogHistory.find((item: any) => item.id === targetDialogId)
   const title = historyItem?.dialog_name || ''
+
+  // 初始化阶段：如果当前只有一个“新会话”tab，则直接复用该tab承载最新历史会话，避免出现“双tab”
+  if (chatTabs.value.length === 1 && isDraftTab(activeTab)) {
+    const modelState = getModelStateByModelName(historyItem?.modelname || '')
+    activeTab.dialogId = targetDialogId
+    activeTab.title = title
+    activeTab.selectedModel = modelState.selectedModel
+    activeTab.selectedModelType = modelState.selectedModelType
+    activeTab.selectedModelAllowNet = modelState.selectedModelAllowNet
+    activeTab.providerValue = modelState.providerValue
+    activeTab.modelValue = modelState.modelValue
+    activeTab.currentModelDesc = modelState.currentModelDesc
+    syncFormDataFromActiveTab()
+    return
+  }
+
   createChatTab(targetDialogId, title, historyItem?.modelname || '')
 })
 
