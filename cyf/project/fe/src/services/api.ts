@@ -42,7 +42,7 @@ const getAuthHeaders = async () => {
 }
 
 export const chatAPI = {
-  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number) => {
+  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number, roleSetting?: any) => {
     const data: any = {
       model,
       dialog: message
@@ -54,6 +54,7 @@ export const chatAPI = {
     if (dialogTitle) data.dialog_title = dialogTitle
     if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
     if (systemPromptId) data.system_prompt_id = systemPromptId
+    if (roleSetting) data.role_setting = roleSetting
     return api.post('/never_guess_my_usage/split', data)
   },
 
@@ -66,6 +67,7 @@ export const chatAPI = {
     dialogTitle?: string,
     maxResponseTokens?: number,
     systemPromptId?: number,
+    roleSetting?: any,
     requestId?: string,
     signal?: AbortSignal
   ): Promise<void> => {
@@ -80,6 +82,7 @@ export const chatAPI = {
     if (dialogTitle) data.dialog_title = dialogTitle
     if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
     if (systemPromptId) data.system_prompt_id = systemPromptId
+    if (roleSetting) data.role_setting = roleSetting
     if (requestId) data.request_id = requestId
 
     const headers = await getAuthHeaders()
@@ -139,7 +142,7 @@ export const chatAPI = {
     })
   },
 
-  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number) => {
+  sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number, roleSetting?: any) => {
     const data: any = {
       model,
       dialog: prompt
@@ -152,6 +155,7 @@ export const chatAPI = {
     if (imageSize) data.size = imageSize
     if (dialogId) data.dialogId = dialogId
     if (systemPromptId) data.system_prompt_id = systemPromptId
+    if (roleSetting) data.role_setting = roleSetting
     return api.post('/never_guess_my_usage/split_pic', data)
   },
 
