@@ -442,9 +442,30 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: any]
   'refresh-history': []
+  'clear-session': []
   'loading-change': [payload: { sessionKey: string, loading: boolean }]
   'session-dialog-created': [payload: { sessionKey: string, dialogId: number }]
+  'role-setting-loaded': [payload: { sessionKey: string, roleSetting: any }]
 }>()
+
+const buildRoleSetting = () => ({
+  enhanced_role_enabled: !!formData.enhancedRoleEnabled,
+  system_prompt_id: formData.enhancedRoleEnabled ? (formData.systemPromptId || null) : null,
+  active_enhanced_group: formData.enhancedRoleEnabled ? (formData.activeEnhancedGroup || '') : '',
+  selected_enhanced_role: formData.enhancedRoleEnabled ? (formData.selectedEnhancedRole || '') : '',
+  system_prompt: formData.enhancedRoleEnabled ? '' : (formData.systemPrompt || ''),
+  active_role_id: formData.enhancedRoleEnabled ? '' : (formData.activeRoleId || 'default')
+})
+
+const applyRoleSetting = (roleSetting: any) => {
+  if (!roleSetting || typeof roleSetting !== 'object') return
+  formData.enhancedRoleEnabled = !!roleSetting.enhanced_role_enabled
+  formData.systemPromptId = roleSetting.system_prompt_id ? Number(roleSetting.system_prompt_id) : undefined
+  formData.activeEnhancedGroup = roleSetting.active_enhanced_group || ''
+  formData.selectedEnhancedRole = roleSetting.selected_enhanced_role || ''
+  formData.systemPrompt = roleSetting.system_prompt || ''
+  formData.activeRoleId = roleSetting.active_role_id || 'default'
+}
 
 // 添加加载对话内容的方法
 const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) => {
@@ -462,6 +483,11 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
       return
     }
     if (response && response.content) {
+      const roleSetting = response.content.role_setting
+      if (roleSetting) {
+        applyRoleSetting(roleSetting)
+        emit('role-setting-loaded', { sessionKey: targetSessionKey, roleSetting })
+      }
       // 将消息数组替换为历史对话内容
       messages.splice(0, messages.length) // 清空现有消息
       const context = response.content.context
@@ -803,17 +829,8 @@ const handleFontSizeChange = (size: string) => {
 
 // 清空当前会话
 const clearCurrentSession = () => {
-  messages.splice(0, messages.length)
-  messages.push({
-    type: 'ai',
-    content: t('chat.aiWelcomeMessage'),
-    time: getCurrentTime()
-  })
-  // 清空对话标题和当前对话ID
-  formData.dialogTitle = ''
-  formData.currentDialogId = null
-  ElMessage.success('已开启新会话')
-  saveMessagesToSession(getSessionKey())
+  // 统一交由父组件处理新建会话tab逻辑，避免子组件直接改 currentDialogId 导致tab行为不一致
+  emit('clear-session')
 }
 
 // 切换单条消息的选中状态
@@ -1364,6 +1381,12 @@ function getCurrentTime() {
   })
 }
 
+function getCurrentDateTime() {
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+}
+
 // 复制消息内容到剪贴板
 const copyMessageContent = async (content: string) => {
   try {
@@ -1603,6 +1626,7 @@ const callApi = async (
   const { isRetry = false, originalIndex, isContinue = false, imageSize = '1024x1024' } = options;
   let wasUserAborted = false;
   const requestSessionKey = getSessionKey()
+  const roleSetting = buildRoleSetting()
 
   setSessionLoading(requestSessionKey, true)
 
@@ -1617,11 +1641,12 @@ const callApi = async (
         formData.selectedModel,
         userMessage.content,
         'single',
-        buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content),
+        buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time),
         formData.dialogTitle,
         imageSize,  // 添加图片尺寸参数
         formData.currentDialogId || 0,
-        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
+        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
+        roleSetting
       );
 
       // 处理响应 - 简化逻辑，只关注URL字段
@@ -1646,6 +1671,10 @@ const callApi = async (
 
         // 检查并更新对话ID（如果后端返回了新的对话ID）
         if (aiResponse.dialog_id && !formData.currentDialogId) {
+          emit('session-dialog-created', {
+            sessionKey: requestSessionKey,
+            dialogId: Number(aiResponse.dialog_id)
+          })
           formData.currentDialogId = aiResponse.dialog_id;
           // 如果没有设置标题，使用新对话的ID作为标题
           if (!formData.dialogTitle.trim()) {
@@ -1680,7 +1709,7 @@ const callApi = async (
         messages.splice(originalIndex, 1, {
           type: 'ai',
           content: responseContent,
-          time: getCurrentTime()
+          time: aiResponse?.time || getCurrentTime()
         });
       } else {
         // 添加新AI消息 - 如果responseContent是图片URL，也设置url字段
@@ -1694,7 +1723,7 @@ const callApi = async (
           type: 'ai',
           content: responseContent,
           url: finalUrl, // 设置url字段以便直接预览
-          time: getCurrentTime()
+          time: aiResponse?.time || getCurrentTime()
         });
       }
     } else {
@@ -1729,7 +1758,7 @@ const callApi = async (
         startWaitingChoiceTimer()
 
         // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
-        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content);
+        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time);
 
         await chatAPI.sendChatStream(
           formData.selectedModel,
@@ -1759,6 +1788,9 @@ const callApi = async (
                 } else if (targetMessages[aiMessageIndex].content === '') {
                   targetMessages[aiMessageIndex].isError = true;
                 }
+                if (response?.time) {
+                  targetMessages[aiMessageIndex].time = response.time
+                }
               })
 
               // 检查并更新对话ID（如果后端返回了新的对话ID）
@@ -1787,6 +1819,7 @@ const callApi = async (
           formData.dialogTitle,  // 添加dialogTitle参数
           Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
           formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
+          roleSetting,
           requestId,
           abortController.signal
         );
@@ -1813,7 +1846,7 @@ const callApi = async (
         }
 
         // 使用之前保存的上下文快照构建对话数组
-        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content);
+        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time);
 
         const response: any = await chatAPI.sendChat(
           formData.selectedModel,
@@ -1822,13 +1855,17 @@ const callApi = async (
           dialogArray,
           formData.dialogTitle,
           Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
-          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
+          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
+          roleSetting
         );
 
         // 更新AI消息内容
         mutateSessionMessages(requestSessionKey, (targetMessages) => {
           if (!targetMessages[aiMessageIndex]) return
           targetMessages[aiMessageIndex].content = response.content
+          if (response.time) {
+            targetMessages[aiMessageIndex].time = response.time
+          }
           if (response.finish_reason === 'length') {
             targetMessages[aiMessageIndex].finishReason = response.finish_reason as 'length';
             targetMessages[aiMessageIndex].isTruncated = true;
@@ -1989,7 +2026,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
   const userMessage = {
     type: 'user' as const,
     content: processedMessage,
-    time: getCurrentTime(),
+    time: getCurrentDateTime(),
     file: file || undefined
   }
 
@@ -2016,15 +2053,17 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
     // 调用图片生成API并传递尺寸参数
     try {
       isLoading.value = true;
+      const roleSetting = buildRoleSetting()
       const aiResponse: any = await chatAPI.sendImageGeneration(
         formData.selectedModel,
         processedMessage,
         formData.contextCount > 0 ? 'multi' : 'single',
-        buildDialogArrayFromSnapshot(contextSnapshot, processedMessage),
+        buildDialogArrayFromSnapshot(contextSnapshot, processedMessage, userMessage.time),
         formData.dialogTitle,
         finalImageSize,  // 传递图片尺寸参数
         formData.currentDialogId || 0,  // 传递对话ID参数
-        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined  // 传递 system_prompt_id
+        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
+        roleSetting
       );
 
       // 处理响应
@@ -2049,6 +2088,10 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
 
           // 检查并更新对话ID（如果后端返回了新的对话ID）
           if (aiResponse.dialog_id && !formData.currentDialogId) {
+            emit('session-dialog-created', {
+              sessionKey: getSessionKey(),
+              dialogId: Number(aiResponse.dialog_id)
+            })
             formData.currentDialogId = aiResponse.dialog_id;
             // 如果没有设置标题，使用新对话的ID作为标题
             if (!formData.dialogTitle.trim()) {
@@ -2067,7 +2110,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
         type: 'ai',
         content: responseContent,
         url: imageUrl, // 设置url字段以便直接预览
-        time: getCurrentTime()
+        time: aiResponse?.time || getCurrentTime()
       });
     } catch (error: any) {
       console.error('图片生成API Error:', error);
@@ -2194,7 +2237,7 @@ const continueGeneration = async (index: number) => {
   const userMessage = {
     type: 'user' as const,
     content: "请继续生成未完成的内容，直接从上次中断的地方继续，不要重复已生成的内容。",
-    time: getCurrentTime()
+    time: getCurrentDateTime()
   };
 
   // 准备上下文信息
@@ -2207,8 +2250,8 @@ const continueGeneration = async (index: number) => {
 }
 
 // 从消息快照构建对话数组函数
-const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): Array<{role: string, content: string}> => {
-  const dialogArray: Array<{role: string, content: string, url?: string}> = []
+const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string, currentTime?: string): Array<{role: string, content: string, time?: string}> => {
+  const dialogArray: Array<{role: string, content: string, url?: string, time?: string}> = []
 
   // 注意：不再在这里拼装 system 消息
   // system 消息现在由后端根据 system_prompt_id 来获取并添加
@@ -2219,7 +2262,7 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
 
   // 如果上下文数量为 0，只发送当前消息
   if (formData.contextCount === 0) {
-    dialogArray.push({ role: 'user', content: currentMessage })
+    dialogArray.push({ role: 'user', content: currentMessage, time: currentTime || getCurrentDateTime() })
     return dialogArray
   }
 
@@ -2233,11 +2276,12 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string): 
     dialogArray.push({
       role: msg.type === 'user' ? 'user' : 'assistant',
       content: msg.content,
-      url: msg.url || ''
+      url: msg.url || '',
+      time: msg.time
     })
   }
 
-  dialogArray.push({ role: 'user', content: currentMessage })
+  dialogArray.push({ role: 'user', content: currentMessage, time: currentTime || getCurrentDateTime() })
   return dialogArray
 }
 

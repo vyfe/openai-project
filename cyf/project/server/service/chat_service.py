@@ -8,6 +8,7 @@ from model.repositories.log_repository import set_dialog, set_log
 from model.repositories.model_meta_repository import get_system_prompt_by_id
 from model.repositories.user_repository import check_test_limit_exceeded, get_user_api_key, increment_test_limit
 from service.common_service import handle_api_exception
+from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
 from service.model_service import is_valid_model
 
@@ -110,11 +111,22 @@ def run_chat_completion(user: str, payload, logger):
         result = client.chat.completions.create(**api_params)
         tokens = result.usage.total_tokens
         set_log(user, tokens, model, json.dumps(result.to_dict()))
-        dialog_id = set_dialog(user, model, "chat", title, json.dumps(dialogvo + [result.choices[0].message.to_dict()]))
+        request_messages = stamp_latest_user_message(dialogvo)
+        assistant_time = current_time_str()
+        assistant_message = result.choices[0].message.to_dict()
+        assistant_message["time"] = assistant_time
+        dialog_id = set_dialog(
+            user,
+            model,
+            "chat",
+            title,
+            build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+        )
         response_data = {
             "role": result.choices[0].message.role,
             "content": result.choices[0].message.content,
             "finish_reason": result.choices[0].finish_reason,
+            "time": assistant_time,
         }
         if dialog_id:
             response_data["dialog_id"] = dialog_id

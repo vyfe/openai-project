@@ -184,7 +184,8 @@ const messages = {
       selectAll: '全选',
       deselectAll: '取消全选',
       exportSelected: '导出选中对话内容',
-      noMessagesSelected: '请先选择要导出的消息'
+      noMessagesSelected: '请先选择要导出的消息',
+      alreadyNewSessionWindow: '已经是新会话窗口'
     },
     admin: {
       title: '管理后台',
@@ -521,7 +522,8 @@ const messages = {
       selectAll: 'Select All',
       deselectAll: 'Deselect All',
       exportSelected: 'Export Selected',
-      noMessagesSelected: 'Please select messages to export'
+      noMessagesSelected: 'Please select messages to export',
+      alreadyNewSessionWindow: 'Already in a new session window'
     },
     login: {
       title: 'Smart Conversation System',

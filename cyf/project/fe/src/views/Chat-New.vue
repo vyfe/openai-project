@@ -135,8 +135,10 @@
         <ChatContent
           :session-key="activeTabKey"
           @refresh-history="refreshHistory"
+          @clear-session="clearSession"
           @loading-change="handleTabLoadingChange"
           @session-dialog-created="handleSessionDialogCreated"
+          @role-setting-loaded="handleRoleSettingLoaded"
           v-model="formData"
         />
       </div>
@@ -240,6 +242,12 @@ type ChatTab = {
   providerValue: string
   modelValue: string
   currentModelDesc: string
+  enhancedRoleEnabled: boolean
+  systemPrompt: string
+  systemPromptId?: number
+  activeEnhancedGroup: string
+  selectedEnhancedRole: string
+  activeRoleId: string
 }
 
 // 组件间共享状态
@@ -295,6 +303,16 @@ const showNotificationPanel = ref(false)
 const showUserSettings = ref(false)
 
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
+
+const getRoleStateFromForm = () => ({
+  enhancedRoleEnabled: !!formData.enhancedRoleEnabled,
+  systemPrompt: formData.systemPrompt || '',
+  systemPromptId: formData.systemPromptId,
+  activeEnhancedGroup: formData.activeEnhancedGroup || '',
+  selectedEnhancedRole: formData.selectedEnhancedRole || '',
+  activeRoleId: formData.activeRoleId || 'default',
+})
+
 const getModelStateByModelName = (modelName?: string) => {
   const modelKey = (modelName || '').trim()
   const fallback = {
@@ -333,6 +351,7 @@ const chatTabs = ref<ChatTab[]>([{
   loading: false,
   unread: false,
   ...getModelStateByModelName(formData.selectedModel || ''),
+  ...getRoleStateFromForm(),
 }])
 const activeTabKey = ref(chatTabs.value[0].key)
 
@@ -397,6 +416,16 @@ const updateCurrentDialogId = (id: number | null) => {
 const getActiveTab = () => chatTabs.value.find(tab => tab.key === activeTabKey.value)
 const isDraftTab = (tab?: ChatTab | null) => !!tab && tab.dialogId === null && !tab.loading
 
+const applyRoleSettingToTab = (tab: ChatTab, roleSetting: any) => {
+  if (!roleSetting || typeof roleSetting !== 'object') return
+  tab.enhancedRoleEnabled = !!roleSetting.enhanced_role_enabled
+  tab.systemPrompt = roleSetting.system_prompt || ''
+  tab.systemPromptId = roleSetting.system_prompt_id ? Number(roleSetting.system_prompt_id) : undefined
+  tab.activeEnhancedGroup = roleSetting.active_enhanced_group || ''
+  tab.selectedEnhancedRole = roleSetting.selected_enhanced_role || ''
+  tab.activeRoleId = roleSetting.active_role_id || 'default'
+}
+
 const syncFormDataFromActiveTab = () => {
   const tab = getActiveTab()
   if (!tab) return
@@ -408,6 +437,12 @@ const syncFormDataFromActiveTab = () => {
   formData.providerValue = tab.providerValue
   formData.modelValue = tab.modelValue
   formData.currentModelDesc = tab.currentModelDesc
+  formData.enhancedRoleEnabled = tab.enhancedRoleEnabled
+  formData.systemPrompt = tab.systemPrompt
+  formData.systemPromptId = tab.systemPromptId
+  formData.activeEnhancedGroup = tab.activeEnhancedGroup
+  formData.selectedEnhancedRole = tab.selectedEnhancedRole
+  formData.activeRoleId = tab.activeRoleId
 }
 
 const createChatTab = (dialogId: number | null = null, title: string = '', modelName?: string) => {
@@ -419,6 +454,7 @@ const createChatTab = (dialogId: number | null = null, title: string = '', model
     loading: false,
     unread: false,
     ...modelState,
+    ...getRoleStateFromForm(),
   }
   chatTabs.value.push(tab)
   activeTabKey.value = tab.key
@@ -468,6 +504,15 @@ const handleSessionDialogCreated = (payload: { sessionKey: string, dialogId: num
   tab.dialogId = payload.dialogId
   if (payload.sessionKey === activeTabKey.value) {
     formData.currentDialogId = payload.dialogId
+  }
+}
+
+const handleRoleSettingLoaded = (payload: { sessionKey: string, roleSetting: any }) => {
+  const tab = chatTabs.value.find(item => item.key === payload.sessionKey)
+  if (!tab) return
+  applyRoleSettingToTab(tab, payload.roleSetting)
+  if (payload.sessionKey === activeTabKey.value) {
+    syncFormDataFromActiveTab()
   }
 }
 
@@ -587,18 +632,12 @@ const handleResize = () => {
 }
 
 const clearSession = () => {
-  const activeTab = getActiveTab()
-  if (isDraftTab(activeTab)) {
-    activeTab!.title = ''
-    syncFormDataFromActiveTab()
-    return
-  }
-
   const rightmostTab = chatTabs.value[chatTabs.value.length - 1]
   if (isDraftTab(rightmostTab)) {
     activeTabKey.value = rightmostTab!.key
     rightmostTab!.title = ''
     syncFormDataFromActiveTab()
+    ElMessage.info(t('chat.alreadyNewSessionWindow'))
     return
   }
 
@@ -701,6 +740,23 @@ watch(() => formData.currentDialogId, (newId) => {
 
   const historyItem = formData.dialogHistory.find((item: any) => item.id === targetDialogId)
   const title = historyItem?.dialog_name || ''
+
+  // 初始化阶段：如果当前只有一个“新会话”tab，则直接复用该tab承载最新历史会话，避免出现“双tab”
+  if (chatTabs.value.length === 1 && isDraftTab(activeTab)) {
+    const modelState = getModelStateByModelName(historyItem?.modelname || '')
+    activeTab.dialogId = targetDialogId
+    activeTab.title = title
+    activeTab.selectedModel = modelState.selectedModel
+    activeTab.selectedModelType = modelState.selectedModelType
+    activeTab.selectedModelAllowNet = modelState.selectedModelAllowNet
+    activeTab.providerValue = modelState.providerValue
+    activeTab.modelValue = modelState.modelValue
+    activeTab.currentModelDesc = modelState.currentModelDesc
+    Object.assign(activeTab, getRoleStateFromForm())
+    syncFormDataFromActiveTab()
+    return
+  }
+
   createChatTab(targetDialogId, title, historyItem?.modelname || '')
 })
 
@@ -715,6 +771,20 @@ watch(
     tab.providerValue = providerValue || ''
     tab.modelValue = modelValue || ''
     tab.currentModelDesc = currentModelDesc || ''
+  }
+)
+
+watch(
+  () => [formData.enhancedRoleEnabled, formData.systemPrompt, formData.systemPromptId, formData.activeEnhancedGroup, formData.selectedEnhancedRole, formData.activeRoleId],
+  ([enhancedRoleEnabled, systemPrompt, systemPromptId, activeEnhancedGroup, selectedEnhancedRole, activeRoleId]) => {
+    const tab = getActiveTab()
+    if (!tab) return
+    tab.enhancedRoleEnabled = !!enhancedRoleEnabled
+    tab.systemPrompt = systemPrompt || ''
+    tab.systemPromptId = systemPromptId ? Number(systemPromptId) : undefined
+    tab.activeEnhancedGroup = activeEnhancedGroup || ''
+    tab.selectedEnhancedRole = selectedEnhancedRole || ''
+    tab.activeRoleId = activeRoleId || 'default'
   }
 )
 

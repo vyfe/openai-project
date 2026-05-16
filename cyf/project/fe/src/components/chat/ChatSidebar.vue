@@ -384,6 +384,7 @@ const handleSystemPromptBlur = () => {
 // 加载增强角色数据
 const loadEnhancedRoles = async () => {
   if (!formData.enhancedRoleEnabled) return
+  if (loadingEnhancedRoles.value) return
 
   loadingEnhancedRoles.value = true
   try {
@@ -399,18 +400,31 @@ const loadEnhancedRoles = async () => {
         return
       }
 
+      let targetGroup = ''
+      let targetRole: any = null
+      if (formData.systemPromptId) {
+        for (const groupName of groupNames) {
+          const matchedRole = response.groups[groupName].find((role: any) => Number(role.id) === Number(formData.systemPromptId))
+          if (matchedRole) {
+            targetGroup = groupName
+            targetRole = matchedRole
+            break
+          }
+        }
+      }
+
       const hasValidActiveGroup =
         formData.activeEnhancedGroup &&
         response.groups[formData.activeEnhancedGroup] &&
         response.groups[formData.activeEnhancedGroup].length > 0
-      const targetGroup = hasValidActiveGroup ? formData.activeEnhancedGroup : groupNames[0]
+      targetGroup = targetGroup || (hasValidActiveGroup ? formData.activeEnhancedGroup : groupNames[0])
 
       formData.activeEnhancedGroup = targetGroup
       localStorage.setItem('activeEnhancedGroup', targetGroup)
 
       const targetRoles = response.groups[targetGroup] || []
       if (targetRoles.length > 0) {
-        const targetRole = targetRoles.find((role: any) => role.role_name === formData.selectedEnhancedRole) || targetRoles[0]
+        targetRole = targetRole || targetRoles.find((role: any) => role.role_name === formData.selectedEnhancedRole) || targetRoles[0]
         formData.selectedEnhancedRole = targetRole.role_name
         formData.systemPromptId = targetRole.id
         localStorage.setItem('selectedEnhancedRole', targetRole.role_name)
@@ -423,6 +437,38 @@ const loadEnhancedRoles = async () => {
   } finally {
     loadingEnhancedRoles.value = false
   }
+}
+
+const syncEnhancedRoleSelection = async () => {
+  if (!formData.enhancedRoleEnabled) return
+  if (Object.keys(formData.enhancedRoleGroups || {}).length === 0) {
+    await loadEnhancedRoles()
+    return
+  }
+
+  const groups = formData.enhancedRoleGroups || {}
+  let targetGroup = formData.activeEnhancedGroup
+  let targetRole: any = null
+
+  if (formData.systemPromptId) {
+    for (const [groupName, roles] of Object.entries(groups)) {
+      const matchedRole = (roles as any[]).find((role: any) => Number(role.id) === Number(formData.systemPromptId))
+      if (matchedRole) {
+        targetGroup = groupName
+        targetRole = matchedRole
+        break
+      }
+    }
+  }
+
+  if (!targetRole && targetGroup && groups[targetGroup]) {
+    targetRole = groups[targetGroup].find((role: any) => role.role_name === formData.selectedEnhancedRole)
+  }
+
+  if (!targetRole) return
+  formData.activeEnhancedGroup = targetGroup
+  formData.selectedEnhancedRole = targetRole.role_name
+  formData.systemPromptId = targetRole.id
 }
 
 // 处理增强角色启用状态切换
@@ -813,6 +859,13 @@ watch(() => formData.selectedModel, (newValue) => {
   }
 })
 
+watch(
+  () => [formData.enhancedRoleEnabled, formData.activeEnhancedGroup, formData.selectedEnhancedRole, formData.systemPromptId],
+  () => {
+    syncEnhancedRoleSelection()
+  }
+)
+
 // Component-specific reactive state that isn't shared through formData and needs initialization
 const loadingEnhancedRoles = ref(false)
 const enhancedGroupNames = computed(() => Object.keys(formData.enhancedRoleGroups || {}))
@@ -880,12 +933,7 @@ const loadDialogHistory = async () => {
 
 // 清空当前会话
 const clearCurrentSession = () => {
-  // 清空对话标题和当前对话ID
-  formData.dialogTitle = ''
-  formData.currentDialogId = null
-  ElMessage.success('已开启新会话')
-
-  // 通知父组件或ChatContent组件清空消息
+  // 仅通知父组件决定是否新建tab，避免在子组件提前改 currentDialogId 干扰判定逻辑
   emit('clear-session', {})
 }
 

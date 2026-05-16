@@ -3,8 +3,8 @@
 ## 项目概述
 
 这是一个基于 Python 的 OpenAI API 客户端-服务端项目，包含：
-- Flask 后端服务（支持多 API Host、多用户/多 Key、模型过滤与缓存）
-- Vue 3 + TypeScript 前端
+- Flask 后端服务（支持多 API Host 轮询+黑名单机制、多用户/多 Key、模型过滤与缓存）
+- Vue 3 + TypeScript 前端（Pinia 状态管理 + TailwindCSS + Vue I18n 国际化 + highlight.js/KaTeX/marked 渲染）
 - 旧版 CustomTkinter 桌面客户端（已基本弃用）
 
 ## 项目结构
@@ -12,44 +12,82 @@
 ```
 cyf/
 └── project/
-    ├── client/              # 旧版客户端（Python/Tkinter）
+    ├── client/                 # 旧版客户端（Python/Tkinter）
     │   ├── client.py
     │   ├── client_support.py
     │   ├── client_pack.py
     │   └── conf/
-    ├── fe/                  # Vue 3 前端
+    ├── fe/                     # Vue 3 前端
     │   ├── src/
+    │   │   ├── components/     # Vue 组件（chat/, admin/）
+    │   │   ├── composables/    # 组合式函数
+    │   │   ├── router/         # Vue Router
+    │   │   ├── services/       # API 客户端（httpClient.ts 定义 API 地址）
+    │   │   ├── stores/         # Pinia 状态管理
+    │   │   ├── styles/         # 样式文件（含响应式、暗色主题）
+    │   │   ├── utils/          # 工具函数
+    │   │   └── views/          # 页面视图
     │   ├── public/
     │   ├── local-run.sh
     │   ├── server.js
     │   ├── nginx.conf.tpl
     │   ├── package.json
     │   └── vite.config.ts
-    └── server/              # Flask 后端
-        ├── server.py
-        ├── init_model_meta.py
-        ├── sqlitelog.py
+    └── server/                 # Flask 后端（分层架构）
+        ├── server.py           # 应用入口（工厂模式+蓝图注册）
+        ├── sqlitelog.py        # SQLite 日志兼容层
         ├── local-run.sh
         ├── deploy.sh
-        └── conf/
-            ├── conf.ini.tpl
-            └── uwsgi.ini
+        ├── conf/               # 配置层
+        │   ├── app_factory.py  # Flask 应用工厂
+        │   ├── settings.py     # 配置解析器
+        │   ├── runtime.py      # 运行时状态（含黑名单、allowed_extensions）
+        │   ├── logging_config.py
+        │   ├── conf.ini.tpl
+        │   └── uwsgi.ini
+        ├── routes/             # 路由层
+        │   ├── public_routes.py
+        │   └── admin_routes.py
+        ├── service/            # 业务逻辑层
+        │   ├── chat_service.py
+        │   ├── stream_service.py
+        │   ├── model_service.py
+        │   ├── host_service.py
+        │   ├── image_service.py
+        │   ├── auth_service.py
+        │   ├── dialog_service.py
+        │   ├── dialog_context_service.py
+        │   ├── usage_service.py
+        │   └── ...
+        ├── model/              # 数据访问层
+        │   ├── db.py
+        │   ├── entities.py     # ORM 实体
+        │   └── repositories/   # 数据仓库模式
+        ├── dto/                # 数据传输对象
+        └── init/               # 初始化脚本
+            └── init_model_meta.py
 ```
 
 ## 关键脚本
 
 - `start-dev.sh`：本地同时启动前后端（会清理 3000/39997 端口）
-- `cyf/project/server/local-run.sh`：后端本地启动，自动安装依赖并记录 `.pip_cache_timestamp`
+- `cyf/project/server/local-run.sh`：后端本地启动，自动安装依赖并记录 `.pip_cache_timestamp`。注意：`start-prod.sh` 默认无执行权限，首次运行需 `chmod +x`
 - `cyf/project/fe/local-run.sh`：前端本地启动，自动 `npm install` 并记录 `.node_modules_timestamp`
 - `start-prod.sh`：生产环境一键启动（依赖 `uwsgi` + `nginx`，解压 `server.tar.gz`/`fe.tar.gz`）
 - `full-pack-prod.sh` / `pack-prod.sh`：生产打包脚本（详见根目录 README）
 
 ## 服务端 (server/)
 
-- Flask + `openai` SDK，支持多 API Host 轮询
-- `common.users` 支持多行 YAML 风格配置：`用户名:密码:可选APIKey`
-- 模型列表缓存与过滤：`model_filter.include_prefixes` / `exclude_keywords` / `cache_ttl`
-- Gemini 模型自动转换消息格式（文本 + `FILE_URL` 标记）
+后端采用分层架构：`routes/`（路由层）→ `service/`（业务逻辑层）→ `model/`（数据访问层），配置由 `conf/` 管理。
+
+- Flask + `openai` SDK，支持多 API Host 轮询。失败的 Host 会被自动拉黑 5 分钟（黑名单机制，位于 `service/host_service.py`），过期后自动恢复
+- `common.users` 支持多行 YAML 风格配置：`用户名:密码:可选APIKey`（当前默认使用数据库认证 `use_db_auth=True`）
+- 模型列表缓存与过滤：
+  - `model_filter.exclude_keywords`：排除含指定关键词的模型（当前生效）
+  - `model_filter.cache_ttl`：模型列表缓存时间（秒）
+  - `model_filter.include_prefixes`：配置文件中定义但**当前代码未实际用于过滤**，实际过滤仅使用 `exclude_keywords`
+- Gemini 模型自动转换消息格式（文本 + `FILE_URL` 标记 → Gemini 兼容的 `{type: "file_url"}` 格式）
+- 初始化脚本位于 `server/init/` 目录：`init_model_meta.py`（模型元数据初始化）、`init_user_data.py`（用户数据初始化）
 - 主要接口前缀：`/never_guess_my_usage`
   - `/login` 登录
   - `/download` 文件上传
@@ -64,8 +102,10 @@ cyf/
 ## 前端 (fe/)
 
 - Vue 3 + TypeScript + Vite + Element Plus
-- API 地址在 `cyf/project/fe/src/services/api.ts`，开发环境默认 `http://localhost:39997`
-- 支持 SSE 流式聊天（`/split_stream`）
+- 额外依赖：Pinia（状态管理）、TailwindCSS（样式框架）、Vue I18n（国际化）、highlight.js（代码高亮）、KaTeX（公式渲染）、marked（Markdown 渲染）
+- API 基地址在 `cyf/project/fe/src/services/httpClient.ts` 中定义（`api.ts` 中引用），开发环境默认 `http://localhost:39997`，生产环境使用 `window.location.hostname`
+- 支持 SSE 流式聊天（`/split_stream`），含 AbortController 取消机制
+- JWT Token 自动刷新机制（`httpClient.ts` 拦截器自动处理 401 重试）
 
 ## 配置说明 (conf/conf.ini)
 
@@ -75,7 +115,7 @@ cyf/
 - `api.api_key` / `api.api_host`：OpenAI Key/Host（`api_host` 支持逗号分隔）
 - `api.usd_to_cny_rate`：美元到人民币转换比例
 - `api.api_param_mode`：`default`（日期字符串）或 `timestamp`（毫秒时间戳）
-- `model_filter.include_prefixes` / `exclude_keywords` / `cache_ttl`
+- `model_filter.include_prefixes` / `exclude_keywords` / `cache_ttl`：`include_prefixes` 已定义但当前过滤代码仅使用 `exclude_keywords`
 
 ## 关键运行说明
 

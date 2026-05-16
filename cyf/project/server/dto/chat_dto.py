@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from service.dialog_context_service import parse_role_setting
+
 
 @dataclass
 class ChatRequest:
@@ -9,6 +11,7 @@ class ChatRequest:
     dialog_mode: str
     dialog_title: str
     system_prompt_id: str
+    role_setting: Optional[dict]
     max_response_tokens: Optional[int]
 
     @classmethod
@@ -21,6 +24,7 @@ class ChatRequest:
             dialog_mode=str(data.get("dialog_mode", "single")).strip(),
             dialog_title=str(data.get("dialog_title", "")).strip(),
             system_prompt_id=str(data.get("system_prompt_id", "")).strip(),
+            role_setting=parse_role_setting(data.get("role_setting")),
             max_response_tokens=max_tokens,
         )
 
@@ -38,6 +42,7 @@ class StreamChatRequest(ChatRequest):
             dialog_mode=base.dialog_mode,
             dialog_title=base.dialog_title,
             system_prompt_id=base.system_prompt_id,
+            role_setting=base.role_setting,
             max_response_tokens=base.max_response_tokens,
             request_id=str(data.get("request_id", "")).strip(),
         )
@@ -57,6 +62,7 @@ class ImageChatRequest(ChatRequest):
             dialog_mode=base.dialog_mode,
             dialog_title=base.dialog_title,
             system_prompt_id=base.system_prompt_id,
+            role_setting=base.role_setting,
             max_response_tokens=base.max_response_tokens,
             size=str(data.get("size", "1024x1024")).strip(),
             dialog_id=str(data.get("dialogId", "")).strip(),

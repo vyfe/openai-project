@@ -585,6 +585,12 @@
     column-gap: 12px;
   }
 
+  /* 附件预览始终占据整行，避免把输入框挤到右列 */
+  .file-preview-area {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
   .message-input {
     min-width: 0;
   }

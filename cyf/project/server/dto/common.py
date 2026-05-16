@@ -10,7 +10,10 @@ def get_request_data(as_text: bool = False):
         json_data = request.get_json(silent=True)
         if json_data:
             if as_text:
-                return {key: str(value) for key, value in json_data.items()}
+                return {
+                    key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+                    for key, value in json_data.items()
+                }
             return json_data
         return request.values
     return request.values

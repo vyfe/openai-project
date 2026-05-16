@@ -7,6 +7,7 @@ from conf.runtime import runtime_state
 from model.repositories.log_repository import set_dialog, set_log
 from service.chat_service import check_test_user_limit, convert_dialog_for_model, is_valid_model, prepare_dialog
 from service.common_service import generate_sse_error, handle_api_exception
+from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
 
 
@@ -107,8 +108,17 @@ def stream_chat(user: str, payload, logger):
                 return
             tokens_used = len(full_content.encode("utf-8")) // 4
             set_log(user, tokens_used, model, json.dumps({"content": full_content}))
-            dialog_id = set_dialog(user, model, "chat", title, json.dumps(dialogvo + [{"role": "assistant", "content": full_content}]))
-            yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id})}\n\n"
+            request_messages = stamp_latest_user_message(dialogvo)
+            assistant_time = current_time_str()
+            assistant_message = {"role": "assistant", "content": full_content, "time": assistant_time}
+            dialog_id = set_dialog(
+                user,
+                model,
+                "chat",
+                title,
+                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+            )
+            yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time})}\n\n"
         except Exception as api_exc:
             error_response = handle_api_exception(api_exc, logger, user=user, model=model, dialog_content=dialogs, url_index=url_index)
             yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"
