@@ -909,7 +909,29 @@ watch(() => formData.dialogTitle, (newTitle) => {
   box-shadow: none;
 }
 
+.chat-tabs-wrap :deep(.el-tabs__nav-wrap) {
+  overflow: hidden;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__nav-scroll) {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__nav-scroll::-webkit-scrollbar) {
+  display: none;
+}
+
+.chat-tabs-wrap :deep(.el-tabs__nav) {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
 .chat-tabs-wrap :deep(.el-tabs__item) {
+  flex: 0 0 160px;
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
   height: 32px;
   line-height: 32px;
   border: 1px solid var(--line-1) !important;
@@ -919,6 +941,26 @@ watch(() => formData.dialogTitle, (newTitle) => {
   color: var(--text-2);
   background: var(--bg-1);
   box-shadow: none;
+}
+
+.chat-tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.chat-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tab-unread-dot {
+  flex: 0 0 auto;
 }
 
 .chat-tabs-wrap :deep(.el-tabs__item:hover) {
@@ -1002,6 +1044,13 @@ body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item:hover) {
 
   .chat-tabs-wrap {
     padding: 6px 8px 4px;
+  }
+
+  .chat-tabs-wrap :deep(.el-tabs__item) {
+    flex-basis: 124px;
+    width: 124px;
+    min-width: 124px;
+    max-width: 124px;
   }
 }
 
