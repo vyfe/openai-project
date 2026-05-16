@@ -191,7 +191,7 @@ const isImageModel = computed(() => {
   return props.selectedModelType === 2
 })
 
-const canUploadAttachment = computed(() => props.selectedModelAllowNet !== false)
+const canUploadAttachment = computed(() => isImageModel.value || props.selectedModelAllowNet !== false)
 
 // 添加键盘可见性检测
 const isKeyboardVisible = ref(false)
@@ -240,7 +240,7 @@ const sendMessage = () => {
   }
 
   if (!canUploadAttachment.value && (uploadedFiles.value.length > 0 || pastedFiles.value.length > 0 || uploadedFile.value)) {
-    ElMessage.warning('当前模型不支持联网，已禁用附件上传')
+    ElMessage.warning('当前模型不支持附件上传')
     clearFile()
     pastedFiles.value = []
     return
