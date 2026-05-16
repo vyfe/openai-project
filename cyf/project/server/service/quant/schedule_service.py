@@ -11,6 +11,9 @@ from quant.db import quant_db
 from quant.entities import QuantDailyBar, QuantScheduleConfig, QuantScheduleRun
 from service.quant.common import normalize_symbol
 from service.quant.cron_utils import CronExpression
+from service.quant.im_service import send_report_to_channel
+from service.quant.memory_service import curate_symbol_memories
+from service.quant.report_service import create_report_for_run
 from service.quant.strategy_service import list_strategies, run_strategy
 from service.quant.task_dispatch_service import create_fetch_bars_task
 from service.quant.trade_calendar_service import resolve_trade_date_for_schedule, shift_trade_day
@@ -18,7 +21,8 @@ from service.quant.trade_calendar_service import resolve_trade_date_for_schedule
 
 TASK_TYPE_DATA_SYNC = "data_sync"
 TASK_TYPE_ANALYSIS = "analysis_report"
-SUPPORTED_SCHEDULE_TYPES = {TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS}
+TASK_TYPE_MEMORY_DIGEST = "memory_digest"
+SUPPORTED_SCHEDULE_TYPES = {TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST}
 RUN_STATUS_PENDING = "pending"
 RUN_STATUS_RUNNING = "running"
 RUN_STATUS_SUCCESS = "success"
@@ -64,6 +68,10 @@ def _validate_schedule(task_type: str, cron_expr: str, payload: dict):
     if normalized_task_type == TASK_TYPE_ANALYSIS:
         if not payload.get("strategy_ids"):
             raise ValueError("analysis_report 任务至少需要一个 strategy_id")
+    if normalized_task_type == TASK_TYPE_MEMORY_DIGEST:
+        lookback_days = int(payload.get("lookback_days", 120) or 120)
+        if lookback_days < 1:
+            raise ValueError("memory_digest.lookback_days 必须大于 0")
 
 
 def _serialize_schedule(item: QuantScheduleConfig) -> dict:
@@ -305,28 +313,53 @@ def _execute_data_sync(run: QuantScheduleRun) -> dict:
 def _execute_analysis_report(run: QuantScheduleRun) -> dict:
     payload = json.loads(run.payload_json or "{}")
     strategy_ids = payload.get("strategy_ids") or []
+    channel_ids = payload.get("channel_ids") or []
     if isinstance(strategy_ids, str):
         strategy_ids = [item.strip() for item in strategy_ids.split(",") if item.strip()]
-    save_all_signals = bool(payload.get("save_all_signals", True))
+    if isinstance(channel_ids, str):
+        channel_ids = [item.strip() for item in channel_ids.split(",") if item.strip()]
+    save_all_signals = _to_bool(payload.get("save_all_signals", True))
     results = []
+    reports = []
+    deliveries = []
     for raw_strategy_id in strategy_ids:
         strategy_id = int(raw_strategy_id)
-        results.append(
-            run_strategy(
-                strategy_id=strategy_id,
-                trade_date=run.trade_date.isoformat() if run.trade_date else None,
-                save_all_signals=save_all_signals,
-            )
+        strategy_run = run_strategy(
+            strategy_id=strategy_id,
+            trade_date=run.trade_date.isoformat() if run.trade_date else None,
+            save_all_signals=save_all_signals,
         )
+        results.append(strategy_run)
+        report = create_report_for_run(int(strategy_run["id"]), report_type="test_report", schedule_run_id=run.id)
+        reports.append(report)
+        for raw_channel_id in channel_ids:
+            deliveries.append(send_report_to_channel(int(report["id"]), channel_id=int(raw_channel_id)))
     total_signals = sum(int(item.get("signals_total", 0) or 0) for item in results)
     return {
         "trade_date": run.trade_date.isoformat() if run.trade_date else None,
         "strategy_runs": results,
+        "reports": reports,
+        "deliveries": deliveries,
         "summary": {
             "strategy_count": len(results),
             "signals_total": total_signals,
             "mode": "test_report",
+            "delivery_count": len(deliveries),
         },
+    }
+
+
+def _execute_memory_digest(run: QuantScheduleRun) -> dict:
+    payload = json.loads(run.payload_json or "{}")
+    symbols = payload.get("symbols")
+    lookback_days = max(1, int(payload.get("lookback_days", 120) or 120))
+    limit = max(1, int(payload.get("limit", 50) or 50))
+    curated = curate_symbol_memories(symbols=symbols, lookback_days=lookback_days, limit=limit)
+    return {
+        "mode": "local_memory_digest",
+        "lookback_days": lookback_days,
+        "files": curated,
+        "count": len(curated),
     }
 
 
@@ -346,6 +379,8 @@ def execute_schedule_run(run_id: int) -> dict:
             result = _execute_data_sync(run)
         elif run.task_type == TASK_TYPE_ANALYSIS:
             result = _execute_analysis_report(run)
+        elif run.task_type == TASK_TYPE_MEMORY_DIGEST:
+            result = _execute_memory_digest(run)
         else:
             raise ValueError(f"不支持的调度任务类型: {run.task_type}")
 

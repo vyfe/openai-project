@@ -1,6 +1,8 @@
 import os
 
 from playhouse.sqlite_ext import SqliteExtDatabase
+from playhouse.migrate import SqliteMigrator, migrate
+from peewee import TextField
 
 from conf.settings import settings
 
@@ -27,4 +29,18 @@ quant_db = SqliteExtDatabase(
 def init_quant_db(models):
     quant_db.connect(reuse_if_open=True)
     quant_db.create_tables(models, safe=True)
+    ensure_quant_schema()
 
+
+def ensure_quant_schema():
+    try:
+        migrator = SqliteMigrator(quant_db)
+        missing_records = []
+        channel_columns = {col.name for col in quant_db.get_columns("quant_im_channel")}
+        if "config_json" not in channel_columns:
+            migrate(migrator.add_column("quant_im_channel", "config_json", TextField(default="{}")))
+            missing_records.append("quant_im_channel.config_json")
+        if missing_records:
+            print(f"[quant-db] 已补齐字段: {', '.join(missing_records)}")
+    except Exception as exc:
+        print(f"[quant-db] 自动更新表结构失败: {exc}")

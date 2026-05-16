@@ -17,6 +17,7 @@ def initialize_database():
 
 def ensure_quant_runtime_dirs():
     os.makedirs(runtime_state.settings.quant_bundle_dir, exist_ok=True)
+    os.makedirs(runtime_state.settings.quant_memory_dir, exist_ok=True)
 
 
 def run_model_meta_refresh(logger, reason: str):
