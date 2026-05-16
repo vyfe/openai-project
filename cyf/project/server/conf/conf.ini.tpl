@@ -17,8 +17,19 @@ test_exceed_msg=异常123
 [log]
 sqlite3_file=
 [quant]
+# 独立量化数据库。不要和 log.sqlite3_file 共用，避免被日志清理策略误伤。
 sqlite3_file=
+# 量化 bundle 运行目录。当前主要用于预留运行时目录，建议给独立路径。
 bundle_dir=
+# 股票记忆 Markdown 存储目录。
+memory_dir=
+# 飞书自建应用配置。用于双向对话、报告推送和持仓录入，当前唯一支持的 IM 通道。
+# 回调地址：/never_guess_my_usage/quant/im/feishu/events
+feishu_app_id=
+feishu_app_secret=
+feishu_verification_token=
+# 可选。若飞书事件订阅开启加密，则填写 Encrypt Key。
+feishu_encrypt_key=
 [api]
 api_key=
 api_host=

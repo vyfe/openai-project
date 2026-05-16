@@ -99,3 +99,72 @@ export const quantScheduleAPI = {
   executeRun: (run_id: number) =>
     quantApi.post('/never_guess_my_usage/quant/scheduler/execute_run', { run_id })
 }
+
+export const quantPromptAPI = {
+  list: (params?: { strategy_id?: number; report_type?: string }) =>
+    quantApi.get('/never_guess_my_usage/quant/prompt_templates', { params }),
+  get: (id: number) =>
+    quantApi.get(`/never_guess_my_usage/quant/prompt_template/${id}`),
+  create: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/prompt_template/create', data),
+  update: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/prompt_template/update', data),
+  delete: (id: number) =>
+    quantApi.post('/never_guess_my_usage/quant/prompt_template/delete', { id })
+}
+
+export const quantReportAPI = {
+  list: (params?: { strategy_id?: number; run_id?: number; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/reports', { params }),
+  get: (id: number) =>
+    quantApi.get(`/never_guess_my_usage/quant/report/${id}`),
+  generate: (data: { run_id: number; report_type?: string }) =>
+    quantApi.post('/never_guess_my_usage/quant/report/generate', data)
+}
+
+export const quantImAPI = {
+  channels: (params?: { status?: string; channel_type?: string }) =>
+    quantApi.get('/never_guess_my_usage/quant/im/channels', { params }),
+  getChannel: (id: number) =>
+    quantApi.get(`/never_guess_my_usage/quant/im/channel/${id}`),
+  createChannel: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/im/channel/create', data),
+  updateChannel: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/im/channel/update', data),
+  deleteChannel: (id: number) =>
+    quantApi.post('/never_guess_my_usage/quant/im/channel/delete', { id }),
+  deliveries: (params?: { report_id?: number; channel_id?: number; status?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/im/deliveries', { params }),
+  inboundEvents: (params?: { channel_id?: number; status?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/im/inbound_events', { params }),
+  sendReport: (data: { report_id: number; channel_id: number }) =>
+    quantApi.post('/never_guess_my_usage/quant/im/send_report', data),
+  sendPositions: (data: { channel_id: number; strategy_id?: number }) =>
+    quantApi.post('/never_guess_my_usage/quant/im/send_positions', data),
+  test: (data: { content: string; channel_id: number }) =>
+    quantApi.post('/never_guess_my_usage/quant/im/test', data)
+}
+
+export const quantMemoryAPI = {
+  files: (params?: { limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/memory/files', { params }),
+  get: (symbol: string) =>
+    quantApi.get(`/never_guess_my_usage/quant/memory/${encodeURIComponent(symbol)}`),
+  curate: (data?: { symbols?: string[]; lookback_days?: number; limit?: number }) =>
+    quantApi.post('/never_guess_my_usage/quant/memory/curate', data || {})
+}
+
+export const quantPositionAPI = {
+  summary: (params?: { strategy_id?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/positions/summary', { params }),
+  journal: (params?: { strategy_id?: number; symbol?: string; source?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/positions/journal', { params }),
+  get: (id: number) =>
+    quantApi.get(`/never_guess_my_usage/quant/positions/journal/${id}`),
+  create: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/positions/create', data),
+  update: (data: any) =>
+    quantApi.post('/never_guess_my_usage/quant/positions/update', data),
+  delete: (id: number) =>
+    quantApi.post('/never_guess_my_usage/quant/positions/delete', { id })
+}

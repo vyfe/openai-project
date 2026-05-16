@@ -402,6 +402,242 @@ class QuantScheduleRun(QuantBaseModel):
         }
 
 
+class QuantPromptTemplate(QuantBaseModel):
+    strategy_id = IntegerField(null=True, index=True)
+    template_name = CharField(default="default")
+    prompt_version = CharField(index=True)
+    status = CharField(default="active", index=True)
+    report_type = CharField(default="test_report", index=True)
+    prompt_template = TextField(default="")
+    change_note = TextField(default="")
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_prompt_template"
+        indexes = ((("strategy_id", "prompt_version"), True),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "strategy_id": self.strategy_id,
+            "template_name": self.template_name,
+            "prompt_version": self.prompt_version,
+            "status": self.status,
+            "report_type": self.report_type,
+            "prompt_template": self.prompt_template,
+            "change_note": self.change_note,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuantReportRecord(QuantBaseModel):
+    report_key = CharField(unique=True)
+    strategy_id = IntegerField(index=True)
+    run_id = IntegerField(null=True, index=True)
+    schedule_run_id = IntegerField(null=True, index=True)
+    trade_date = DateField(index=True)
+    report_type = CharField(default="test_report", index=True)
+    status = CharField(default="success", index=True)
+    bundle_version = CharField(default="analysis-bundle-v1")
+    prompt_version = CharField(default="template-v1")
+    title = CharField(default="")
+    analysis_bundle_json = TextField(default="{}")
+    report_draft_json = TextField(default="{}")
+    final_markdown = TextField(default="")
+    memory_references_json = TextField(default="[]")
+    meta_json = TextField(default="{}")
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_report_record"
+        indexes = (
+            (("strategy_id", "trade_date"), False),
+            (("run_id", "report_type"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "report_key": self.report_key,
+            "strategy_id": self.strategy_id,
+            "run_id": self.run_id,
+            "schedule_run_id": self.schedule_run_id,
+            "trade_date": self.trade_date.isoformat() if isinstance(self.trade_date, date) else None,
+            "report_type": self.report_type,
+            "status": self.status,
+            "bundle_version": self.bundle_version,
+            "prompt_version": self.prompt_version,
+            "title": self.title,
+            "analysis_bundle": json.loads(self.analysis_bundle_json or "{}"),
+            "report_draft": json.loads(self.report_draft_json or "{}"),
+            "final_markdown": self.final_markdown,
+            "memory_references": json.loads(self.memory_references_json or "[]"),
+            "meta": json.loads(self.meta_json or "{}"),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuantImChannel(QuantBaseModel):
+    name = CharField(unique=True)
+    channel_type = CharField(default="feishu_app", index=True)
+    status = CharField(default="active", index=True)
+    config_json = TextField(default="{}")
+    mention_list_json = TextField(default="[]")
+    description = TextField(default="")
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_im_channel"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "channel_type": self.channel_type,
+            "status": self.status,
+            "config": json.loads(self.config_json or "{}"),
+            "mention_list": json.loads(self.mention_list_json or "[]"),
+            "description": self.description,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuantReportDelivery(QuantBaseModel):
+    report_id = IntegerField(null=True, index=True)
+    run_id = IntegerField(null=True, index=True)
+    channel_id = IntegerField(null=True, index=True)
+    channel_type = CharField(default="feishu_app", index=True)
+    channel_target = TextField(default="")
+    message_type = CharField(default="markdown")
+    status = CharField(default="pending", index=True)
+    request_payload_json = TextField(default="{}")
+    response_payload_json = TextField(default="{}")
+    error_message = TextField(default="")
+    sent_at = DateTimeField(null=True, index=True)
+    created_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_report_delivery"
+        indexes = (
+            (("report_id", "channel_id"), False),
+            (("status", "created_at"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "report_id": self.report_id,
+            "run_id": self.run_id,
+            "channel_id": self.channel_id,
+            "channel_type": self.channel_type,
+            "channel_target": self.channel_target,
+            "message_type": self.message_type,
+            "status": self.status,
+            "request_payload": json.loads(self.request_payload_json or "{}"),
+            "response_payload": json.loads(self.response_payload_json or "{}"),
+            "error_message": self.error_message,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class QuantImInboundEvent(QuantBaseModel):
+    event_id = CharField(unique=True)
+    channel_id = IntegerField(null=True, index=True)
+    channel_type = CharField(default="feishu_app", index=True)
+    message_id = CharField(default="", index=True)
+    chat_id = CharField(default="", index=True)
+    sender_id = CharField(default="", index=True)
+    sender_type = CharField(default="")
+    message_type = CharField(default="")
+    command = CharField(default="", index=True)
+    status = CharField(default="received", index=True)
+    raw_payload_json = TextField(default="{}")
+    parsed_payload_json = TextField(default="{}")
+    response_payload_json = TextField(default="{}")
+    error_message = TextField(default="")
+    received_at = DateTimeField(default=datetime.now, index=True)
+    processed_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = "quant_im_inbound_event"
+        indexes = (
+            (("chat_id", "received_at"), False),
+            (("sender_id", "received_at"), False),
+            (("status", "received_at"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "event_id": self.event_id,
+            "channel_id": self.channel_id,
+            "channel_type": self.channel_type,
+            "message_id": self.message_id,
+            "chat_id": self.chat_id,
+            "sender_id": self.sender_id,
+            "sender_type": self.sender_type,
+            "message_type": self.message_type,
+            "command": self.command,
+            "status": self.status,
+            "raw_payload": json.loads(self.raw_payload_json or "{}"),
+            "parsed_payload": json.loads(self.parsed_payload_json or "{}"),
+            "response_payload": json.loads(self.response_payload_json or "{}"),
+            "error_message": self.error_message,
+            "received_at": self.received_at.isoformat() if self.received_at else None,
+            "processed_at": self.processed_at.isoformat() if self.processed_at else None,
+        }
+
+
+class QuantPositionJournal(QuantBaseModel):
+    strategy_id = IntegerField(null=True, index=True)
+    run_id = IntegerField(null=True, index=True)
+    operation_id = IntegerField(null=True, index=True)
+    symbol = CharField(index=True)
+    side = CharField(default="buy", index=True)
+    price = FloatField(null=True)
+    quantity = IntegerField(default=0)
+    occurred_at = DateTimeField(index=True)
+    source = CharField(default="manual", index=True)
+    reason = TextField(default="")
+    remark = TextField(default="")
+    created_by = CharField(default="", index=True)
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_position_journal"
+        indexes = (
+            (("symbol", "occurred_at"), False),
+            (("strategy_id", "occurred_at"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "strategy_id": self.strategy_id,
+            "run_id": self.run_id,
+            "operation_id": self.operation_id,
+            "symbol": self.symbol,
+            "side": self.side,
+            "price": self.price,
+            "quantity": self.quantity,
+            "occurred_at": self.occurred_at.isoformat() if self.occurred_at else None,
+            "source": self.source,
+            "reason": self.reason,
+            "remark": self.remark,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 QUANT_MODELS = [
     QuantInstrument,
     QuantDailyBar,
@@ -413,4 +649,10 @@ QUANT_MODELS = [
     QuantBacktestRun,
     QuantScheduleConfig,
     QuantScheduleRun,
+    QuantPromptTemplate,
+    QuantReportRecord,
+    QuantImChannel,
+    QuantReportDelivery,
+    QuantImInboundEvent,
+    QuantPositionJournal,
 ]

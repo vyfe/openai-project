@@ -6,11 +6,13 @@ from quant.entities import (
     QuantBacktestRun,
     QuantDailyBar,
     QuantOperationRecord,
+    QuantReportRecord,
     QuantStrategy,
     QuantStrategyRun,
     QuantStrategySignal,
 )
 from service.quant.backtest_service import list_backtest_runs
+from service.quant.memory_service import list_memory_files
 from service.quant.ops_service import list_operation_records
 from service.quant.task_dispatch_service import list_tasks
 
@@ -59,6 +61,10 @@ def get_dashboard_overview() -> dict:
         item.to_dict()
         for item in QuantStrategyRun.select().order_by(QuantStrategyRun.id.desc()).limit(6).iterator()
     ]
+    recent_reports = [
+        item.to_dict()
+        for item in QuantReportRecord.select().order_by(QuantReportRecord.id.desc()).limit(6).iterator()
+    ]
     latest_signals = [
         item.to_dict()
         for item in (
@@ -71,6 +77,7 @@ def get_dashboard_overview() -> dict:
 
     today_operations = QuantOperationRecord.select().where(QuantOperationRecord.trade_date == date.fromisoformat(today)).count()
     success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success").count()
+    memory_files = list_memory_files(limit=6)
 
     return {
         "snapshot": {
@@ -80,11 +87,15 @@ def get_dashboard_overview() -> dict:
             "today_operations": today_operations,
             "successful_backtests": success_backtests,
             "pending_tasks": len([item for item in tasks if item.get("status") in ("pending", "leased")]),
+            "recent_reports": len(recent_reports),
+            "memory_files": len(memory_files),
         },
         "today_tasks": tasks,
         "latest_signals": latest_signals,
         "recent_runs": latest_runs,
         "recent_operations": operations,
         "recent_backtests": backtests,
+        "recent_reports": recent_reports,
+        "recent_memory_files": memory_files,
         "risk_tips": _build_risk_tips(tasks, latest_signals, operations, backtests),
     }

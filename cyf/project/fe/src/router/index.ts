@@ -29,8 +29,56 @@ const router = createRouter({
     {
       path: '/quant',
       name: 'Quant',
-      component: () => import('@/views/Quant.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true }
+      component: () => import('@/views/quant/QuantLayout.vue'),
+      redirect: '/quant/overview',
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        {
+          path: 'overview',
+          name: 'QuantOverview',
+          component: () => import('@/views/quant/pages/QuantOverviewPage.vue')
+        },
+        {
+          path: 'data',
+          name: 'QuantData',
+          component: () => import('@/views/quant/pages/QuantDataPage.vue')
+        },
+        {
+          path: 'strategy',
+          name: 'QuantStrategy',
+          component: () => import('@/views/quant/pages/QuantStrategyPage.vue')
+        },
+        {
+          path: 'runs',
+          name: 'QuantRuns',
+          component: () => import('@/views/quant/pages/QuantRunsPage.vue')
+        },
+        {
+          path: 'operations',
+          name: 'QuantOperations',
+          component: () => import('@/views/quant/pages/QuantOperationsPage.vue')
+        },
+        {
+          path: 'backtest',
+          name: 'QuantBacktest',
+          component: () => import('@/views/quant/pages/QuantBacktestPage.vue')
+        },
+        {
+          path: 'scheduler',
+          name: 'QuantScheduler',
+          component: () => import('@/views/quant/pages/QuantSchedulerPage.vue')
+        },
+        {
+          path: 'ai-memory',
+          name: 'QuantAiMemory',
+          component: () => import('@/views/quant/pages/QuantAiMemoryPage.vue')
+        },
+        {
+          path: 'im-positions',
+          name: 'QuantImPositions',
+          component: () => import('@/views/quant/pages/QuantImPositionsPage.vue')
+        }
+      ]
     }
   ]
 })

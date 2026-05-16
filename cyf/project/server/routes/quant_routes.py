@@ -7,6 +7,21 @@ from service.auth_service import require_admin_auth, require_auth
 from service.quant.backtest_service import delete_backtest_run, get_backtest_run, list_backtest_runs, run_backtest
 from service.quant.dashboard_service import get_dashboard_overview
 from service.quant.import_service import fetch_import_batches, import_bundle, parse_bundle_bytes
+from service.quant.im_service import (
+    available_im_channel_options,
+    create_im_channel,
+    delete_im_channel,
+    get_im_channel,
+    handle_feishu_event_callback,
+    list_delivery_records,
+    list_inbound_events,
+    list_im_channels,
+    send_position_summary_to_channel,
+    send_report_to_channel,
+    send_test_message,
+    update_im_channel,
+)
+from service.quant.memory_service import curate_symbol_memories, list_memory_files, read_symbol_memory
 from service.quant.ops_service import (
     create_operation_record,
     delete_operation_record,
@@ -14,11 +29,30 @@ from service.quant.ops_service import (
     list_operation_records,
     update_operation_record,
 )
+from service.quant.position_service import (
+    create_position_entry,
+    delete_position_entry,
+    get_position_entry,
+    list_position_journal,
+    list_position_summary,
+    update_position_entry,
+)
 from service.quant.provider_factory import list_supported_providers
 from service.quant.query_service import fetch_daily_bars
+from service.quant.report_service import (
+    create_prompt_template,
+    create_report_for_run,
+    delete_prompt_template,
+    get_prompt_template,
+    get_report,
+    list_prompt_templates,
+    list_reports,
+    update_prompt_template,
+)
 from service.quant.schedule_service import (
     TASK_TYPE_ANALYSIS,
     TASK_TYPE_DATA_SYNC,
+    TASK_TYPE_MEMORY_DIGEST,
     available_strategy_options,
     create_schedule_config,
     delete_schedule_config,
@@ -70,9 +104,10 @@ def quant_scheduler_meta(user, password):
     del user, password
     return success_response(
         data={
-            "task_types": [TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS],
+            "task_types": [TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST],
             "market_calendars": ["A_SHARE"],
             "strategy_options": available_strategy_options(),
+            "im_channel_options": available_im_channel_options(),
             "latest_market_data_date": latest_market_data_date(),
             "overview": get_scheduler_overview(),
         }
@@ -416,6 +451,358 @@ def quant_symbols(user, password):
     limit = request.args.get("limit", default=500, type=int) or 500
     limit = max(1, min(limit, 5000))
     return success_response(data=list_available_symbols(limit=limit))
+
+
+@quant_bp.route("/prompt_templates", methods=["GET"])
+@require_auth
+def quant_prompt_templates(user, password):
+    del user, password
+    strategy_id = request.args.get("strategy_id", type=int)
+    report_type = str(request.args.get("report_type", "")).strip() or None
+    return success_response(data=list_prompt_templates(strategy_id=strategy_id, report_type=report_type))
+
+
+@quant_bp.route("/prompt_template/<int:template_id>", methods=["GET"])
+@require_auth
+def quant_prompt_template_get(user, password, template_id):
+    del user, password
+    try:
+        return success_response(data=get_prompt_template(template_id))
+    except Exception as exc:
+        return error_response(f"获取 Prompt 模板失败: {exc}")
+
+
+@quant_bp.route("/prompt_template/create", methods=["POST"])
+@require_admin_auth
+def quant_prompt_template_create():
+    try:
+        data = get_request_data()
+        result = create_prompt_template(
+            strategy_id=data.get("strategy_id"),
+            template_name=str(data.get("template_name", "default")).strip() or "default",
+            prompt_version=str(data.get("prompt_version", "")).strip(),
+            status=str(data.get("status", "active")).strip() or "active",
+            report_type=str(data.get("report_type", "test_report")).strip() or "test_report",
+            prompt_template=str(data.get("prompt_template", "")).strip(),
+            change_note=str(data.get("change_note", "")).strip(),
+        )
+        return success_response(data=result, msg="Prompt 模板创建成功")
+    except Exception as exc:
+        return error_response(f"创建 Prompt 模板失败: {exc}")
+
+
+@quant_bp.route("/prompt_template/update", methods=["POST"])
+@require_admin_auth
+def quant_prompt_template_update():
+    try:
+        data = get_request_data()
+        template_id = int(data.get("id"))
+        updates = {key: data.get(key) for key in ("strategy_id", "template_name", "prompt_version", "status", "report_type", "prompt_template", "change_note") if key in data}
+        result = update_prompt_template(template_id, **updates)
+        return success_response(data=result, msg="Prompt 模板更新成功")
+    except Exception as exc:
+        return error_response(f"更新 Prompt 模板失败: {exc}")
+
+
+@quant_bp.route("/prompt_template/delete", methods=["POST"])
+@require_admin_auth
+def quant_prompt_template_delete():
+    try:
+        data = get_request_data()
+        delete_prompt_template(int(data.get("id")))
+        return success_response(msg="Prompt 模板删除成功")
+    except Exception as exc:
+        return error_response(f"删除 Prompt 模板失败: {exc}")
+
+
+@quant_bp.route("/reports", methods=["GET"])
+@require_auth
+def quant_reports(user, password):
+    del user, password
+    strategy_id = request.args.get("strategy_id", type=int)
+    run_id = request.args.get("run_id", type=int)
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 300))
+    return success_response(data=list_reports(strategy_id=strategy_id, run_id=run_id, limit=limit))
+
+
+@quant_bp.route("/report/<int:report_id>", methods=["GET"])
+@require_auth
+def quant_report_get(user, password, report_id):
+    del user, password
+    try:
+        return success_response(data=get_report(report_id))
+    except Exception as exc:
+        return error_response(f"获取报告失败: {exc}")
+
+
+@quant_bp.route("/report/generate", methods=["POST"])
+@require_admin_auth
+def quant_report_generate():
+    try:
+        data = get_request_data()
+        run_id = int(data.get("run_id"))
+        report_type = str(data.get("report_type", "test_report")).strip() or "test_report"
+        result = create_report_for_run(run_id=run_id, report_type=report_type)
+        return success_response(data=result, msg="测试报告生成成功")
+    except Exception as exc:
+        return error_response(f"生成测试报告失败: {exc}")
+
+
+@quant_bp.route("/im/channels", methods=["GET"])
+@require_auth
+def quant_im_channels(user, password):
+    del user, password
+    status = str(request.args.get("status", "")).strip() or None
+    channel_type = str(request.args.get("channel_type", "")).strip() or None
+    return success_response(data=list_im_channels(status=status, channel_type=channel_type))
+
+
+@quant_bp.route("/im/channel/<int:channel_id>", methods=["GET"])
+@require_auth
+def quant_im_channel_get(user, password, channel_id):
+    del user, password
+    try:
+        return success_response(data=get_im_channel(channel_id))
+    except Exception as exc:
+        return error_response(f"获取 IM 通道失败: {exc}")
+
+
+@quant_bp.route("/im/channel/create", methods=["POST"])
+@require_admin_auth
+def quant_im_channel_create():
+    try:
+        data = get_request_data()
+        result = create_im_channel(
+            name=str(data.get("name", "")).strip(),
+            status=str(data.get("status", "active")).strip() or "active",
+            config=data.get("config"),
+            description=str(data.get("description", "")).strip(),
+        )
+        return success_response(data=result, msg="IM 通道创建成功")
+    except Exception as exc:
+        return error_response(f"创建 IM 通道失败: {exc}")
+
+
+@quant_bp.route("/im/channel/update", methods=["POST"])
+@require_admin_auth
+def quant_im_channel_update():
+    try:
+        data = get_request_data()
+        channel_id = int(data.get("id"))
+        updates = {
+            key: data.get(key)
+            for key in ("name", "status", "description", "config")
+            if key in data
+        }
+        result = update_im_channel(channel_id, **updates)
+        return success_response(data=result, msg="IM 通道更新成功")
+    except Exception as exc:
+        return error_response(f"更新 IM 通道失败: {exc}")
+
+
+@quant_bp.route("/im/channel/delete", methods=["POST"])
+@require_admin_auth
+def quant_im_channel_delete():
+    try:
+        data = get_request_data()
+        delete_im_channel(int(data.get("id")))
+        return success_response(msg="IM 通道删除成功")
+    except Exception as exc:
+        return error_response(f"删除 IM 通道失败: {exc}")
+
+
+@quant_bp.route("/im/deliveries", methods=["GET"])
+@require_auth
+def quant_im_deliveries(user, password):
+    del user, password
+    report_id = request.args.get("report_id", type=int)
+    channel_id = request.args.get("channel_id", type=int)
+    status = str(request.args.get("status", "")).strip() or None
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 300))
+    return success_response(data=list_delivery_records(report_id=report_id, channel_id=channel_id, status=status, limit=limit))
+
+
+@quant_bp.route("/im/inbound_events", methods=["GET"])
+@require_auth
+def quant_im_inbound_events(user, password):
+    del user, password
+    channel_id = request.args.get("channel_id", type=int)
+    status = str(request.args.get("status", "")).strip() or None
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 300))
+    return success_response(data=list_inbound_events(channel_id=channel_id, status=status, limit=limit))
+
+
+@quant_bp.route("/im/feishu/events", methods=["POST"])
+def quant_im_feishu_events():
+    payload, status_code = handle_feishu_event_callback(request.get_data() or b"", request.headers)
+    return payload, status_code
+
+
+@quant_bp.route("/im/send_report", methods=["POST"])
+@require_admin_auth
+def quant_im_send_report():
+    try:
+        data = get_request_data()
+        report_id = int(data.get("report_id"))
+        result = send_report_to_channel(
+            report_id=report_id,
+            channel_id=int(data.get("channel_id")),
+        )
+        if result.get("status") == "failed":
+            return error_response(f"推送报告失败: {result.get('error_message') or '未知错误'}")
+        return success_response(data=result, msg="报告推送已执行")
+    except Exception as exc:
+        return error_response(f"推送报告失败: {exc}")
+
+
+@quant_bp.route("/im/send_positions", methods=["POST"])
+@require_admin_auth
+def quant_im_send_positions():
+    try:
+        data = get_request_data()
+        result = send_position_summary_to_channel(
+            channel_id=int(data.get("channel_id")),
+            strategy_id=int(data.get("strategy_id")) if data.get("strategy_id") not in (None, "") else None,
+        )
+        if result.get("status") == "failed":
+            return error_response(f"推送持仓摘要失败: {result.get('error_message') or '未知错误'}")
+        return success_response(data=result, msg="持仓摘要推送已执行")
+    except Exception as exc:
+        return error_response(f"推送持仓摘要失败: {exc}")
+
+
+@quant_bp.route("/im/test", methods=["POST"])
+@require_admin_auth
+def quant_im_test():
+    try:
+        data = get_request_data()
+        result = send_test_message(
+            content=str(data.get("content", "")).strip() or "测试消息",
+            channel_id=int(data.get("channel_id")),
+        )
+        return success_response(data=result, msg="测试消息发送成功")
+    except Exception as exc:
+        return error_response(f"发送测试消息失败: {exc}")
+
+
+@quant_bp.route("/memory/files", methods=["GET"])
+@require_auth
+def quant_memory_files(user, password):
+    del user, password
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 300))
+    return success_response(data=list_memory_files(limit=limit))
+
+
+@quant_bp.route("/memory/<symbol>", methods=["GET"])
+@require_auth
+def quant_memory_get(user, password, symbol):
+    del user, password
+    try:
+        return success_response(data=read_symbol_memory(symbol))
+    except Exception as exc:
+        return error_response(f"获取记忆文件失败: {exc}")
+
+
+@quant_bp.route("/memory/curate", methods=["POST"])
+@require_admin_auth
+def quant_memory_curate():
+    try:
+        data = get_request_data()
+        symbols = parse_json_list(data.get("symbols")) if "symbols" in data else data.get("symbols")
+        lookback_days = int(data.get("lookback_days", 120) or 120)
+        limit = int(data.get("limit", 50) or 50)
+        result = curate_symbol_memories(symbols=symbols, lookback_days=lookback_days, limit=limit)
+        return success_response(data=result, msg="记忆梳理完成")
+    except Exception as exc:
+        return error_response(f"梳理记忆失败: {exc}")
+
+
+@quant_bp.route("/positions/summary", methods=["GET"])
+@require_auth
+def quant_positions_summary(user, password):
+    del user, password
+    strategy_id = request.args.get("strategy_id", type=int)
+    return success_response(data=list_position_summary(strategy_id=strategy_id))
+
+
+@quant_bp.route("/positions/journal", methods=["GET"])
+@require_auth
+def quant_positions_journal(user, password):
+    del user, password
+    strategy_id = request.args.get("strategy_id", type=int)
+    symbol = str(request.args.get("symbol", "")).strip() or None
+    source = str(request.args.get("source", "")).strip() or None
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 500))
+    return success_response(data=list_position_journal(strategy_id=strategy_id, symbol=symbol, source=source, limit=limit))
+
+
+@quant_bp.route("/positions/journal/<int:entry_id>", methods=["GET"])
+@require_auth
+def quant_position_get(user, password, entry_id):
+    del user, password
+    try:
+        return success_response(data=get_position_entry(entry_id))
+    except Exception as exc:
+        return error_response(f"获取持仓流水失败: {exc}")
+
+
+@quant_bp.route("/positions/create", methods=["POST"])
+@require_auth
+def quant_position_create(user, password):
+    del password
+    try:
+        data = get_request_data()
+        result = create_position_entry(
+            strategy_id=data.get("strategy_id"),
+            run_id=data.get("run_id"),
+            operation_id=data.get("operation_id"),
+            symbol=str(data.get("symbol", "")).strip(),
+            side=str(data.get("side", "buy")).strip() or "buy",
+            price=data.get("price"),
+            quantity=data.get("quantity"),
+            occurred_at=data.get("occurred_at"),
+            source=str(data.get("source", "manual")).strip() or "manual",
+            reason=str(data.get("reason", "")).strip(),
+            remark=str(data.get("remark", "")).strip(),
+            created_by=user,
+        )
+        return success_response(data=result, msg="持仓流水创建成功")
+    except Exception as exc:
+        return error_response(f"创建持仓流水失败: {exc}")
+
+
+@quant_bp.route("/positions/update", methods=["POST"])
+@require_auth
+def quant_position_update(user, password):
+    del user, password
+    try:
+        data = get_request_data()
+        entry_id = int(data.get("id"))
+        updates = {
+            key: data.get(key)
+            for key in ("strategy_id", "run_id", "operation_id", "symbol", "side", "price", "quantity", "occurred_at", "source", "reason", "remark")
+            if key in data
+        }
+        return success_response(data=update_position_entry(entry_id, **updates), msg="持仓流水更新成功")
+    except Exception as exc:
+        return error_response(f"更新持仓流水失败: {exc}")
+
+
+@quant_bp.route("/positions/delete", methods=["POST"])
+@require_auth
+def quant_position_delete(user, password):
+    del user, password
+    try:
+        data = get_request_data()
+        delete_position_entry(int(data.get("id")))
+        return success_response(msg="持仓流水删除成功")
+    except Exception as exc:
+        return error_response(f"删除持仓流水失败: {exc}")
 
 
 @quant_bp.route("/operations/list", methods=["GET"])

@@ -33,6 +33,11 @@ class Settings:
     users_raw: str
     quant_sqlite3_file: str
     quant_bundle_dir: str
+    quant_memory_dir: str
+    quant_feishu_app_id: str
+    quant_feishu_app_secret: str
+    quant_feishu_verification_token: str
+    quant_feishu_encrypt_key: str
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -84,6 +89,11 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         users_raw=conf.get("common", "users", fallback=""),
         quant_sqlite3_file=_get_str(conf, "quant", "sqlite3_file", fallback=os.path.join(BASE_DIR, "quant.db")),
         quant_bundle_dir=_get_str(conf, "quant", "bundle_dir", fallback=os.path.join(BASE_DIR, "quant_bundles")),
+        quant_memory_dir=_get_str(conf, "quant", "memory_dir", fallback=os.path.join(BASE_DIR, "quant_memory")),
+        quant_feishu_app_id=_get_str(conf, "quant", "feishu_app_id", fallback=""),
+        quant_feishu_app_secret=_get_str(conf, "quant", "feishu_app_secret", fallback=""),
+        quant_feishu_verification_token=_get_str(conf, "quant", "feishu_verification_token", fallback=""),
+        quant_feishu_encrypt_key=_get_str(conf, "quant", "feishu_encrypt_key", fallback=""),
     )
 
 
