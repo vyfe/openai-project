@@ -33,6 +33,8 @@ feishu_app_secret=
 feishu_verification_token=
 # 可选。若飞书事件订阅开启加密，则填写 Encrypt Key。
 feishu_encrypt_key=
+# 消息调试后缀
+feishu_debug_suffix=
 [api]
 api_key=
 api_host=

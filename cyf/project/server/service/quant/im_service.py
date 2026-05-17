@@ -25,34 +25,6 @@ from service.quant.position_service import create_position_entry, list_position_
 logger = logging.getLogger("quant.im")
 
 
-# ---- 正则消息规则注册表 ----
-@dataclass
-class MessageRule:
-    """正则匹配规则，priority 越小越优先"""
-    pattern: "re.Pattern"
-    handler: Callable[[str, dict], Optional[tuple[str, str]]]
-    priority: int
-    name: str
-
-
-_message_rules: List[MessageRule] = []
-
-
-def register_message_handler(pattern: str, priority: int = 50):
-    """装饰器：注册一个基于正则的消息处理器。priority 越小优先级越高。"""
-    def decorator(func: Callable[[str, dict], Optional[tuple[str, str]]]):
-        _message_rules.append(MessageRule(
-            pattern=re.compile(pattern),
-            handler=func,
-            priority=priority,
-            name=func.__name__,
-        ))
-        _message_rules.sort(key=lambda r: r.priority)
-        logger.info("[rule-registry] 注册消息规则 | name=%s | pattern=%s | priority=%d", func.__name__, pattern, priority)
-        return func
-    return decorator
-
-
 from lark_oapi import Client, LogLevel
 from lark_oapi.core.model import Config
 from lark_oapi.api.im.v1 import (
@@ -67,6 +39,7 @@ from lark_oapi.api.im.v1.model.p2_im_message_receive_v1 import P2ImMessageReceiv
 from lark_oapi.core.const import UTF_8
 from lark_oapi.core.model import RawRequest, RawResponse
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
+from service.quant.im_rules import _message_rules, register_message_handler  # noqa: F401
 
 CHANNEL_FEISHU_APP = "feishu_app"
 
@@ -707,16 +680,19 @@ def _route_feishu_command(text: str, parsed: dict) -> tuple[str, str]:
     return "time_echo", f"⏰ 当前时间：{now}"
 
 
-# ---- 内置规则：当前时间回显（priority 极高，兜底） ----
-@register_message_handler(r"^[时间|几点|现在几点].*", priority=15)
-def _time_query_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return "time_query", f"⏰ 当前时间：{now}"
-
 
 def _should_process_feishu_message(parsed: dict) -> bool:
     if parsed.get("sender_type") == "bot":
         return False
+    # Debug suffix 过滤：配置了 feishu.debug.suffix 时，消息必须包含 [{suffix}] 才处理
+    debug_suffix = (settings.quant_feishu_debug_suffix or "").strip()
+    if debug_suffix:
+        text = str(parsed.get("text") or "")
+        expected_tag = f"[{debug_suffix}]"
+        if expected_tag not in text:
+            logger.debug("[feishu-filter] 消息不含 debug suffix=%s，丢弃 | text=%s", expected_tag, text[:80])
+            return False
+        logger.debug("[feishu-filter] debug suffix 匹配成功 | suffix=%s", expected_tag)
     chat_type = str(parsed.get("chat_type") or "").lower()
     if chat_type in ("p2p", "private"):
         return True
