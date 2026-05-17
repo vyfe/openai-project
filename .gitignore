@@ -1,12 +1,12 @@
-/cyf/project/*/conf/conf.ini
-/cyf/project/*/conf/role_init.sql
+cyf/project/*/conf/conf.ini
+cyf/project/*/conf/role_init.sql
 # 密钥
-/cyf/project/*/conf/key.*
-/cyf/project/server/*.db
-/cyf/project/server/*.db-shm
-/cyf/project/server/*.db-wal
+cyf/project/*/conf/key.*
+cyf/project/server/*.db
+cyf/project/server/*.db-shm
+cyf/project/server/*.db-wal
 **/*.log
-/cyf/project/fe/node_*/*
+cyf/project/fe/node_*/*
 **/dist/
 .DS_STORE
 .claude/
@@ -14,3 +14,4 @@
 .idea/
 .joycode/
 **/__pycache__/
+cyf/project/server/.pip_cache_timestamp

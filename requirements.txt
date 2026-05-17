@@ -9,6 +9,6 @@ akshare
 baostock
 apscheduler
 exchange_calendars
-cryptography
+lark-oapi
 customtkinter
 gunicorn

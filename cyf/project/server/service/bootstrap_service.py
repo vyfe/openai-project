@@ -62,3 +62,23 @@ def bootstrap_runtime(logger):
     runtime_state.build_clients()
     start_blacklist_cleanup_thread()
     start_model_meta_scheduler(logger)
+    _start_feishu_ws_async(logger)
+
+
+def _start_feishu_ws_async(logger):
+    """在后台线程中启动飞书 WebSocket 长连接。延迟 2 秒确保服务就绪。"""
+    def _delayed_start():
+        import time
+        time.sleep(2)
+        try:
+            from worker.quant_feishu_ws import start_feishu_ws_client
+            started = start_feishu_ws_client()
+            if started:
+                logger.info("飞书 WebSocket 长连接客户端已启动")
+            else:
+                logger.info("飞书 WebSocket 客户端未启动（配置缺失或已在运行中）")
+        except Exception as exc:
+            logger.error(f"飞书 WebSocket 客户端启动失败: {exc}")
+
+    t = threading.Thread(target=_delayed_start, name="feishu-ws-bootstrap", daemon=True)
+    t.start()
