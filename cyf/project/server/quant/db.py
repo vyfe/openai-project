@@ -36,10 +36,20 @@ def ensure_quant_schema():
     try:
         migrator = SqliteMigrator(quant_db)
         missing_records = []
+
         channel_columns = {col.name for col in quant_db.get_columns("quant_im_channel")}
         if "config_json" not in channel_columns:
             migrate(migrator.add_column("quant_im_channel", "config_json", TextField(default="{}")))
             missing_records.append("quant_im_channel.config_json")
+
+        bar_columns = {col.name for col in quant_db.get_columns("quant_daily_bar")}
+        if "change" not in bar_columns:
+            migrate(migrator.add_column("quant_daily_bar", "change", FloatField(null=True)))
+            missing_records.append("quant_daily_bar.change")
+        if "amplitude_pct" not in bar_columns:
+            migrate(migrator.add_column("quant_daily_bar", "amplitude_pct", FloatField(null=True)))
+            missing_records.append("quant_daily_bar.amplitude_pct")
+
         if missing_records:
             print(f"[quant-db] 已补齐字段: {', '.join(missing_records)}")
     except Exception as exc:

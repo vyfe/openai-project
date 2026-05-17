@@ -58,6 +58,8 @@ def normalize_bundle(bundle: dict) -> dict:
                 "amount": to_float(item.get("amount")),
                 "turnover_rate": to_float(item.get("turnover_rate")),
                 "pct_change": to_float(item.get("pct_change")),
+                "change": to_float(item.get("change")),
+                "amplitude_pct": to_float(item.get("amplitude_pct")),
                 "source": source,
                 "source_run_id": str(bundle.get("source_run_id") or batch_id),
                 "data_source_version": str(item.get("data_source_version") or bundle.get("data_source_version") or ""),
@@ -103,12 +105,13 @@ def import_bundle(bundle: dict, file_name: str = "", payload_bytes: Optional[byt
         instrument_rows = {}
         bar_rows = []
         for item in normalized["records"]:
+            name = str(item.get("name") or "").strip()
             instrument_rows[item["symbol"]] = {
                 "symbol": item["symbol"],
                 "code": item["code"],
                 "exchange": item["exchange"],
                 "market": "A_SHARE",
-                "name": "",
+                "name": name,
                 "source": item["source"],
                 "status": "active",
                 "created_at": now,

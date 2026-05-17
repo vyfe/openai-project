@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import time
+
 from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_baostock_symbol, to_float
 from quant_client.provider_base import BaseAshareProvider
+
+MAX_RETRIES = 3
+RETRY_SLEEP_SECONDS = 60
 
 
 class BaostockAshareProvider(BaseAshareProvider):
@@ -22,9 +27,24 @@ class BaostockAshareProvider(BaseAshareProvider):
             raise RuntimeError("未安装 baostock，请先安装依赖") from exc
 
         adjust_code = self._ADJUST_MAP.get(adjust_flag, "2")
-        login_result = bs.login()
-        if getattr(login_result, "error_code", "0") != "0":
-            raise RuntimeError(f"baostock 登录失败: {login_result.error_msg}")
+
+        last_exc = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                login_result = bs.login()
+                if getattr(login_result, "error_code", "0") != "0":
+                    last_exc = RuntimeError(f"baostock 登录失败: {login_result.error_msg}")
+                    if attempt < MAX_RETRIES - 1:
+                        time.sleep(RETRY_SLEEP_SECONDS)
+                        continue
+                    raise last_exc
+                break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_SLEEP_SECONDS)
+                else:
+                    raise RuntimeError(f"baostock 登录失败 (已重试{MAX_RETRIES}次): {last_exc}") from last_exc
 
         try:
             rows: list[dict] = []
@@ -46,24 +66,37 @@ class BaostockAshareProvider(BaseAshareProvider):
         last_error = ""
         records = []
         for fields in field_sets:
-            rs = bs.query_history_k_data_plus(
-                full_symbol,
-                fields,
-                start_date=start_date,
-                end_date=end_date,
-                frequency="d",
-                adjustflag=adjust_code,
-            )
-            if getattr(rs, "error_code", "0") != "0":
-                last_error = getattr(rs, "error_msg", "")
-                continue
+            last_exc = None
+            for attempt in range(MAX_RETRIES):
+                try:
+                    rs = bs.query_history_k_data_plus(
+                        full_symbol,
+                        fields,
+                        start_date=start_date,
+                        end_date=end_date,
+                        frequency="d",
+                        adjustflag=adjust_code,
+                    )
+                    if getattr(rs, "error_code", "0") != "0":
+                        last_exc = RuntimeError(getattr(rs, "error_msg", ""))
+                        if attempt < MAX_RETRIES - 1:
+                            time.sleep(RETRY_SLEEP_SECONDS)
+                            continue
+                    else:
+                        while rs.next():
+                            records.append(rs.get_row_data())
+                        if records:
+                            columns = rs.fields
+                            return self._map_rows(code, exchange, columns, records, adjust_flag)
+                        last_exc = RuntimeError(f"baostock 返回空数据: {full_symbol}")
+                except Exception as exc:
+                    last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_SLEEP_SECONDS)
 
-            while rs.next():
-                records.append(rs.get_row_data())
-            columns = rs.fields
-            return self._map_rows(code, exchange, columns, records, adjust_flag)
+            last_error = str(last_exc)
 
-        raise RuntimeError(f"baostock 查询失败: {last_error or full_symbol}")
+        raise RuntimeError(f"baostock 查询失败 (已重试{MAX_RETRIES}次): {last_error or full_symbol}")
 
     def _map_rows(self, code: str, exchange: str, columns: list[str], records: list[list[str]], adjust_flag: str) -> list[dict]:
         mapped = []
@@ -97,4 +130,3 @@ class BaostockAshareProvider(BaseAshareProvider):
             )
             prev_close = close_price
         return mapped
-

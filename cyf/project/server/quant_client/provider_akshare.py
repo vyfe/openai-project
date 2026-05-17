@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import time
+
 from quant_client.common import compact_date_text, infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_float
 from quant_client.provider_base import BaseAshareProvider
+
+MAX_RETRIES = 3
+RETRY_SLEEP_SECONDS = 60
 
 
 class AkshareAshareProvider(BaseAshareProvider):
@@ -23,14 +28,29 @@ class AkshareAshareProvider(BaseAshareProvider):
         for raw_symbol in symbols:
             code = normalize_code(raw_symbol)
             exchange = infer_exchange(code)
-            df = ak.stock_zh_a_hist(
-                symbol=code,
-                period="daily",
-                start_date=compact_date_text(start_date),
-                end_date=compact_date_text(end_date),
-                adjust=adjust_flag if adjust_flag in ("", "qfq", "hfq") else "qfq",
-            )
+
+            last_exc = None
+            df = None
+            for attempt in range(MAX_RETRIES):
+                try:
+                    df = ak.stock_zh_a_hist(
+                        symbol=code,
+                        period="daily",
+                        start_date=compact_date_text(start_date),
+                        end_date=compact_date_text(end_date),
+                        adjust=adjust_flag if adjust_flag in ("", "qfq", "hfq") else "qfq",
+                    )
+                    if df is not None and not df.empty:
+                        break
+                    last_exc = RuntimeError(f"akshare 返回空数据: {code}")
+                except Exception as exc:
+                    last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_SLEEP_SECONDS)
+
             if df is None or df.empty:
+                if last_exc:
+                    raise RuntimeError(f"akshare 请求失败 (已重试{MAX_RETRIES}次, symbol={code}): {last_exc}") from last_exc
                 continue
 
             prev_close = None
@@ -60,4 +80,3 @@ class AkshareAshareProvider(BaseAshareProvider):
                 )
                 prev_close = close_price
         return rows
-
