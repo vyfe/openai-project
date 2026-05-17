@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import base64
-import hashlib
+import logging
 import json
 import re
 import time
 import uuid
 from datetime import datetime
-from typing import Optional
-from urllib.parse import quote
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional
 
-import requests
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from peewee import IntegrityError
 
 from conf.settings import settings
@@ -26,11 +22,94 @@ from quant.entities import (
 from service.quant.common import normalize_symbol
 from service.quant.position_service import create_position_entry, list_position_summary
 
+logger = logging.getLogger("quant.im")
+
+
+# ---- 正则消息规则注册表 ----
+@dataclass
+class MessageRule:
+    """正则匹配规则，priority 越小越优先"""
+    pattern: "re.Pattern"
+    handler: Callable[[str, dict], Optional[tuple[str, str]]]
+    priority: int
+    name: str
+
+
+_message_rules: List[MessageRule] = []
+
+
+def register_message_handler(pattern: str, priority: int = 50):
+    """装饰器：注册一个基于正则的消息处理器。priority 越小优先级越高。"""
+    def decorator(func: Callable[[str, dict], Optional[tuple[str, str]]]):
+        _message_rules.append(MessageRule(
+            pattern=re.compile(pattern),
+            handler=func,
+            priority=priority,
+            name=func.__name__,
+        ))
+        _message_rules.sort(key=lambda r: r.priority)
+        logger.info("[rule-registry] 注册消息规则 | name=%s | pattern=%s | priority=%d", func.__name__, pattern, priority)
+        return func
+    return decorator
+
+
+from lark_oapi import Client, LogLevel
+from lark_oapi.core.model import Config
+from lark_oapi.api.im.v1 import (
+    CreateMessageRequest,
+    CreateMessageRequestBody,
+    CreateMessageResponse,
+    ReplyMessageRequest,
+    ReplyMessageRequestBody,
+    ReplyMessageResponse,
+)
+from lark_oapi.api.im.v1.model.p2_im_message_receive_v1 import P2ImMessageReceiveV1
+from lark_oapi.core.const import UTF_8
+from lark_oapi.core.model import RawRequest, RawResponse
+from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 
 CHANNEL_FEISHU_APP = "feishu_app"
-FEISHU_API_BASE = "https://open.feishu.cn/open-apis"
-_FEISHU_TOKEN_CACHE = {"token": "", "expires_at": 0.0}
 
+_FEISHU_CLIENT: Optional[Client] = None
+_FEISHU_EVENT_HANDLER: Optional[EventDispatcherHandler] = None
+
+def _get_feishu_client() -> Optional[Client]:
+    global _FEISHU_CLIENT
+    if _FEISHU_CLIENT is not None:
+        return _FEISHU_CLIENT
+    app_id = (settings.quant_feishu_app_id or "").strip()
+    app_secret = (settings.quant_feishu_app_secret or "").strip()
+    if not app_id or not app_secret:
+        return None
+    logger.info("[feishu-client] 初始化飞书 SDK Client | app_id=%s***", app_id[:8] if len(app_id) > 8 else "***")
+    _FEISHU_CLIENT = (
+        Client.builder()
+        .app_id(app_id)
+        .app_secret(app_secret)
+        .log_level(LogLevel.WARNING)
+        .build()
+    )
+    return _FEISHU_CLIENT
+
+def get_feishu_event_handler() -> Optional[EventDispatcherHandler]:
+    global _FEISHU_EVENT_HANDLER
+    if _FEISHU_EVENT_HANDLER is not None:
+        return _FEISHU_EVENT_HANDLER
+    encrypt_key = (settings.quant_feishu_encrypt_key or "").strip()
+    verification_token = (settings.quant_feishu_verification_token or "").strip()
+    builder = EventDispatcherHandler.builder(encrypt_key, verification_token)
+    builder.register_p2_im_message_receive_v1(_on_im_message_receive)
+    _FEISHU_EVENT_HANDLER = builder.build()
+    logger.info("[feishu-handler] 初始化 EventDispatcherHandler | encrypt_key=%s | verification_token=%s",
+                "已配置" if encrypt_key else "未配置",
+                "已配置" if verification_token else "未配置")
+    return _FEISHU_EVENT_HANDLER
+
+def _require_feishu_client() -> Client:
+    client = _get_feishu_client()
+    if client is None:
+        raise ValueError("缺少飞书应用 app_id/app_secret 配置")
+    return client
 
 def _json_loads(value, default):
     if value in (None, ""):
@@ -41,7 +120,6 @@ def _json_loads(value, default):
         return json.loads(str(value))
     except Exception:
         return default
-
 
 def _normalize_mentions(value) -> list[str]:
     if value is None:
@@ -57,7 +135,6 @@ def _normalize_mentions(value) -> list[str]:
             return [str(item).strip() for item in parsed if str(item).strip()]
     return [item.strip() for item in text.split(",") if item.strip()]
 
-
 def _to_bool(value, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
@@ -65,13 +142,11 @@ def _to_bool(value, default: bool = False) -> bool:
         return default
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
-
 def _truncate_text(content: str, limit: int = 9000) -> str:
     text = str(content or "").strip()
     if len(text) <= limit:
         return text
     return f"{text[:limit - 24]}\n\n内容过长，已截断展示。"
-
 
 def _truncate_markdown(content: str, limit: int = 3800) -> str:
     text = str(content or "").strip()
@@ -79,26 +154,22 @@ def _truncate_markdown(content: str, limit: int = 3800) -> str:
         return text
     return f"{text[:limit - 24]}\n\n> 内容过长，已截断展示。"
 
-
 def _mask_secret(text: str, keep: int = 6) -> str:
     value = str(text or "")
     if len(value) <= keep * 2:
         return value
     return f"{value[:keep]}...{value[-keep:]}"
 
-
 def _mask_feishu_target(config: dict) -> str:
     receive_id_type = str(config.get("receive_id_type") or "chat_id")
     receive_id = str(config.get("receive_id") or "")
     return f"feishu:{receive_id_type}:{_mask_secret(receive_id)}" if receive_id else "feishu:app"
-
 
 def _normalize_channel_type(value: str) -> str:
     channel_type = str(value or CHANNEL_FEISHU_APP).strip() or CHANNEL_FEISHU_APP
     if channel_type != CHANNEL_FEISHU_APP:
         raise ValueError(f"不支持的 IM 通道类型: {channel_type}")
     return channel_type
-
 
 def _normalize_feishu_config(config) -> dict:
     payload = _json_loads(config, {}) or {}
@@ -129,7 +200,6 @@ def _normalize_feishu_config(config) -> dict:
         ).strip(),
     }
 
-
 def _normalize_channel_config(channel_type: str, config=None) -> dict:
     if channel_type == CHANNEL_FEISHU_APP:
         normalized = _normalize_feishu_config(config)
@@ -137,7 +207,6 @@ def _normalize_channel_config(channel_type: str, config=None) -> dict:
             raise ValueError("飞书通道需要配置 receive_id")
         return normalized
     raise ValueError(f"不支持的 IM 通道类型: {channel_type}")
-
 
 def list_im_channels(status: Optional[str] = None, channel_type: Optional[str] = None) -> list[dict]:
     query = QuantImChannel.select().order_by(QuantImChannel.id.desc())
@@ -147,10 +216,8 @@ def list_im_channels(status: Optional[str] = None, channel_type: Optional[str] =
         query = query.where(QuantImChannel.channel_type == channel_type)
     return [item.to_dict() for item in query.iterator()]
 
-
 def get_im_channel(channel_id: int) -> dict:
     return QuantImChannel.get_by_id(channel_id).to_dict()
-
 
 def create_im_channel(
     *,
@@ -177,7 +244,6 @@ def create_im_channel(
     )
     return record.to_dict()
 
-
 def update_im_channel(channel_id: int, **updates) -> dict:
     record = QuantImChannel.get_by_id(channel_id)
     next_channel_type = _normalize_channel_type(updates.get("channel_type", record.channel_type))
@@ -198,12 +264,10 @@ def update_im_channel(channel_id: int, **updates) -> dict:
     record.save()
     return record.to_dict()
 
-
 def delete_im_channel(channel_id: int) -> bool:
     record = QuantImChannel.get_by_id(channel_id)
     record.delete_instance()
     return True
-
 
 def list_delivery_records(
     report_id: Optional[int] = None,
@@ -221,7 +285,6 @@ def list_delivery_records(
     query = query.limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
-
 def list_inbound_events(
     channel_id: Optional[int] = None,
     status: Optional[str] = None,
@@ -233,7 +296,6 @@ def list_inbound_events(
     if status:
         query = query.where(QuantImInboundEvent.status == status)
     return [item.to_dict() for item in query.limit(limit).iterator()]
-
 
 def _load_channel(channel_id: Optional[int] = None) -> dict:
     if not channel_id:
@@ -252,43 +314,8 @@ def _load_channel(channel_id: Optional[int] = None) -> dict:
         "channel_target": _mask_feishu_target(config),
     }
 
-
-def _get_feishu_tenant_access_token() -> str:
-    now = time.time()
-    if _FEISHU_TOKEN_CACHE["token"] and now < float(_FEISHU_TOKEN_CACHE["expires_at"]) - 120:
-        return str(_FEISHU_TOKEN_CACHE["token"])
-    if not settings.quant_feishu_app_id or not settings.quant_feishu_app_secret:
-        raise ValueError("缺少飞书应用 app_id/app_secret 配置")
-    response = requests.post(
-        f"{FEISHU_API_BASE}/auth/v3/tenant_access_token/internal",
-        json={
-            "app_id": settings.quant_feishu_app_id,
-            "app_secret": settings.quant_feishu_app_secret,
-        },
-        timeout=10,
-    )
-    response.raise_for_status()
-    data = response.json()
-    if int(data.get("code", -1)) != 0:
-        raise ValueError(f"获取飞书 tenant_access_token 失败: {data}")
-    token = str(data.get("tenant_access_token") or "").strip()
-    if not token:
-        raise ValueError(f"飞书 token 响应缺少 tenant_access_token: {data}")
-    _FEISHU_TOKEN_CACHE["token"] = token
-    _FEISHU_TOKEN_CACHE["expires_at"] = now + int(data.get("expire", 7200) or 7200)
-    return token
-
-
-def _feishu_headers() -> dict:
-    return {
-        "Authorization": f"Bearer {_get_feishu_tenant_access_token()}",
-        "Content-Type": "application/json; charset=utf-8",
-    }
-
-
 def _feishu_content_text(content: str) -> str:
     return json.dumps({"text": _truncate_text(content)}, ensure_ascii=False)
-
 
 def _send_feishu_text(channel: dict, content: str) -> dict:
     config = channel.get("config") or {}
@@ -296,50 +323,77 @@ def _send_feishu_text(channel: dict, content: str) -> dict:
     receive_id_type = str(config.get("receive_id_type") or "chat_id").strip()
     if not receive_id:
         raise ValueError("飞书通道缺少 receive_id")
-    payload = {
+    logger.info("[feishu-send] 发送消息 | receive_id=%s | receive_id_type=%s | content_len=%d", receive_id, receive_id_type, len(content))
+    msg_uuid = str(uuid.uuid4())
+    request_payload = {
         "receive_id": receive_id,
+        "receive_id_type": receive_id_type,
         "msg_type": "text",
         "content": _feishu_content_text(content),
-        "uuid": str(uuid.uuid4()),
+        "uuid": msg_uuid,
     }
-    response = requests.post(
-        f"{FEISHU_API_BASE}/im/v1/messages?receive_id_type={quote(receive_id_type)}",
-        headers=_feishu_headers(),
-        json=payload,
-        timeout=10,
+    client = _require_feishu_client()
+    req = (
+        CreateMessageRequest.builder()
+        .receive_id_type(receive_id_type)
+        .request_body(
+            CreateMessageRequestBody.builder()
+            .receive_id(receive_id)
+            .msg_type("text")
+            .content(_feishu_content_text(content))
+            .uuid(msg_uuid)
+            .build()
+        )
+        .build()
     )
-    response.raise_for_status()
-    data = response.json()
-    if int(data.get("code", -1)) != 0:
-        raise ValueError(f"飞书消息发送失败: {data}")
-    return {"message_type": "text", "request_payload": payload, "response_payload": data}
-
+    resp: CreateMessageResponse = client.im.v1.message.create(req)
+    if resp.code != 0:
+        raise ValueError(f"飞书消息发送失败: code={resp.code}, msg={resp.msg}")
+    response_payload = {
+        "code": resp.code,
+        "msg": resp.msg,
+        "message_id": resp.data.message_id if resp.data else None,
+    }
+    return {"message_type": "text", "request_payload": request_payload, "response_payload": response_payload}
 
 def _reply_feishu_text(message_id: str, content: str, reply_in_thread: bool = False) -> dict:
     if not message_id:
         raise ValueError("飞书回复缺少 message_id")
-    payload = {
+    logger.info("[feishu-reply] 回复消息 | message_id=%s | reply_in_thread=%s | content_len=%d", message_id, reply_in_thread, len(content))
+    msg_uuid = str(uuid.uuid4())
+    request_payload = {
+        "message_id": message_id,
         "msg_type": "text",
         "content": _feishu_content_text(content),
         "reply_in_thread": bool(reply_in_thread),
-        "uuid": str(uuid.uuid4()),
+        "uuid": msg_uuid,
     }
-    response = requests.post(
-        f"{FEISHU_API_BASE}/im/v1/messages/{quote(message_id, safe='')}/reply",
-        headers=_feishu_headers(),
-        json=payload,
-        timeout=10,
+    client = _require_feishu_client()
+    req = (
+        ReplyMessageRequest.builder()
+        .message_id(message_id)
+        .request_body(
+            ReplyMessageRequestBody.builder()
+            .msg_type("text")
+            .content(_feishu_content_text(content))
+            .reply_in_thread(bool(reply_in_thread))
+            .uuid(msg_uuid)
+            .build()
+        )
+        .build()
     )
-    response.raise_for_status()
-    data = response.json()
-    if int(data.get("code", -1)) != 0:
-        raise ValueError(f"飞书消息回复失败: {data}")
-    return {"message_type": "text", "request_payload": payload, "response_payload": data}
-
+    resp: ReplyMessageResponse = client.im.v1.message.reply(req)
+    if resp.code != 0:
+        raise ValueError(f"飞书消息回复失败: code={resp.code}, msg={resp.msg}")
+    response_payload = {
+        "code": resp.code,
+        "msg": resp.msg,
+        "message_id": resp.data.message_id if resp.data else None,
+    }
+    return {"message_type": "text", "request_payload": request_payload, "response_payload": response_payload}
 
 def _send_channel_content(channel: dict, content: str) -> dict:
     return _send_feishu_text(channel, content)
-
 
 def _create_delivery_record(
     *,
@@ -370,7 +424,6 @@ def _create_delivery_record(
         created_at=datetime.now(),
     )
     return record.to_dict()
-
 
 def send_report_to_channel(
     report_id: int,
@@ -405,7 +458,6 @@ def send_report_to_channel(
             sent_at=datetime.now(),
         )
 
-
 def render_position_summary_markdown(strategy_id: Optional[int] = None) -> str:
     summary = list_position_summary(strategy_id=strategy_id)
     journal_count = QuantPositionJournal.select().count() if strategy_id is None else (
@@ -432,7 +484,6 @@ def render_position_summary_markdown(strategy_id: Optional[int] = None) -> str:
             f"- {item['symbol']} 持仓 `{item['net_quantity']}` 股，成本 `{item.get('avg_cost')}`，现价 `{item.get('latest_price')}`，浮盈 `{pnl_text}`"
         )
     return "\n".join(lines)
-
 
 def send_position_summary_to_channel(
     *,
@@ -466,7 +517,6 @@ def send_position_summary_to_channel(
             sent_at=datetime.now(),
         )
 
-
 def send_test_message(
     *,
     content: str,
@@ -482,55 +532,11 @@ def send_test_message(
         "response_payload": result["response_payload"],
     }
 
-
 def available_im_channel_options() -> list[dict]:
     return [
         {"id": item["id"], "name": item["name"], "channel_type": item["channel_type"], "status": item["status"]}
         for item in list_im_channels(status="active")
     ]
-
-
-def _verify_feishu_signature(raw_body: bytes, headers) -> bool:
-    encrypt_key = settings.quant_feishu_encrypt_key
-    if not encrypt_key:
-        return True
-    timestamp = headers.get("X-Lark-Request-Timestamp") or headers.get("x-lark-request-timestamp") or ""
-    nonce = headers.get("X-Lark-Request-Nonce") or headers.get("x-lark-request-nonce") or ""
-    signature = headers.get("X-Lark-Signature") or headers.get("x-lark-signature") or ""
-    if not timestamp or not nonce or not signature:
-        return False
-    expected = hashlib.sha256((timestamp + nonce + encrypt_key).encode("utf-8") + raw_body).hexdigest()
-    return expected == signature
-
-
-def _decrypt_feishu_payload(encrypted: str) -> dict:
-    if not settings.quant_feishu_encrypt_key:
-        raise ValueError("收到飞书加密事件，但未配置 feishu_encrypt_key")
-    key = hashlib.sha256(settings.quant_feishu_encrypt_key.encode("utf-8")).digest()
-    raw = base64.b64decode(encrypted)
-    if len(raw) < 16:
-        raise ValueError("飞书事件解密失败: 密文过短")
-    iv = raw[:16]
-    ciphertext = raw[16:]
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    padded = decryptor.update(ciphertext) + decryptor.finalize()
-    padding = padded[-1]
-    if padding < 1 or padding > 16:
-        raise ValueError("飞书事件解密失败: padding 非法")
-    text = padded[:-padding].decode("utf-8")
-    return json.loads(text)
-
-
-def _verify_feishu_token(payload: dict):
-    expected = settings.quant_feishu_verification_token
-    if not expected:
-        return
-    header = payload.get("header") or {}
-    actual = header.get("token") or payload.get("token") or ""
-    if actual != expected:
-        raise ValueError("飞书事件 verification token 不匹配")
-
 
 def _extract_feishu_text(message: dict) -> str:
     content = _json_loads(message.get("content"), {})
@@ -551,25 +557,50 @@ def _extract_feishu_text(message: dict) -> str:
     text = re.sub(r"^@\S+\s*", "", text).strip()
     return text
 
+def _normalize_feishu_mentions(mentions) -> list[dict]:
+    """将 SDK 的 MentionEvent 对象列表转为 JSON 可序列化的纯 dict 列表。"""
+    if not mentions:
+        return []
+    result = []
+    for m in mentions:
+        uid = m.id
+        result.append({
+            "key": m.key,
+            "id": {"open_id": uid.open_id, "user_id": uid.user_id, "union_id": uid.union_id} if uid else None,
+            "name": m.name,
+            "tenant_key": m.tenant_key,
+        })
+    return result
 
-def _parse_feishu_message_event(payload: dict) -> dict:
-    event = payload.get("event") or {}
-    sender = event.get("sender") or {}
-    sender_id = sender.get("sender_id") or {}
-    message = event.get("message") or {}
+
+def _parse_feishu_event_from_sdk(data: P2ImMessageReceiveV1) -> dict:
+    event = data.event
+    message = event.message if event else None
+    sender = event.sender if event else None
+    sender_id_obj = sender.sender_id if sender else None
+    sender_id = ""
+    if sender_id_obj:
+        sender_id = sender_id_obj.open_id or sender_id_obj.user_id or sender_id_obj.union_id or ""
+    message_dict = {
+        "message_id": message.message_id,
+        "chat_id": message.chat_id,
+        "chat_type": message.chat_type,
+        "message_type": message.message_type,
+        "content": message.content,
+        "mentions": message.mentions,
+    } if message else {}
     return {
-        "event_id": (payload.get("header") or {}).get("event_id") or message.get("message_id") or uuid.uuid4().hex,
-        "message_id": message.get("message_id") or "",
-        "chat_id": message.get("chat_id") or "",
-        "chat_type": message.get("chat_type") or "",
-        "sender_id": sender_id.get("open_id") or sender_id.get("user_id") or sender_id.get("union_id") or "",
-        "sender_type": sender.get("sender_type") or "",
-        "message_type": message.get("message_type") or "",
-        "mentions": message.get("mentions") or [],
-        "text": _extract_feishu_text(message),
-        "raw_event": event,
+        "event_id": (data.header.event_id if data.header else None) or (message.message_id if message else None) or uuid.uuid4().hex,
+        "message_id": message.message_id if message else "",
+        "chat_id": message.chat_id if message else "",
+        "chat_type": message.chat_type if message else "",
+        "sender_id": sender_id,
+        "sender_type": sender.sender_type if sender else "",
+        "message_type": message.message_type if message else "",
+        "mentions": _normalize_feishu_mentions(message.mentions) if message else [],
+        "text": _extract_feishu_text(message_dict) if message else "",
+        "raw_event": {},
     }
-
 
 def _match_feishu_channel(chat_id: str) -> Optional[QuantImChannel]:
     channels = QuantImChannel.select().where(
@@ -580,7 +611,6 @@ def _match_feishu_channel(chat_id: str) -> Optional[QuantImChannel]:
         if chat_id and chat_id in (config.get("inbound_chat_id"), config.get("receive_id")):
             return channel
     return None
-
 
 def _feishu_help_text() -> str:
     return "\n".join(
@@ -594,20 +624,17 @@ def _feishu_help_text() -> str:
         ]
     )
 
-
 def _latest_report_text() -> str:
     report = QuantReportRecord.select().order_by(QuantReportRecord.id.desc()).first()
     if not report:
         return "当前还没有可发送的量化报告。"
     return _truncate_text(report.final_markdown, limit=9000)
 
-
 def _parse_number_token(token: str, *, as_int: bool = False):
     text = re.sub(r"[^0-9.\-]", "", str(token or ""))
     if not text:
         return None
     return int(float(text)) if as_int else float(text)
-
 
 def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dict]:
     normalized = re.sub(r"[，,]+", " ", str(text or "")).strip()
@@ -646,11 +673,20 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
     )
     return entry
 
-
 def _route_feishu_command(text: str, parsed: dict) -> tuple[str, str]:
     command_text = str(text or "").strip()
     if not command_text:
         return "help", _feishu_help_text()
+
+    # 1. 正则规则引擎（可扩展，按 priority 排序，越小越优先）
+    for rule in _message_rules:
+        if rule.pattern.search(command_text):
+            result = rule.handler(command_text, parsed)
+            if result is not None:
+                logger.debug("[rule-engine] 命中规则 | name=%s | text=%s", rule.name, command_text[:60])
+                return result
+
+    # 2. 硬编码命令（向后兼容）
     compact = command_text.lower().replace(" ", "")
     if compact in ("help", "帮助", "菜单", "说明"):
         return "help", _feishu_help_text()
@@ -665,7 +701,17 @@ def _route_feishu_command(text: str, parsed: dict) -> tuple[str, str]:
             "position_entry",
             f"已登记持仓流水：{entry['side']} {entry['symbol']} {entry['quantity']} 股，价格 {price_text}。\n记录 ID: {entry['id']}",
         )
-    return "unknown", f"暂未识别这条指令：{command_text}\n\n{_feishu_help_text()}"
+
+    # 3. 兜底：回显当前时间
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return "time_echo", f"⏰ 当前时间：{now}"
+
+
+# ---- 内置规则：当前时间回显（priority 极高，兜底） ----
+@register_message_handler(r"^[时间|几点|现在几点].*", priority=15)
+def _time_query_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return "time_query", f"⏰ 当前时间：{now}"
 
 
 def _should_process_feishu_message(parsed: dict) -> bool:
@@ -676,65 +722,91 @@ def _should_process_feishu_message(parsed: dict) -> bool:
         return True
     return bool(parsed.get("mentions"))
 
+def _on_im_message_receive(data: P2ImMessageReceiveV1) -> None:
+    logger.info("[feishu-event] 收到 im.message.receive_v1")
+    parsed = _parse_feishu_event_from_sdk(data)
+    logger.debug(
+        "[feishu-event] 解析结果 | chat_id=%s | message_id=%s | sender_id=%s | chat_type=%s | text_preview=%s",
+        parsed.get("chat_id"), parsed.get("message_id"), parsed.get("sender_id"),
+        parsed.get("chat_type"), (parsed.get("text") or "")[:80],
+    )
+    channel = _match_feishu_channel(parsed.get("chat_id", ""))
+    channel_id = channel.id if channel else None
+    if channel:
+        logger.info("[feishu-event] 匹配到通道 | channel_id=%d | name=%s", channel.id, channel.name)
+    else:
+        logger.info("[feishu-event] 未匹配到任何活跃通道 | chat_id=%s", parsed.get("chat_id"))
+    try:
+        event_record = QuantImInboundEvent.create(
+            event_id=parsed["event_id"],
+            channel_id=channel_id,
+            channel_type=CHANNEL_FEISHU_APP,
+            message_id=parsed.get("message_id") or "",
+            chat_id=parsed.get("chat_id") or "",
+            sender_id=parsed.get("sender_id") or "",
+            sender_type=parsed.get("sender_type") or "",
+            message_type=parsed.get("message_type") or "",
+            raw_payload_json=json.dumps({}, ensure_ascii=False),
+            parsed_payload_json=json.dumps(parsed, ensure_ascii=False),
+            received_at=datetime.now(),
+        )
+    except IntegrityError:
+        logger.info("[feishu-event] 重复事件，跳过 | event_id=%s", parsed.get("event_id"))
+        return
+    if not _should_process_feishu_message(parsed):
+        logger.info(
+            "[feishu-event] 消息被忽略 | chat_type=%s | has_mentions=%s",
+            parsed.get("chat_type"), bool(parsed.get("mentions"))
+        )
+        event_record.status = "ignored"
+        event_record.command = "ignored"
+        event_record.processed_at = datetime.now()
+        event_record.save()
+        return
+    logger.info("[feishu-event] 开始处理 | command_text=%s", (parsed.get("text") or "")[:100])
+    try:
+        command, response_text = _route_feishu_command(parsed.get("text") or "", parsed)
+        logger.info("[feishu-event] 命令路由 | command=%s | response_len=%d", command, len(response_text))
+        reply_in_thread = _to_bool(_json_loads(channel.config_json, {}).get("reply_in_thread"), False) if channel else False
+        response_payload = _reply_feishu_text(parsed.get("message_id") or "", response_text, reply_in_thread=reply_in_thread)
+        event_record.command = command
+        event_record.status = "processed"
+        event_record.response_payload_json = json.dumps(response_payload, ensure_ascii=False)
+        event_record.processed_at = datetime.now()
+        event_record.save()
+    except Exception as exc:
+        logger.exception("[feishu-event] 处理失败 | error=%s", exc)
+        event_record.status = "failed"
+        event_record.error_message = str(exc)
+        event_record.processed_at = datetime.now()
+        event_record.save()
 
 def handle_feishu_event_callback(raw_body: bytes, headers) -> tuple[dict, int]:
     if not raw_body:
+        logger.info("[feishu-callback] 收到空请求体")
         return {"code": 0, "msg": "empty"}, 200
+    handler = get_feishu_event_handler()
+    if handler is None:
+        logger.error("[feishu-callback] EventDispatcherHandler 未初始化（缺少飞书配置）")
+        return {"code": 503, "msg": "feishu not configured"}, 503
+    important_headers = {k: v for k, v in headers.items()
+                         if k.lower() in ("content-type", "x-lark-request-timestamp",
+                                          "x-lark-request-nonce", "x-lark-signature", "user-agent")}
+    logger.info("[feishu-callback] 收到请求 | body_len=%d | headers=%s", len(raw_body), important_headers)
     try:
-        payload = json.loads(raw_body.decode("utf-8"))
-        is_challenge = payload.get("type") == "url_verification" or bool(payload.get("challenge"))
-        if is_challenge:
-            if "encrypt" in payload:
-                payload = _decrypt_feishu_payload(payload["encrypt"])
-            _verify_feishu_token(payload)
-            return {"challenge": payload.get("challenge", "")}, 200
-        if not _verify_feishu_signature(raw_body, headers):
-            return {"code": 401, "msg": "invalid feishu signature"}, 401
-        if "encrypt" in payload:
-            payload = _decrypt_feishu_payload(payload["encrypt"])
-        _verify_feishu_token(payload)
-        event_type = (payload.get("header") or {}).get("event_type") or payload.get("type") or ""
-        if event_type != "im.message.receive_v1":
-            return {"code": 0, "msg": "ignored event"}, 200
-        parsed = _parse_feishu_message_event(payload)
-        channel = _match_feishu_channel(parsed.get("chat_id", ""))
-        channel_id = channel.id if channel else None
-        try:
-            event_record = QuantImInboundEvent.create(
-                event_id=parsed["event_id"],
-                channel_id=channel_id,
-                channel_type=CHANNEL_FEISHU_APP,
-                message_id=parsed.get("message_id") or "",
-                chat_id=parsed.get("chat_id") or "",
-                sender_id=parsed.get("sender_id") or "",
-                sender_type=parsed.get("sender_type") or "",
-                message_type=parsed.get("message_type") or "",
-                raw_payload_json=json.dumps(payload, ensure_ascii=False),
-                parsed_payload_json=json.dumps(parsed, ensure_ascii=False),
-                received_at=datetime.now(),
-            )
-        except IntegrityError:
-            return {"code": 0, "msg": "duplicate event"}, 200
-        if not _should_process_feishu_message(parsed):
-            event_record.status = "ignored"
-            event_record.command = "ignored"
-            event_record.processed_at = datetime.now()
-            event_record.save()
-            return {"code": 0, "msg": "ignored message"}, 200
-        try:
-            command, response_text = _route_feishu_command(parsed.get("text") or "", parsed)
-            reply_in_thread = _to_bool(_json_loads(channel.config_json, {}).get("reply_in_thread"), False) if channel else False
-            response_payload = _reply_feishu_text(parsed.get("message_id") or "", response_text, reply_in_thread=reply_in_thread)
-            event_record.command = command
-            event_record.status = "processed"
-            event_record.response_payload_json = json.dumps(response_payload, ensure_ascii=False)
-            event_record.processed_at = datetime.now()
-            event_record.save()
-        except Exception as exc:
-            event_record.status = "failed"
-            event_record.error_message = str(exc)
-            event_record.processed_at = datetime.now()
-            event_record.save()
-        return {"code": 0, "msg": "ok"}, 200
+        raw_req = RawRequest()
+        raw_req.uri = "/never_guess_my_usage/quant/im/feishu/events"
+        raw_req.body = raw_body
+        raw_req.headers = {k.lower(): v for k, v in headers.items()}
+        logger.debug("[feishu-callback] 转发到 SDK EventDispatcherHandler...")
+        raw_resp: RawResponse = handler.do(raw_req)
+        status_code = raw_resp.status_code or 200
+        if raw_resp.content:
+            body = json.loads(raw_resp.content.decode(UTF_8))
+            logger.info("[feishu-callback] SDK 返回 | status=%d | body=%s", status_code, body)
+            return body, status_code
+        logger.info("[feishu-callback] SDK 返回 | status=%d (无 content)", status_code)
+        return {"code": 0, "msg": "ok"}, status_code
     except Exception as exc:
+        logger.exception("[feishu-callback] 处理失败 | error=%s", exc)
         return {"code": 500, "msg": f"feishu event failed: {exc}"}, 500

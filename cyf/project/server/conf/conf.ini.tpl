@@ -16,6 +16,9 @@ test_ip_default_limit=20
 test_exceed_msg=异常123
 [log]
 sqlite3_file=
+[admin]
+# 是否启用SQL执行后门
+enable_sql_execute=
 [quant]
 # 独立量化数据库。不要和 log.sqlite3_file 共用，避免被日志清理策略误伤。
 sqlite3_file=
