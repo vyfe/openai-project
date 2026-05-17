@@ -38,6 +38,7 @@ class Settings:
     quant_feishu_app_secret: str
     quant_feishu_verification_token: str
     quant_feishu_encrypt_key: str
+    quant_feishu_debug_suffix: str
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -94,6 +95,7 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         quant_feishu_app_secret=_get_str(conf, "quant", "feishu_app_secret", fallback=""),
         quant_feishu_verification_token=_get_str(conf, "quant", "feishu_verification_token", fallback=""),
         quant_feishu_encrypt_key=_get_str(conf, "quant", "feishu_encrypt_key", fallback=""),
+        quant_feishu_debug_suffix=_get_str(conf, "quant", "feishu_debug_suffix", fallback=""),
     )
 
 
