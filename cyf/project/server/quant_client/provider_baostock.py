@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 import time
 
 from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_baostock_symbol, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 MAX_RETRIES = 3
-RETRY_SLEEP_SECONDS = 60
+RETRY_SLEEP_SECONDS = int(os.environ.get("QUANT_RETRY_SLEEP_SECONDS", "60"))
 
 
 class BaostockAshareProvider(BaseAshareProvider):
