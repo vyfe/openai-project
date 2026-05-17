@@ -49,6 +49,7 @@ from service.quant.report_service import (
     list_reports,
     update_prompt_template,
 )
+from service.quant.symbol_search_service import search_symbols, search_symbols_fallback
 from service.quant.schedule_service import (
     TASK_TYPE_ANALYSIS,
     TASK_TYPE_DATA_SYNC,
@@ -1084,3 +1085,17 @@ def quant_client_task_report(user, password):
         return success_response(data=task, msg="任务上报成功")
     except Exception as exc:
         return error_response(f"上报任务结果失败: {exc}")
+
+@quant_bp.route("/symbols/search", methods=["GET"])
+@require_auth
+def quant_symbol_search(user, password):
+    """模糊搜索 A 股股票（名称/代码/拼音），用于持仓录入联想"""
+    del user, password
+    keyword = str(request.args.get("keyword", "")).strip()
+    limit = request.args.get("limit", default=20, type=int) or 20
+    try:
+        results = search_symbols_fallback(keyword, limit=max(1, min(limit, 50)))
+        return success_response(data=results, msg=f"找到 {len(results)} 个匹配")
+    except Exception as exc:
+        return error_response(f"搜索失败: {exc}")
+

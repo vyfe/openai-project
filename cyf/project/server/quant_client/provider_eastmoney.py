@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import urllib.parse
 import urllib.request
 
+from quant_client.eastmoney_patch import get_eastmoney_session
 from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_float
 from quant_client.provider_base import BaseAshareProvider
 
@@ -12,7 +14,7 @@ from quant_client.provider_base import BaseAshareProvider
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 EASTMONEY_UT = "fa5fd1943c7b386f172d6893dbfba10b"
 MAX_RETRIES = 3
-RETRY_SLEEP_SECONDS = 60
+RETRY_SLEEP_SECONDS = int(os.environ.get("QUANT_RETRY_SLEEP_SECONDS", "60"))
 
 
 def _get_secid(code: str) -> str:
@@ -61,14 +63,11 @@ class EastmoneyAshareProvider(BaseAshareProvider):
         last_exc = None
         for attempt in range(MAX_RETRIES):
             try:
-                req = urllib.request.Request(
-                    url,
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-                        "Referer": "https://quote.eastmoney.com/",
-                        "Accept": "application/json,text/plain,*/*",
-                    },
-                )
+                session = get_eastmoney_session()
+                headers, cookie = session.get_headers()
+                req = urllib.request.Request(url, headers=headers)
+                if cookie:
+                    req.add_header("Cookie", cookie)
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
                 break
