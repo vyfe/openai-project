@@ -41,6 +41,8 @@ class QuantDailyBar(QuantBaseModel):
     amount = FloatField(null=True)
     turnover_rate = FloatField(null=True)
     pct_change = FloatField(null=True)
+    change = FloatField(null=True)
+    amplitude_pct = FloatField(null=True)
     source = CharField(default="")
     source_run_id = CharField(default="", index=True)
     data_source_version = CharField(default="")

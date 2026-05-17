@@ -1,3 +1,4 @@
+from quant_client.provider_eastmoney import EastmoneyAshareProvider
 from quant_client.provider_akshare import AkshareAshareProvider
 from quant_client.provider_base import BaseAshareProvider
 from quant_client.provider_baostock import BaostockAshareProvider
@@ -5,11 +6,11 @@ from quant_client.provider_baostock import BaostockAshareProvider
 
 class AutoAshareProvider(BaseAshareProvider):
     provider_name = "auto"
-    provider_version = "akshare_then_baostock"
+    provider_version = "eastmoney_then_akshare_then_baostock"
 
     def fetch_daily_bars(self, symbols: list[str], start_date: str, end_date: str, adjust_flag: str = "qfq") -> list[dict]:
         errors = []
-        for provider_cls in (AkshareAshareProvider, BaostockAshareProvider):
+        for provider_cls in (EastmoneyAshareProvider, AkshareAshareProvider, BaostockAshareProvider):
             provider = provider_cls()
             try:
                 records = provider.fetch_daily_bars(symbols=symbols, start_date=start_date, end_date=end_date, adjust_flag=adjust_flag)
@@ -23,6 +24,7 @@ class AutoAshareProvider(BaseAshareProvider):
 
 PROVIDER_MAP = {
     "auto": AutoAshareProvider,
+    "eastmoney": EastmoneyAshareProvider,
     "akshare": AkshareAshareProvider,
     "baostock": BaostockAshareProvider,
 }
