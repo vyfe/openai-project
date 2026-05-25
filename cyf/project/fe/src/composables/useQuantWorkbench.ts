@@ -115,11 +115,13 @@ export type ScheduleRunRecord = {
   attempts: number
   max_retries: number
   message?: string
+  log_file?: string
   payload?: Record<string, any>
   result?: Record<string, any>
   next_retry_at?: string
   started_at?: string
   finished_at?: string
+  log_tail?: string
 }
 
 export type PromptTemplateRecord = {
@@ -327,6 +329,15 @@ function createQuantWorkbench() {
     leaseSeconds: 600
   })
 
+  const backfillForm = reactive({
+    symbols: [] as string[],
+    lookbackDays: 730,
+    provider: 'auto',
+    adjustFlag: 'qfq',
+    note: '',
+    leaseSeconds: 600
+  })
+
   const defaultRuleConfig = {
     logic: 'all',
     signal_type: 'watch',
@@ -478,6 +489,7 @@ function createQuantWorkbench() {
   const selectedBacktest = computed(() => selectedBacktestDetail.value || backtestRuns.value.find(item => item.id === selectedBacktestId.value) || null)
   const selectedSchedule = computed(() => scheduleConfigs.value.find(item => item.id === selectedScheduleId.value) || null)
   const selectedScheduleRun = computed(() => scheduleRuns.value.find(item => item.id === selectedScheduleRunId.value) || null)
+  const selectedScheduleRunLogText = computed(() => selectedScheduleRun.value?.log_tail || '')
   const selectedPrompt = computed(() => promptTemplates.value.find(item => item.id === selectedPromptId.value) || null)
   const selectedReport = computed(() => selectedReportDetail.value || reports.value.find(item => item.id === selectedReportId.value) || null)
   const selectedImChannel = computed(() => imChannels.value.find(item => item.id === selectedChannelId.value) || null)
@@ -1190,6 +1202,21 @@ function createQuantWorkbench() {
     }
   }
 
+  const loadScheduleRunLog = async (runId?: number | null) => {
+    const finalId = runId || selectedScheduleRunId.value
+    if (!finalId) return
+    try {
+      const response: any = await quantScheduleAPI.getRunLog(finalId, { limit: 200 })
+      const target = scheduleRuns.value.find(item => item.id === finalId)
+      if (target) {
+        target.log_tail = response.data?.log_tail || ''
+        target.log_file = response.data?.log_file || target.log_file
+      }
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加载执行日志失败')
+    }
+  }
+
   const createTask = async () => {
     if (!taskForm.symbols.length || !taskForm.startDate || !taskForm.endDate) {
       ElMessage.warning('请先补全任务的股票池和时间范围')
@@ -1210,6 +1237,30 @@ function createQuantWorkbench() {
       await Promise.all([loadTasks(), loadOverview()])
     } catch (error: any) {
       ElMessage.error(error?.message || '创建任务失败')
+    } finally {
+      loading.createTask = false
+    }
+  }
+
+  const createBackfillTask = async () => {
+    if (!backfillForm.symbols.length) {
+      ElMessage.warning('先选择需要补历史数据的股票')
+      return
+    }
+    loading.createTask = true
+    try {
+      await quantDataAPI.backfill({
+        symbols: backfillForm.symbols,
+        lookback_days: backfillForm.lookbackDays,
+        provider: backfillForm.provider,
+        adjust_flag: backfillForm.adjustFlag,
+        note: backfillForm.note,
+        lease_seconds: backfillForm.leaseSeconds
+      })
+      ElMessage.success('历史补数任务已创建')
+      await Promise.all([loadTasks(), loadOverview()])
+    } catch (error: any) {
+      ElMessage.error(error?.message || '创建历史补数任务失败')
     } finally {
       loading.createTask = false
     }
@@ -1510,8 +1561,24 @@ function createQuantWorkbench() {
       await quantScheduleAPI.executeRun(finalId)
       ElMessage.success('执行记录已在当前服务内触发')
       await Promise.all([loadScheduleRuns(), loadSchedulerMeta(), loadOverview(), loadTasks(), loadRuns()])
+      if (finalId) await loadScheduleRunLog(finalId)
     } catch (error: any) {
       ElMessage.error(error?.message || '执行调度记录失败')
+    }
+  }
+
+  const resetScheduleRunNow = async (runId?: number | null, allowSuccess = false) => {
+    const finalId = runId || selectedScheduleRunId.value
+    if (!finalId) {
+      ElMessage.info('先选中一条执行记录')
+      return
+    }
+    try {
+      await quantScheduleAPI.resetRun(finalId, allowSuccess)
+      ElMessage.success('执行记录已重置回待执行')
+      await Promise.all([loadScheduleRuns(), loadSchedulerMeta(), loadOverview()])
+    } catch (error: any) {
+      ElMessage.error(error?.message || '重置执行记录失败')
     }
   }
 
@@ -1825,6 +1892,7 @@ function createQuantWorkbench() {
     loading,
     dailyQuery,
     taskForm,
+    backfillForm,
     defaultRuleConfig,
     breakoutRuleConfig,
     strategyPresets,
@@ -1843,6 +1911,7 @@ function createQuantWorkbench() {
     selectedBacktest,
     selectedSchedule,
     selectedScheduleRun,
+    selectedScheduleRunLogText,
     selectedPrompt,
     selectedReport,
     selectedImChannel,
@@ -1913,7 +1982,9 @@ function createQuantWorkbench() {
     loadBacktestDetail,
     loadScheduleConfigs,
     loadScheduleRuns,
+    loadScheduleRunLog,
     createTask,
+    createBackfillTask,
     resetTask,
     saveStrategy,
     deleteSelectedStrategy,
@@ -1928,6 +1999,7 @@ function createQuantWorkbench() {
     manualRunSchedule,
     rebuildDueScheduleRuns,
     executeScheduleRunNow,
+    resetScheduleRunNow,
     saveImChannel,
     deleteSelectedImChannel,
     sendReportNow,

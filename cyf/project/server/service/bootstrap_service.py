@@ -2,6 +2,7 @@ import os
 import threading
 
 from conf.runtime import runtime_state
+from conf.runtime_logging import build_runtime_log_path
 from model.db import init_db
 from model.entities import ALL_MODELS, ModelMeta, User
 from quant.db import init_quant_db
@@ -18,6 +19,7 @@ def initialize_database():
 def ensure_quant_runtime_dirs():
     os.makedirs(runtime_state.settings.quant_bundle_dir, exist_ok=True)
     os.makedirs(runtime_state.settings.quant_memory_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(build_runtime_log_path("platform", "uwsgi.log")), exist_ok=True)
 
 
 def run_model_meta_refresh(logger, reason: str):

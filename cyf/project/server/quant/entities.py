@@ -368,6 +368,7 @@ class QuantScheduleRun(QuantBaseModel):
     max_retries = IntegerField(default=1)
     next_retry_at = DateTimeField(null=True, index=True)
     message = TextField(default="")
+    log_file = CharField(default="")
     payload_json = TextField(default="{}")
     result_json = TextField(default="{}")
     created_at = DateTimeField(default=datetime.now)
@@ -396,6 +397,7 @@ class QuantScheduleRun(QuantBaseModel):
             "max_retries": self.max_retries,
             "next_retry_at": self.next_retry_at.isoformat() if self.next_retry_at else None,
             "message": self.message,
+            "log_file": self.log_file,
             "payload": json.loads(self.payload_json or "{}"),
             "result": json.loads(self.result_json or "{}"),
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -478,6 +480,49 @@ class QuantReportRecord(QuantBaseModel):
             "final_markdown": self.final_markdown,
             "memory_references": json.loads(self.memory_references_json or "[]"),
             "meta": json.loads(self.meta_json or "{}"),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class QuantDailyIndicator(QuantBaseModel):
+    symbol = CharField(index=True)
+    code = CharField(index=True)
+    exchange = CharField(index=True)
+    trade_date = DateField(index=True)
+    adjust_flag = CharField(default="qfq", index=True)
+    indicator_name = CharField(index=True)
+    indicator_version = CharField(default="", index=True)
+    params_json = TextField(default="{}")
+    value_json = TextField(default="{}")
+    source_bar_count = IntegerField(default=0)
+    source_run_id = CharField(default="", index=True)
+    data_source_version = CharField(default="")
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_daily_indicator"
+        indexes = (
+            (("symbol", "trade_date", "adjust_flag", "indicator_name", "indicator_version"), True),
+            (("indicator_name", "trade_date"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "symbol": self.symbol,
+            "code": self.code,
+            "exchange": self.exchange,
+            "trade_date": self.trade_date.isoformat() if isinstance(self.trade_date, date) else None,
+            "adjust_flag": self.adjust_flag,
+            "indicator_name": self.indicator_name,
+            "indicator_version": self.indicator_version,
+            "params": json.loads(self.params_json or "{}"),
+            "value": json.loads(self.value_json or "{}"),
+            "source_bar_count": self.source_bar_count,
+            "source_run_id": self.source_run_id,
+            "data_source_version": self.data_source_version,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -640,9 +685,31 @@ class QuantPositionJournal(QuantBaseModel):
         }
 
 
+
+
+class QuantFeishuUserBinding(QuantBaseModel):
+    """飞书用户与慧聊用户绑定关系"""
+    feishu_open_id = CharField(unique=True, index=True)
+    username = CharField(index=True)
+    bound_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_feishu_user_binding"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "feishu_open_id": self.feishu_open_id,
+            "username": self.username,
+            "bound_at": self.bound_at.isoformat() if self.bound_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 QUANT_MODELS = [
     QuantInstrument,
     QuantDailyBar,
+    QuantDailyIndicator,
     QuantImportBatch,
     QuantStrategy,
     QuantStrategyRun,
@@ -657,4 +724,5 @@ QUANT_MODELS = [
     QuantReportDelivery,
     QuantImInboundEvent,
     QuantPositionJournal,
+    QuantFeishuUserBinding,
 ]

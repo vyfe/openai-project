@@ -118,4 +118,17 @@ router.beforeEach((to, from, next) => {
   }
 })
 
+
+// 量化工作台路由守卫：普通用户不能访问管理页面
+router.beforeEach((to, _from, next) => {
+  const adminOnlyPaths = ['/quant/strategy', '/quant/backtest', '/quant/scheduler']
+  if (adminOnlyPaths.some(p => to.path.startsWith(p))) {
+    const authStore = useAuthStore()
+    if (!authStore.isAdmin()) {
+      return next('/quant/overview')
+    }
+  }
+  next()
+})
+
 export default router

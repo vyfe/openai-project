@@ -104,17 +104,21 @@ const { isDarkTheme, initThemeManager } = useThemeManager()
 const workbench = useQuantWorkbench()
 const summaryCards = computed(() => (unref(workbench.dashboardCards) || []).filter((card): card is NonNullable<typeof card> => Boolean(card)))
 
-const navItems = [
-  { label: '总览', to: '/quant/overview', icon: DataBoard },
-  { label: '数据中心', to: '/quant/data', icon: Search },
-  { label: '策略中心', to: '/quant/strategy', icon: MagicStick },
-  { label: '执行记录', to: '/quant/runs', icon: VideoPlay },
-  { label: '操作登记', to: '/quant/operations', icon: DocumentChecked },
-  { label: '回测评估', to: '/quant/backtest', icon: TrendCharts },
-  { label: '调度执行', to: '/quant/scheduler', icon: RefreshRight },
-  { label: 'AI与记忆', to: '/quant/ai-memory', icon: Histogram },
-  { label: 'IM与持仓', to: '/quant/im-positions', icon: Promotion }
+const allNavItems = [
+  { label: '总览', to: '/quant/overview', icon: DataBoard, adminOnly: false },
+  { label: '数据中心', to: '/quant/data', icon: Search, adminOnly: false },
+  { label: '策略中心', to: '/quant/strategy', icon: MagicStick, adminOnly: true },
+  { label: '执行记录', to: '/quant/runs', icon: VideoPlay, adminOnly: false },
+  { label: '操作登记', to: '/quant/operations', icon: DocumentChecked, adminOnly: false },
+  { label: '回测评估', to: '/quant/backtest', icon: TrendCharts, adminOnly: true },
+  { label: '调度执行', to: '/quant/scheduler', icon: RefreshRight, adminOnly: true },
+  { label: 'AI与记忆', to: '/quant/ai-memory', icon: Histogram, adminOnly: false },
+  { label: 'IM与持仓', to: '/quant/im-positions', icon: Promotion, adminOnly: false }
 ]
+
+const navItems = computed(() =>
+  allNavItems.filter(item => !item.adminOnly || authStore.isAdmin())
+)
 
 const goBack = () => router.push('/chat')
 const goAdmin = () => router.push('/admin')

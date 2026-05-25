@@ -138,10 +138,18 @@ users=
 [log]
 sqlite3_file=/data/openai-project/log/log.db
 
+[runtime_log]
+root_dir=/data/openai-project/runtime-logs
+level=INFO
+plain_retention_days=7
+archive_retention_days=30
+compress_backups=true
+
 [quant]
 sqlite3_file=/data/openai-project/quant/quant.db
 bundle_dir=/data/openai-project/quant/bundles
 memory_dir=/data/openai-project/quant/memory
+schedule_log_dir=
 feishu_app_id=cli_xxx
 feishu_app_secret=xxx
 feishu_verification_token=xxx
@@ -167,6 +175,31 @@ api_param_mode=default
 - `data_sync`：15:20
 - `analysis_report`：15:35
 - `memory_digest`：21:30
+
+### 5.3 运行日志目录
+
+运行日志与业务 SQLite 已分离：
+
+- `log.sqlite3_file` 只表示 LLM 业务记录库
+- `quant.sqlite3_file` 只表示 quant 主库
+- `runtime_log.root_dir` 统一承接程序运行日志
+
+默认目录结构：
+
+- `logs/llm/app.log`
+- `logs/llm/access.log`
+- `logs/quant/web.log`
+- `logs/quant/access.log`
+- `logs/quant/scheduler.log`
+- `logs/quant/client.log`
+- `logs/quant/runs/`
+- `logs/platform/uwsgi.log`
+
+保留策略：
+
+- 近 7 天保留明文日志
+- 超过 7 天压缩为 `.gz`
+- 超过 30 天自动清理
 
 ## 6. 飞书配置
 
@@ -222,7 +255,21 @@ python worker/quant_scheduler_worker.py
 
 ### 7.3 数据客户端
 
-建议在另一进程里循环执行：
+建议直接走项目脚本，脚本已经会同时拉起本地采集客户端：
+
+```bash
+cd /Users/chenyifei.anon/IdeaProjects/openai-project
+./start-dev.sh
+```
+
+如果是生产环境：
+
+```bash
+cd /Users/chenyifei.anon/IdeaProjects/openai-project
+./start-prod.sh --restart --with-client --client-id quant-local-01
+```
+
+单独启动时，建议在另一进程里循环执行：
 
 ```bash
 cd /Users/chenyifei.anon/IdeaProjects/openai-project/cyf/project/server
@@ -235,6 +282,17 @@ while true; do
   sleep 15
 done
 ```
+
+### 7.4 启动后检查
+
+至少确认这些文件开始写入：
+
+- `cyf/project/server/logs/llm/app.log`
+- `cyf/project/server/logs/llm/access.log`
+- `cyf/project/server/logs/quant/web.log`
+- `cyf/project/server/logs/quant/scheduler.log`
+- `cyf/project/server/logs/quant/client.log`
+- `cyf/project/server/logs/platform/uwsgi.log`（仅生产）
 
 ## 8. 当前工作台
 

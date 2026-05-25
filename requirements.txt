@@ -12,3 +12,5 @@ exchange_calendars
 lark-oapi
 customtkinter
 gunicorn
+# 工具库
+python-dateutil>=2.8
