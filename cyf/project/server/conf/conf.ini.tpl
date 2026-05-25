@@ -16,6 +16,17 @@ test_ip_default_limit=20
 test_exceed_msg=异常123
 [log]
 sqlite3_file=
+[runtime_log]
+# 运行日志根目录。LLM / Quant / Ops / Platform 会在此目录下分流。
+root_dir=
+# 默认日志级别
+level=INFO
+# 近 7 天保留普通文本日志
+plain_retention_days=7
+# 超过普通保留期后，压缩保留 30 天
+archive_retention_days=30
+# 是否自动压缩滚动日志
+compress_backups=true
 [admin]
 # 是否启用SQL执行后门
 enable_sql_execute=
@@ -26,6 +37,10 @@ sqlite3_file=
 bundle_dir=
 # 股票记忆 Markdown 存储目录。
 memory_dir=
+# 调度执行日志目录。留空时默认使用 <runtime_log.root_dir>/quant/runs。
+schedule_log_dir=
+# 调度执行日志保留天数。过期文件会被清理。
+schedule_log_retention_days=7
 # 飞书自建应用配置。用于双向对话、报告推送和持仓录入，当前唯一支持的 IM 通道。
 # 回调地址：/never_guess_my_usage/quant/im/feishu/events
 feishu_app_id=

@@ -9,6 +9,15 @@ export const quantDataAPI = {
   dashboardOverview: () => quantApi.get('/never_guess_my_usage/quant/dashboard/overview'),
   dailyBars: (params: { symbol: string; start_date?: string; end_date?: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/daily_bars', { params }),
+  backfill: (data: {
+    symbols?: string[]
+    symbols_text?: string
+    lookback_days?: number
+    provider?: string
+    adjust_flag?: string
+    note?: string
+    lease_seconds?: number
+  }) => quantApi.post('/never_guess_my_usage/quant/data/backfill', data),
   importBatches: (params?: { limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/import_batches', { params }),
   symbols: (params?: { limit?: number }) =>
@@ -92,10 +101,14 @@ export const quantScheduleAPI = {
     quantApi.get('/never_guess_my_usage/quant/scheduler/runs', { params }),
   getRun: (id: number) =>
     quantApi.get(`/never_guess_my_usage/quant/scheduler/run/${id}`),
+  getRunLog: (id: number, params?: { limit?: number }) =>
+    quantApi.get(`/never_guess_my_usage/quant/scheduler/run/${id}/log`, { params }),
   manualRun: (schedule_id: number) =>
     quantApi.post('/never_guess_my_usage/quant/scheduler/manual_run', { schedule_id }),
   rebuildDueRuns: (lookback_minutes: number) =>
     quantApi.post('/never_guess_my_usage/quant/scheduler/rebuild_due_runs', { lookback_minutes }),
+  resetRun: (run_id: number, allow_success = false) =>
+    quantApi.post('/never_guess_my_usage/quant/scheduler/reset_run', { run_id, allow_success }),
   executeRun: (run_id: number) =>
     quantApi.post('/never_guess_my_usage/quant/scheduler/execute_run', { run_id })
 }

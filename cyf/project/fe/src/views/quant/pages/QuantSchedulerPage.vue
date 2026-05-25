@@ -269,17 +269,18 @@
         <div class="quant-toolbar">
           <el-button :icon="RefreshRight" @click="workbench.loadScheduleRuns" :loading="workbench.loading.scheduleRuns">刷新记录</el-button>
           <el-button plain @click="workbench.executeScheduleRunNow()">立即执行选中记录</el-button>
+          <el-button plain @click="workbench.resetScheduleRunNow()">重试选中记录</el-button>
         </div>
       </div>
 
-      <el-table
-        :data="workbench.scheduleRuns"
-        stripe
-        height="360"
-        class="quant-table"
-        @row-click="selectScheduleRun"
-        :row-class-name="({ row }) => row.id === workbench.selectedScheduleRunId ? 'quant-row--active' : ''"
-      >
+        <el-table
+          :data="workbench.scheduleRuns"
+          stripe
+          height="360"
+          class="quant-table"
+          @row-click="selectScheduleRun"
+          :row-class-name="({ row }) => row.id === workbench.selectedScheduleRunId ? 'quant-row--active' : ''"
+        >
         <el-table-column prop="scheduled_for" label="计划时间" min-width="176" />
         <el-table-column prop="schedule_name" label="配置" min-width="150" />
         <el-table-column prop="task_type" label="类型" width="130" />
@@ -291,28 +292,49 @@
         </el-table-column>
         <el-table-column prop="attempts" label="次数" width="76" />
         <el-table-column prop="message" label="说明" min-width="220" />
-        <el-table-column label="操作" width="96">
-          <template #default="{ row }">
-            <el-button
-              v-if="['pending', 'retry_wait', 'failed'].includes(row.status)"
-              text
-              @click.stop="workbench.executeScheduleRunNow(row.id)"
-            >
-              执行
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          <el-table-column label="操作" width="96">
+            <template #default="{ row }">
+              <el-button
+                v-if="['pending', 'retry_wait'].includes(row.status)"
+                text
+                @click.stop="workbench.executeScheduleRunNow(row.id)"
+              >
+                执行
+              </el-button>
+              <el-button
+                v-else-if="['failed', 'success', 'skipped'].includes(row.status)"
+                text
+                @click.stop="workbench.resetScheduleRunNow(row.id, row.status === 'success')"
+              >
+                重试
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
 
       <div v-if="workbench.selectedScheduleRun" class="quant-run-result">
         <div class="quant-mini-section__title">
           <span>结果详情</span>
-          <span class="quant-muted">{{ workbench.selectedScheduleRun.schedule_name }} · {{ workbench.selectedScheduleRun.status }}</span>
+          <div class="quant-toolbar">
+            <span class="quant-muted">{{ workbench.selectedScheduleRun.schedule_name }} · {{ workbench.selectedScheduleRun.status }}</span>
+            <el-button text @click="workbench.loadScheduleRunLog(workbench.selectedScheduleRun.id)">刷新日志</el-button>
+          </div>
         </div>
         <el-input
           :model-value="JSON.stringify(workbench.selectedScheduleRun.result || workbench.selectedScheduleRun.payload || {}, null, 2)"
           type="textarea"
           :rows="10"
+          readonly
+          class="quant-code-input"
+        />
+        <div class="quant-mini-section__title" style="margin-top: 16px;">
+          <span>执行日志</span>
+          <span class="quant-muted">{{ workbench.selectedScheduleRun.log_file || '--' }}</span>
+        </div>
+        <el-input
+          :model-value="workbench.selectedScheduleRunLogText || '暂无日志'"
+          type="textarea"
+          :rows="12"
           readonly
           class="quant-code-input"
         />
@@ -329,5 +351,6 @@ const workbench = useQuantWorkbench()
 
 const selectScheduleRun = (row: { id: number }) => {
   workbench.selectedScheduleRunId = row.id
+  void workbench.loadScheduleRunLog(row.id)
 }
 </script>

@@ -1,8 +1,10 @@
 import json
+import logging
+import re
 from datetime import datetime
 
 import sqlitelog
-from flask import Blueprint, current_app, request
+from flask import Blueprint, request
 from peewee import DoesNotExist, IntegrityError
 
 from conf.runtime import runtime_state
@@ -15,6 +17,9 @@ from service.model_service import get_runtime_state_snapshot, invalidate_model_c
 
 
 admin_bp = Blueprint("admin_routes", __name__, url_prefix="/never_guess_my_usage")
+llm_logger = logging.getLogger("llm.web")
+_SQL_TYPE_PATTERN = re.compile(r"^\s*([a-zA-Z]+)")
+_SQL_TARGET_PATTERN = re.compile(r"\b(?:from|into|update|table)\s+[`\"]?([a-zA-Z0-9_]+)", re.IGNORECASE)
 
 
 def test_limit_to_dict(limit):
@@ -54,6 +59,15 @@ def notification_to_dict(notification):
         "created_at": notification.created_at.strftime("%Y-%m-%d %H:%M:%S") if notification.created_at else None,
         "updated_at": notification.updated_at.strftime("%Y-%m-%d %H:%M:%S") if notification.updated_at else None,
     }
+
+
+def _summarize_sql(sql: str, params) -> str:
+    statement_match = _SQL_TYPE_PATTERN.search(sql or "")
+    target_match = _SQL_TARGET_PATTERN.search(sql or "")
+    statement = statement_match.group(1).lower() if statement_match else "unknown"
+    target = target_match.group(1) if target_match else "unknown"
+    params_count = len(params) if isinstance(params, (list, tuple)) else (1 if params else 0)
+    return f"statement={statement} target={target} params_count={params_count}"
 
 
 @admin_bp.route("/model_meta/list", methods=["GET"])
@@ -116,7 +130,7 @@ def model_meta_create():
             allow_net=to_bool(data.get("allow_net", "true")),
             status_valid=to_bool(data.get("status_valid", "true")),
         )
-        invalidate_model_cache("model_meta_create", logger=current_app.logger)
+        invalidate_model_cache("model_meta_create", logger=llm_logger)
         return success_response(data=model.to_dict(), msg="模型创建成功")
     except IntegrityError:
         return error_response("模型名称已存在")
@@ -148,7 +162,7 @@ def model_meta_update():
         if "status_valid" in data:
             model.status_valid = to_bool(data["status_valid"])
         model.save()
-        invalidate_model_cache("model_meta_update", logger=current_app.logger)
+        invalidate_model_cache("model_meta_update", logger=llm_logger)
         return success_response(data=model.to_dict(), msg="模型更新成功")
     except DoesNotExist:
         return error_response("模型不存在")
@@ -191,7 +205,7 @@ def model_meta_batch_update():
         if not updates:
             return error_response("至少需要一个可更新字段")
         affected_rows = ModelMeta.update(**updates).where(ModelMeta.id.in_(model_ids)).execute()
-        invalidate_model_cache("model_meta_batch_update", logger=current_app.logger)
+        invalidate_model_cache("model_meta_batch_update", logger=llm_logger)
         return success_response(data={"updated": affected_rows, "ids": model_ids}, msg=f"批量更新成功，共更新 {affected_rows} 条模型记录")
     except Exception as exc:
         return error_response(f"批量更新模型失败: {exc}")
@@ -207,7 +221,7 @@ def model_meta_delete():
             return error_response("模型ID不能为空")
         model = ModelMeta.get_by_id(int(model_id))
         model.delete_instance()
-        invalidate_model_cache("model_meta_delete", logger=current_app.logger)
+        invalidate_model_cache("model_meta_delete", logger=llm_logger)
         return success_response(msg="模型删除成功")
     except DoesNotExist:
         return error_response("模型不存在")
@@ -668,11 +682,11 @@ def sql_execute():
         params = data.get("params", [])
         if not sql:
             return error_response("SQL语句不能为空")
-        current_app.logger.info(f"Admin SQL execute: {sql[:100]}...")
+        llm_logger.info("admin_sql_execute %s", _summarize_sql(sql, params))
         results = sqlitelog.message_query(sql, params if params else None)
         return success_response(data=results, msg="SQL执行成功")
     except Exception as exc:
-        current_app.logger.error(f"SQL execute error: {exc}")
+        llm_logger.error("SQL execute error: %s", exc)
         return error_response(f"SQL执行失败: {exc}")
 
 

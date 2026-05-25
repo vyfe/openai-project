@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from quant.entities import QuantDailyBar, QuantPositionJournal
 from service.quant.common import normalize_symbol
+from service.quant.task_dispatch_service import create_fetch_bars_task
 
 
 def _parse_occurred_at(value) -> datetime:
@@ -53,6 +54,7 @@ def list_position_journal(
     strategy_id: Optional[int] = None,
     symbol: Optional[str] = None,
     source: Optional[str] = None,
+    created_by: Optional[str] = None,
     limit: int = 100,
 ) -> list[dict]:
     query = QuantPositionJournal.select()
@@ -62,6 +64,8 @@ def list_position_journal(
         query = query.where(QuantPositionJournal.symbol == normalize_symbol(symbol))
     if source:
         query = query.where(QuantPositionJournal.source == source)
+    if created_by:
+        query = query.where(QuantPositionJournal.created_by == created_by)
     query = query.order_by(QuantPositionJournal.occurred_at.desc(), QuantPositionJournal.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
@@ -88,12 +92,26 @@ def create_position_entry(
     normalized_quantity = _to_int(quantity, default=0) or 0
     if normalized_quantity <= 0:
         raise ValueError("quantity 必须大于 0")
+
+    normalized_symbol = normalize_symbol(symbol)
+    normalized_side = _normalize_side(side)
+    should_backfill = False
+
+    # 持仓上限检查：同一用户最多 5 只股票
+    if created_by:
+        # 计算当前净持仓（买入 - 卖出）
+        user_positions = list_position_summary(created_by=created_by)
+        current_count = len(user_positions)
+        already_held = any(p["symbol"] == normalized_symbol for p in user_positions)
+        if not already_held and current_count >= 5:
+            raise ValueError(f"持仓已达上限 5 只股票，当前持有: {current_count} 只")
+        should_backfill = normalized_side == "buy" and not already_held
     record = QuantPositionJournal.create(
         strategy_id=_to_int(strategy_id),
         run_id=_to_int(run_id),
         operation_id=_to_int(operation_id),
-        symbol=normalize_symbol(symbol),
-        side=_normalize_side(side),
+        symbol=normalized_symbol,
+        side=normalized_side,
         price=_to_float(price),
         quantity=normalized_quantity,
         occurred_at=_parse_occurred_at(occurred_at),
@@ -104,7 +122,60 @@ def create_position_entry(
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
+    if should_backfill:
+        _create_new_position_backfill_task(normalized_symbol, created_by)
     return record.to_dict()
+
+
+def _build_backfill_window(lookback_days: int = 730) -> tuple[str, str]:
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=max(30, int(lookback_days or 730)))
+    return start_date.isoformat(), end_date.isoformat()
+
+
+def enqueue_position_backfill_task(
+    *,
+    symbols: list[str],
+    created_by: str = "",
+    lookback_days: int = 730,
+    provider: str = "auto",
+    adjust_flag: str = "qfq",
+    lease_seconds: int = 600,
+    note: str = "",
+) -> dict:
+    normalized_symbols = []
+    seen = set()
+    for item in symbols or []:
+        normalized = normalize_symbol(item)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        normalized_symbols.append(normalized)
+    if not normalized_symbols:
+        raise ValueError("symbols 不能为空")
+
+    start_date, end_date = _build_backfill_window(lookback_days)
+    final_note = note.strip() if str(note or "").strip() else "backfill:position_history"
+    if created_by:
+        final_note = f"{final_note}:user={created_by}"
+    return create_fetch_bars_task(
+        symbols=normalized_symbols,
+        start_date=start_date,
+        end_date=end_date,
+        provider=str(provider or "auto").strip() or "auto",
+        adjust_flag=str(adjust_flag or "qfq").strip() or "qfq",
+        note=final_note,
+        lease_seconds=max(60, int(lease_seconds or 600)),
+    )
+
+
+def _create_new_position_backfill_task(symbol: str, created_by: str = "") -> dict:
+    return enqueue_position_backfill_task(
+        symbols=[symbol],
+        created_by=created_by,
+        lookback_days=730,
+        note="backfill:new_position",
+    )
 
 
 def update_position_entry(entry_id: int, **updates) -> dict:
@@ -145,8 +216,8 @@ def delete_position_entry(entry_id: int) -> bool:
     return True
 
 
-def list_position_summary(strategy_id: Optional[int] = None) -> list[dict]:
-    entries = list_position_journal(strategy_id=strategy_id, limit=5000)
+def list_position_summary(strategy_id: Optional[int] = None, created_by: Optional[str] = None) -> list[dict]:
+    entries = list_position_journal(strategy_id=strategy_id, created_by=created_by, limit=5000)
     positions = {}
     for item in sorted(entries, key=lambda row: row.get("occurred_at") or ""):
         symbol = item["symbol"]

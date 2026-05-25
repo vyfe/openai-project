@@ -57,7 +57,10 @@
             <h2>数据同步任务</h2>
             <p>给独立客户端派发抓数任务，策略调度和它分开。</p>
           </div>
-          <el-button type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">创建任务</el-button>
+          <div class="quant-toolbar">
+            <el-button type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">创建任务</el-button>
+            <el-button plain :icon="Promotion" @click="workbench.createBackfillTask" :loading="workbench.loading.createTask">补历史数据</el-button>
+          </div>
         </div>
 
         <div class="quant-form-stack">
@@ -101,6 +104,50 @@
           <el-form label-position="top">
             <el-form-item label="备注">
               <el-input v-model="workbench.taskForm.note" placeholder="例如：补 2024-2025 年回测样本" />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <div class="quant-mini-section">
+          <div class="quant-mini-section__title">
+            <span>补历史数据</span>
+            <span class="quant-muted">新持仓可直接按 2 年窗口补数，客户端按需拉取。</span>
+          </div>
+          <div class="quant-form-grid quant-form-grid--two">
+            <el-form label-position="top">
+              <el-form-item label="股票池">
+                <el-select v-model="workbench.backfillForm.symbols" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择要补数的股票">
+                  <el-option v-for="item in workbench.symbolOptions" :key="item.symbol" :label="item.symbol" :value="item.symbol" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+            <el-form label-position="top">
+              <el-form-item label="回看天数">
+                <el-input-number v-model="workbench.backfillForm.lookbackDays" :min="30" :max="1000" :step="30" />
+              </el-form-item>
+            </el-form>
+          </div>
+          <div class="quant-form-grid quant-form-grid--two">
+            <el-form label-position="top">
+              <el-form-item label="数据源">
+                <el-select v-model="workbench.backfillForm.provider">
+                  <el-option v-for="provider in workbench.providers" :key="provider" :label="provider" :value="provider" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+            <el-form label-position="top">
+              <el-form-item label="复权">
+                <el-select v-model="workbench.backfillForm.adjustFlag">
+                  <el-option label="前复权" value="qfq" />
+                  <el-option label="后复权" value="hfq" />
+                  <el-option label="不复权" value="raw" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+          </div>
+          <el-form label-position="top">
+            <el-form-item label="备注">
+              <el-input v-model="workbench.backfillForm.note" placeholder="例如：新买入后自动补 2 年历史" />
             </el-form-item>
           </el-form>
         </div>

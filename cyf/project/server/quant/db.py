@@ -2,7 +2,7 @@ import os
 
 from playhouse.sqlite_ext import SqliteExtDatabase
 from playhouse.migrate import SqliteMigrator, migrate
-from peewee import TextField
+from peewee import FloatField, TextField
 
 from conf.settings import settings
 
@@ -49,6 +49,18 @@ def ensure_quant_schema():
         if "amplitude_pct" not in bar_columns:
             migrate(migrator.add_column("quant_daily_bar", "amplitude_pct", FloatField(null=True)))
             missing_records.append("quant_daily_bar.amplitude_pct")
+
+        schedule_run_columns = {col.name for col in quant_db.get_columns("quant_schedule_run")}
+        if "log_file" not in schedule_run_columns:
+            migrate(migrator.add_column("quant_schedule_run", "log_file", TextField(default="")))
+            missing_records.append("quant_schedule_run.log_file")
+
+        existing_tables = set(quant_db.get_tables())
+        new_tables = {"quant_feishu_user_binding", "quant_daily_indicator"} - existing_tables
+        if new_tables:
+            from quant.entities import QuantDailyIndicator, QuantFeishuUserBinding
+            quant_db.create_tables([QuantFeishuUserBinding, QuantDailyIndicator], safe=True)
+            missing_records.append(f"new_tables: {', '.join(new_tables)}")
 
         if missing_records:
             print(f"[quant-db] 已补齐字段: {', '.join(missing_records)}")

@@ -5,6 +5,7 @@ from functools import wraps
 from flask import request
 
 from conf.runtime import runtime_state
+from conf.logging_config import set_log_user
 from dto.common import get_request_data
 from model.repositories.user_repository import (
     find_user_by_token,
@@ -141,6 +142,7 @@ def require_auth(f):
         if token_ok:
             kwargs["user"] = token_payload.get("username", "")
             kwargs["password"] = ""
+            set_log_user(kwargs["user"])
             return f(*args, **kwargs)
         data = get_request_data()
         user = str(data.get("user", "")).strip()
@@ -150,6 +152,7 @@ def require_auth(f):
             return {"success": False, "msg": error_msg or token_msg or "认证失败"}, 401
         kwargs["user"] = user
         kwargs["password"] = password
+        set_log_user(user)
         return f(*args, **kwargs)
 
     return decorated_function
@@ -162,6 +165,7 @@ def require_admin_auth(f):
             return "", 200
         ok, msg, payload = authenticate_request_token(required_role="admin")
         if ok:
+            set_log_user(payload.get("username", ""))
             return f(*args, **kwargs)
         data = get_request_data()
         user = str(data.get("user", "")).strip()
@@ -169,6 +173,7 @@ def require_admin_auth(f):
         success, error_msg, _ = verify_user_password(user, password, "admin")
         if not success:
             return {"success": False, "msg": error_msg or msg or "认证失败"}, 401
+        set_log_user(user)
         return f(*args, **kwargs)
 
     return decorated_function

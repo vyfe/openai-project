@@ -47,3 +47,52 @@ def get_message_rules() -> List[MessageRule]:
 def _time_query_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return "time_query", f"⏰ 当前时间：{now}"
+
+
+# ---- 飞书绑定命令 ----
+@register_message_handler(r"^/bind\s+(\S+)\s+(\S+)", priority=5)
+def _bind_command_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
+    """绑定飞书账户到慧聊用户: /bind {username} {password}"""
+    import re as _re
+    from service.quant.binding_service import bind_user
+    m = _re.match(r"^/bind\s+(\S+)\s+(\S+)", text)
+    if not m:
+        return None
+    username = m.group(1)
+    password = m.group(2)
+    sender_id = parsed.get("sender_id") or ""
+    if not sender_id:
+        return "bind_error", "❌ 无法获取你的飞书身份，请重试"
+    try:
+        bind_user(sender_id, username, password)
+        return "bind_success", f"✅ 已绑定慧聊用户: {username}"
+    except Exception as e:
+        return "bind_error", f"❌ 绑定失败: {e}"
+
+
+@register_message_handler(r"^/unbind", priority=5)
+def _unbind_command_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
+    """解绑飞书账户"""
+    from service.quant.binding_service import unbind_user, get_binding
+    sender_id = parsed.get("sender_id") or ""
+    if not sender_id:
+        return "unbind_error", "❌ 无法获取你的飞书身份"
+    binding = get_binding(sender_id)
+    if not binding:
+        return "unbind_info", "ℹ️ 你还没有绑定慧聊账户"
+    username = binding.get("username", "")
+    unbind_user(sender_id)
+    return "unbind_success", f"✅ 已解绑慧聊用户: {username}"
+
+
+@register_message_handler(r"^/whoami", priority=5)
+def _whoami_command_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
+    """查询当前绑定状态"""
+    from service.quant.binding_service import get_binding
+    sender_id = parsed.get("sender_id") or ""
+    if not sender_id:
+        return "whoami_error", "❌ 无法获取你的飞书身份"
+    binding = get_binding(sender_id)
+    if binding:
+        return "whoami", f"👤 已绑定慧聊用户: {binding['username']}\n绑定时间: {binding['bound_at']}"
+    return "whoami", "👤 未绑定慧聊账户。发送 /bind {用户名} {密码} 进行绑定"

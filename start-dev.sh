@@ -12,11 +12,17 @@ set +m
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_PORT=39997
 FRONTEND_PORT=3000
-BACKEND_LOG="${TMPDIR:-/tmp}/openai-project-backend.log"
-FRONTEND_LOG="${TMPDIR:-/tmp}/openai-project-frontend.log"
+SERVER_LOG_ROOT="$PROJECT_ROOT/cyf/project/server/logs"
+PLATFORM_LOG_DIR="$SERVER_LOG_ROOT/platform"
+QUANT_LOG_DIR="$SERVER_LOG_ROOT/quant"
+FRONTEND_LOG_DIR="$PROJECT_ROOT/logs/frontend"
+BACKEND_LOG="$PLATFORM_LOG_DIR/dev-backend.log"
+FRONTEND_LOG="$FRONTEND_LOG_DIR/dev-frontend.log"
+CLIENT_LOG="$QUANT_LOG_DIR/client-runner.log"
 
 BACKEND_PID=""
 FRONTEND_PID=""
+CLIENT_PID=""
 
 kill_port() {
     local port="$1"
@@ -108,6 +114,26 @@ print_log_tail() {
     fi
 }
 
+start_quant_client_loop() {
+    local python_bin="$1"
+    local server_url="$2"
+    local client_id="$3"
+    local log_file="$4"
+    (
+        cd "$PROJECT_ROOT/cyf/project/server"
+        while true; do
+            "$python_bin" worker/quant_data_agent.py run-once \
+                --server-url "$server_url" \
+                --client-id "$client_id" \
+                --user admin \
+                --password admin123 \
+                >>"$log_file" 2>&1 || true
+            sleep 15
+        done
+    ) &
+    CLIENT_PID=$!
+}
+
 wait_for_service() {
     local name="$1"
     local port="$2"
@@ -149,6 +175,9 @@ cleanup() {
     if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
         kill "${BACKEND_PID}" 2>/dev/null || true
     fi
+    if [[ -n "${CLIENT_PID}" ]] && kill -0 "${CLIENT_PID}" 2>/dev/null; then
+        kill "${CLIENT_PID}" 2>/dev/null || true
+    fi
 
     # 回收子进程，避免 shell 打印 Terminated 作业信息
     if [[ -n "${FRONTEND_PID}" ]]; then
@@ -156,6 +185,9 @@ cleanup() {
     fi
     if [[ -n "${BACKEND_PID}" ]]; then
         wait "${BACKEND_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${CLIENT_PID}" ]]; then
+        wait "${CLIENT_PID}" 2>/dev/null || true
     fi
 
     sleep 1
@@ -166,12 +198,18 @@ cleanup() {
     if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
         kill -9 "${BACKEND_PID}" 2>/dev/null || true
     fi
+    if [[ -n "${CLIENT_PID}" ]] && kill -0 "${CLIENT_PID}" 2>/dev/null; then
+        kill -9 "${CLIENT_PID}" 2>/dev/null || true
+    fi
 
     if [[ -n "${FRONTEND_PID}" ]]; then
         wait "${FRONTEND_PID}" 2>/dev/null || true
     fi
     if [[ -n "${BACKEND_PID}" ]]; then
         wait "${BACKEND_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${CLIENT_PID}" ]]; then
+        wait "${CLIENT_PID}" 2>/dev/null || true
     fi
 
     kill_port "$FRONTEND_PORT"
@@ -212,8 +250,11 @@ fi
 echo "🚀 启动开发环境..."
 echo "📄 后端日志: $BACKEND_LOG"
 echo "📄 前端日志: $FRONTEND_LOG"
+echo "📄 采集客户端日志: $CLIENT_LOG"
+mkdir -p "$PLATFORM_LOG_DIR" "$QUANT_LOG_DIR" "$FRONTEND_LOG_DIR"
 : > "$BACKEND_LOG"
 : > "$FRONTEND_LOG"
+: > "$CLIENT_LOG"
 
 if [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
     BACKEND_PYTHON="$PROJECT_ROOT/.venv/bin/python"
@@ -239,7 +280,12 @@ FRONTEND_PID=$!
 
 wait_for_service "前端" "$FRONTEND_PORT" "$FRONTEND_PID" 45 "$FRONTEND_LOG"
 
-echo "✅ 前后端服务已启动 (前端 PID: $FRONTEND_PID, 后端 PID: $BACKEND_PID)"
+echo "🛰️ 启动采集客户端循环..."
+start_quant_client_loop "$BACKEND_PYTHON" "http://127.0.0.1:${BACKEND_PORT}" "local-dev-client" "$CLIENT_LOG"
+echo "💡 采集客户端将每 15 秒轮询一次任务队列"
+sleep 2
+
+echo "✅ 前后端和采集客户端已启动 (前端 PID: $FRONTEND_PID, 后端 PID: $BACKEND_PID, 客户端 PID: $CLIENT_PID)"
 echo "💡 按 Ctrl+C 退出并停止所有服务"
 
-wait "$FRONTEND_PID" "$BACKEND_PID"
+wait "$FRONTEND_PID" "$BACKEND_PID" "$CLIENT_PID"

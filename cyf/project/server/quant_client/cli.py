@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from typing import List
 
 from quant_client.bundle_builder import build_fetch_bundle, write_bundle
 from quant_client.constants import DEFAULT_TASK_TYPE
 from quant_client.http_client import QuantTaskClient
 from quant_client.provider_factory import list_supported_providers
+
+logger = logging.getLogger("quant.client")
 
 
 def _read_symbols(args) -> List[str]:
@@ -41,6 +44,7 @@ def _build_client(args) -> QuantTaskClient:
 
 
 def cmd_providers(_args):
+    logger.info("list providers")
     print(json.dumps({"providers": list_supported_providers()}, ensure_ascii=False, indent=2))
 
 
@@ -48,6 +52,14 @@ def cmd_fetch_bars(args):
     symbols = _read_symbols(args)
     if not symbols:
         raise SystemExit("请通过 --symbols 或 --symbols-file 提供至少一个 symbol")
+    logger.info(
+        "fetch bars provider=%s symbols=%s start=%s end=%s adjust=%s",
+        args.provider,
+        len(symbols),
+        args.start_date,
+        args.end_date,
+        args.adjust_flag,
+    )
     bundle = build_fetch_bundle(
         provider_name=args.provider,
         symbols=symbols,
@@ -64,15 +76,18 @@ def cmd_fetch_bars(args):
 
 def cmd_claim_task(args):
     client = _build_client(args)
+    logger.info("claim task client_id=%s", args.client_id)
     result = client.claim_task(client_id=args.client_id, capabilities=list_supported_providers())
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
 def cmd_run_once(args):
     client = _build_client(args)
+    logger.info("run_once claim client_id=%s", args.client_id)
     claim_result = client.claim_task(client_id=args.client_id, capabilities=list_supported_providers())
     task = (claim_result or {}).get("data")
     if not task:
+        logger.info("run_once no task client_id=%s", args.client_id)
         print(json.dumps({"success": True, "message": "no task"}, ensure_ascii=False, indent=2))
         return
 
@@ -80,11 +95,13 @@ def cmd_run_once(args):
     payload = task.get("payload") or {}
     task_type = task.get("task_type")
     if task_type != DEFAULT_TASK_TYPE:
+        logger.warning("unsupported task type client_id=%s task_id=%s task_type=%s", args.client_id, task_id, task_type)
         result = client.report_task_failure(args.client_id, task_id, f"不支持的任务类型: {task_type}")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
     try:
+        logger.info("execute task client_id=%s task_id=%s task_type=%s", args.client_id, task_id, task_type)
         bundle = build_fetch_bundle(
             provider_name=str(payload.get("provider") or "auto"),
             symbols=payload.get("symbols") or [],
@@ -93,8 +110,10 @@ def cmd_run_once(args):
             adjust_flag=str(payload.get("adjust_flag") or "qfq"),
         )
         result = client.report_task_success(args.client_id, task_id, bundle, message="采集并上报成功")
+        logger.info("task success client_id=%s task_id=%s records=%s", args.client_id, task_id, len(bundle.get("records") or []))
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except Exception as exc:
+        logger.exception("task failure client_id=%s task_id=%s", args.client_id, task_id)
         result = client.report_task_failure(args.client_id, task_id, str(exc))
         print(json.dumps(result, ensure_ascii=False, indent=2))
 

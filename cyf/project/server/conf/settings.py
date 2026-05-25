@@ -34,6 +34,13 @@ class Settings:
     quant_sqlite3_file: str
     quant_bundle_dir: str
     quant_memory_dir: str
+    quant_schedule_log_dir: str
+    quant_schedule_log_retention_days: int
+    runtime_log_root_dir: str
+    runtime_log_level: str
+    runtime_log_plain_retention_days: int
+    runtime_log_archive_retention_days: int
+    runtime_log_compress_backups: bool
     quant_feishu_app_id: str
     quant_feishu_app_secret: str
     quant_feishu_verification_token: str
@@ -91,6 +98,13 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         quant_sqlite3_file=_get_str(conf, "quant", "sqlite3_file", fallback=os.path.join(BASE_DIR, "quant.db")),
         quant_bundle_dir=_get_str(conf, "quant", "bundle_dir", fallback=os.path.join(BASE_DIR, "quant_bundles")),
         quant_memory_dir=_get_str(conf, "quant", "memory_dir", fallback=os.path.join(BASE_DIR, "quant_memory")),
+        runtime_log_root_dir=_get_str(conf, "runtime_log", "root_dir", fallback=os.path.join(BASE_DIR, "logs")),
+        runtime_log_level=_get_str(conf, "runtime_log", "level", fallback="INFO"),
+        runtime_log_plain_retention_days=int(conf.get("runtime_log", "plain_retention_days", fallback="7")),
+        runtime_log_archive_retention_days=int(conf.get("runtime_log", "archive_retention_days", fallback="30")),
+        runtime_log_compress_backups=_get_bool(conf, "runtime_log", "compress_backups", fallback="true"),
+        quant_schedule_log_dir=_get_str(conf, "quant", "schedule_log_dir", fallback=""),
+        quant_schedule_log_retention_days=int(conf.get("quant", "schedule_log_retention_days", fallback="7")),
         quant_feishu_app_id=_get_str(conf, "quant", "feishu_app_id", fallback=""),
         quant_feishu_app_secret=_get_str(conf, "quant", "feishu_app_secret", fallback=""),
         quant_feishu_verification_token=_get_str(conf, "quant", "feishu_verification_token", fallback=""),

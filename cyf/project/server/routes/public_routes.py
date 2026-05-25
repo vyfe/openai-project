@@ -1,12 +1,14 @@
 import json
+import logging
 import os
 import time
 from datetime import datetime
 
 import requests
-from flask import Blueprint, Response, current_app, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 import sqlitelog
+from conf.logging_config import set_log_user
 from conf.runtime import runtime_state
 from dto.auth_dto import LoginRequest, RefreshTokenRequest, RegisterRequest, ResetPasswordRequest
 from dto.chat_dto import ChatRequest, ImageChatRequest, StreamCancelRequest, StreamChatRequest
@@ -26,29 +28,30 @@ from service.usage_service import get_usage_summary
 
 
 public_bp = Blueprint("public_routes", __name__, url_prefix="/never_guess_my_usage")
+llm_logger = logging.getLogger("llm.web")
 
 
 @public_bp.route("/models/grouped", methods=["GET", "POST"])
 def get_grouped_models_endpoint():
     try:
-        return {"success": True, "grouped_models": get_grouped_models(logger=current_app.logger)}, 200
+        return {"success": True, "grouped_models": get_grouped_models(logger=llm_logger)}, 200
     except Exception as exc:
-        current_app.logger.error(f"获取分组模型列表异常: {exc}")
+        llm_logger.error("获取分组模型列表异常: %s", exc)
         return {"success": False, "msg": f"获取分组模型列表失败: {exc}"}, 200
 
 
 @public_bp.route("/models", methods=["GET", "POST"])
 def get_models():
     try:
-        return {"success": True, "models": get_cached_models(logger=current_app.logger)}, 200
+        return {"success": True, "models": get_cached_models(logger=llm_logger)}, 200
     except Exception as exc:
-        current_app.logger.error(f"获取模型列表异常: {exc}")
+        llm_logger.error("获取模型列表异常: %s", exc)
         return {"success": False, "msg": f"获取模型列表失败: {exc}"}, 200
 
 
 @public_bp.route("/test")
 def health_check():
-    current_app.logger.info(get_request_data())
+    llm_logger.info("health_check invoked")
     try:
         return json.dumps(get_request_data().to_dict()), 200
     except Exception:
@@ -63,6 +66,7 @@ def login():
     is_valid, error_msg, user_info = verify_credentials(req.user, req.password)
     if not is_valid:
         return {"success": False, "msg": error_msg}, 200
+    set_log_user(user_info.get("username", req.user))
     token_bundle = issue_auth_tokens(user_info.get("username", req.user), user_info.get("role", "user"))
     return {"success": True, "msg": "登录成功", "data": {**user_info, **token_bundle}}, 200
 
@@ -89,16 +93,17 @@ def register():
             return jsonify({"success": False, "msg": "用户名已存在"}), 200
         api_key = req.api_key or runtime_state.settings.default_api_key
         user = create_user(req.username, req.password, api_key if api_key else None)
+        llm_logger.info("user_register success username=%s", req.username)
         return jsonify({"success": True, "msg": "注册成功", "data": {"username": user.username}}), 200
     except Exception as exc:
-        current_app.logger.error(f"注册失败: {exc}")
+        llm_logger.error("注册失败: %s", exc)
         return jsonify({"success": False, "msg": f"注册失败: {exc}"}), 200
 
 
 @public_bp.route("/set_info")
 def data_check():
     data = get_request_data()
-    current_app.logger.info(data)
+    llm_logger.info("set_info invoked has_param=%s query=%s", bool(data.get("param")), str(data.get("info", ""))[:32])
     try:
         if data.get("param"):
             param = data.get("param").split(",")
@@ -134,7 +139,7 @@ def upload():
 @require_auth
 def dialog(user, password):
     payload = ChatRequest.from_data(get_request_data(as_text=True))
-    return run_chat_completion(user, payload, current_app.logger)
+    return run_chat_completion(user, payload, llm_logger)
 
 
 @public_bp.route("/split_stream", methods=["POST", "GET"])
@@ -142,9 +147,9 @@ def dialog(user, password):
 def dialog_stream(user, password):
     payload = StreamChatRequest.from_data(get_request_data(as_text=True))
     try:
-        return stream_chat(user, payload, current_app.logger)
+        return stream_chat(user, payload, llm_logger)
     except Exception as exc:
-        current_app.logger.error(f"流式对话异常: {exc}")
+        llm_logger.error("流式对话异常: %s", exc)
         return Response(
             generate_sse_error(f"流式对话异常: {str(exc)}", "GENERAL_ERROR"),
             mimetype="text/event-stream",
@@ -166,13 +171,13 @@ def dialog_stream_cancel(user, password):
 @require_auth
 def dialog_pic(user, password):
     payload = ImageChatRequest.from_data(get_request_data(as_text=True))
-    return generate_or_edit_image(user, payload, current_app.logger)
+    return generate_or_edit_image(user, payload, llm_logger)
 
 
 @public_bp.route("/split_his", methods=["POST"])
 @require_auth
 def dialog_his(user, password):
-    current_app.logger.info(user)
+    llm_logger.info("dialog_history requested")
     return {"content": get_recent_dialogs(user)}, 200
 
 
@@ -193,7 +198,7 @@ def get_usage(user, password):
     try:
         return get_usage_summary(user), 200
     except requests.exceptions.RequestException as exc:
-        current_app.logger.error(f"获取用量API请求异常: {exc}")
+        llm_logger.error("获取用量API请求异常: %s", exc)
         return {"success": False, "msg": f"API请求失败: {exc}"}, 200
 
 
@@ -204,7 +209,7 @@ def get_browser_conf(user, password):
         browser_conf = get_user_browser_conf(user) or ""
         return {"success": True, "data": browser_conf}, 200
     except Exception as exc:
-        current_app.logger.error(f"获取浏览器配置失败: {exc}")
+        llm_logger.error("获取浏览器配置失败: %s", exc)
         return {"success": False, "msg": f"获取配置失败: {exc}"}, 200
 
 
@@ -217,7 +222,7 @@ def save_browser_conf(user, password):
         success, msg = set_user_browser_conf(user, browser_conf)
         return {"success": success, "msg": msg}, 200
     except Exception as exc:
-        current_app.logger.error(f"保存浏览器配置失败: {exc}")
+        llm_logger.error("保存浏览器配置失败: %s", exc)
         return {"success": False, "msg": f"保存配置失败: {exc}"}, 200
 
 
@@ -250,7 +255,7 @@ def get_system_prompts_by_group():
     try:
         return {"success": True, "groups": fetch_system_prompts_grouped()}, 200
     except Exception as exc:
-        current_app.logger.error(f"获取按组分类的系统提示词失败: {exc}")
+        llm_logger.error("获取按组分类的系统提示词失败: %s", exc)
         return {"success": False, "msg": f"获取系统提示词失败: {exc}"}, 200
 
 
@@ -280,7 +285,7 @@ def get_notifications():
             },
         }, 200
     except Exception as exc:
-        current_app.logger.error(f"获取通知公告列表失败: {exc}")
+        llm_logger.error("获取通知公告列表失败: %s", exc)
         return {"success": False, "msg": f"获取通知公告列表失败: {exc}"}, 200
 
 
@@ -308,5 +313,5 @@ def user_reset_password(user, password):
         revoke_user_tokens(user)
         return jsonify({"success": True, "msg": "密码更新成功，请重新登录"})
     except Exception as exc:
-        current_app.logger.error(f"重置密码失败: {exc}")
+        llm_logger.error("重置密码失败: %s", exc)
         return jsonify({"success": False, "msg": f"重置密码失败: {exc}"})

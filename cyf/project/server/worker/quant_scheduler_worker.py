@@ -16,18 +16,20 @@ if SERVER_DIR not in sys.path:
 from conf.logging_config import configure_root_logging
 from quant.entities import QUANT_MODELS
 from quant.db import init_quant_db
+from service.quant.schedule_log_service import cleanup_expired_schedule_logs
 from service.quant.schedule_service import acquire_runnable_runs, enqueue_due_runs, execute_schedule_run
 
 
 def main():
     configure_root_logging()
-    logger = logging.getLogger("quant_scheduler_worker")
+    logger = logging.getLogger("quant.scheduler.worker")
     init_quant_db(QUANT_MODELS)
     logger.info("quant scheduler worker started")
 
     while True:
         loop_started_at = datetime.now()
         try:
+            cleanup_expired_schedule_logs()
             enqueue_due_runs(loop_started_at, lookback_minutes=2)
             runnable = acquire_runnable_runs(limit=20)
             for item in runnable:

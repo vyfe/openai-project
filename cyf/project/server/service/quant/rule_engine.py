@@ -54,7 +54,7 @@ def _breakout_high(history: List[QuantDailyBar], window: int) -> Optional[float]
 
 
 def _evaluate_one_rule(rule: Dict[str, Any], current_bar: QuantDailyBar, history: List[QuantDailyBar]) -> Tuple[bool, Dict[str, Any], str]:
-    rule_type = str(rule.get("type", "")).strip()
+    rule_type = str(rule.get("rule_type", rule.get("type", ""))).strip()
     label = str(rule.get("label", rule_type or "rule")).strip()
     operator = str(rule.get("operator", ">=")).strip()
     if operator not in SUPPORTED_OPERATORS:
@@ -110,7 +110,7 @@ def _evaluate_one_rule(rule: Dict[str, Any], current_bar: QuantDailyBar, history
 def get_required_history_size(rule_config: Dict[str, Any]) -> int:
     size = 1
     for rule in rule_config.get("rules", []):
-        rule_type = str(rule.get("type", "")).strip()
+        rule_type = str(rule.get("rule_type", rule.get("type", ""))).strip()
         if rule_type in ("close_above_ma", "close_below_ma"):
             size = max(size, int(rule.get("window", 5)))
         elif rule_type == "volume_ratio":

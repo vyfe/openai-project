@@ -8,7 +8,6 @@
 
 import os
 import sys
-import shutil
 import configparser
 from datetime import datetime, timedelta
 from peewee import *
@@ -19,13 +18,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # 从sqlitelog导入数据模型
 from sqlitelog import Log, Dialog
+from conf.logging_config import configure_root_logging
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+configure_root_logging()
+logger = logging.getLogger("ops.archive")
 
 # 读取配置文件
 conf = configparser.ConfigParser()
