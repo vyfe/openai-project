@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# 开发环境量化子系统独立启动脚本
+# 功能：独立启动数据采集 Agent 和/或定时调度 Worker，不耦合 Web 前后端
+#
+# 用法：
+#   ./start-dev-quant --agent      仅启动数据采集客户端
+#   ./start-dev-quant --scheduler  仅启动定时调度 Worker
+#   ./start-dev-quant --all        同时启动 Agent + Scheduler（默认）
+
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SERVER_DIR="$PROJECT_ROOT/cyf/project/server"
+BACKEND_PORT=39997
+SERVER_URL="http://127.0.0.1:${BACKEND_PORT}"
+
+LOG_ROOT="$PROJECT_ROOT/cyf/project/server/logs"
+QUANT_LOG_DIR="$LOG_ROOT/quant"
+AGENT_LOG="$QUANT_LOG_DIR/dev-agent.log"
+SCHEDULER_LOG="$QUANT_LOG_DIR/dev-scheduler.log"
+
+# 默认选项
+START_AGENT=false
+START_SCHEDULER=false
+
+show_help() {
+    echo "用法: $0 [选项]"
+    echo "选项:"
+    echo "  --agent       仅启动数据采集 Agent（每15秒轮询任务）"
+    echo "  --scheduler   仅启动定时调度 Worker（每30秒轮询）"
+    echo "  --all         同时启动 Agent + Scheduler（默认）"
+    echo "  --help        显示此帮助信息"
+    exit 0
+}
+
+for arg in "$@"; do
+    case $arg in
+        --agent)       START_AGENT=true ;;
+        --scheduler)   START_SCHEDULER=true ;;
+        --all)         START_AGENT=true; START_SCHEDULER=true ;;
+        --help|-h)     show_help ;;
+        *)             echo "未知参数: $arg"; show_help ;;
+    esac
+done
+
+# 默认全部启动
+if [ "$START_AGENT" = false ] && [ "$START_SCHEDULER" = false ]; then
+    START_AGENT=true
+    START_SCHEDULER=true
+fi
+
+# 查找可用的 Python
+if [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
+    PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
+else
+    PYTHON_BIN="python3"
+fi
+
+# PID 跟踪
+AGENT_PID=""
+SCHEDULER_PID=""
+
+cleanup() {
+    trap - INT TERM EXIT ERR
+    echo ""
+    echo "🛑 正在停止量化子系统..."
+
+    if [ -n "$AGENT_PID" ] && kill -0 "$AGENT_PID" 2>/dev/null; then
+        kill "$AGENT_PID" 2>/dev/null || true
+        wait "$AGENT_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SCHEDULER_PID" ] && kill -0 "$SCHEDULER_PID" 2>/dev/null; then
+        kill "$SCHEDULER_PID" 2>/dev/null || true
+        wait "$SCHEDULER_PID" 2>/dev/null || true
+    fi
+
+    # 确保子进程被清理
+    if [ -n "$AGENT_PID" ]; then
+        kill -9 "$AGENT_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SCHEDULER_PID" ]; then
+        kill -9 "$SCHEDULER_PID" 2>/dev/null || true
+    fi
+
+    echo "👋 量化子系统已停止"
+}
+
+trap cleanup INT TERM EXIT
+trap 'echo "❌ 脚本异常退出"; cleanup; exit 1' ERR
+
+# 准备日志目录
+mkdir -p "$QUANT_LOG_DIR"
+
+echo "🚀 量化子系统开发环境启动"
+echo "📡 后端地址: $SERVER_URL"
+echo "📄 Agent 日志:   $AGENT_LOG"
+echo "📄 Scheduler 日志: $SCHEDULER_LOG"
+echo ""
+
+# ── 数据采集 Agent ──
+if [ "$START_AGENT" = true ]; then
+    : > "$AGENT_LOG"
+    (
+        cd "$SERVER_DIR"
+        while true; do
+            "$PYTHON_BIN" worker/quant_data_agent.py run-once \
+                --server-url "$SERVER_URL" \
+                --client-id "local-dev-client" \
+                --user admin \
+                --password admin123 >>"$AGENT_LOG" 2>&1 || true
+            sleep 15
+        done
+    ) &
+    AGENT_PID=$!
+    echo "✅ 数据采集 Agent 已启动 (PID: $AGENT_PID, 轮询间隔: 15s)"
+fi
+
+# ── 定时调度 Worker ──
+if [ "$START_SCHEDULER" = true ]; then
+    : > "$SCHEDULER_LOG"
+    (
+        cd "$SERVER_DIR"
+        exec "$PYTHON_BIN" worker/quant_scheduler_worker.py
+    ) >>"$SCHEDULER_LOG" 2>&1 &
+    SCHEDULER_PID=$!
+    echo "✅ 定时调度 Worker 已启动 (PID: $SCHEDULER_PID, 轮询间隔: ≤30s)"
+fi
+
+echo ""
+echo "💡 按 Ctrl+C 退出并停止所有量化子进程"
+
+# 等待任意子进程退出
+if [ -n "$AGENT_PID" ] && [ -n "$SCHEDULER_PID" ]; then
+    wait "$AGENT_PID" "$SCHEDULER_PID" 2>/dev/null || true
+elif [ -n "$AGENT_PID" ]; then
+    wait "$AGENT_PID" 2>/dev/null || true
+elif [ -n "$SCHEDULER_PID" ]; then
+    wait "$SCHEDULER_PID" 2>/dev/null || true
+fi

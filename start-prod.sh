@@ -11,12 +11,8 @@ BACKEND_TAR="server.tar.gz" # 后端压缩包名
 FRONTEND_TAR="fe.tar.gz"    # 前端压缩包名
 # NGINX_CONF_DIR="/etc/nginx/conf.d"  # Nginx 配置目录
 PROJECT_ROOT="$HOME/openai-project"
-START_QUANT_CLIENT=false
-QUANT_CLIENT_ID="prod-local-client"
 SERVER_LOG_ROOT="$PROJECT_ROOT/cyf/project/server/logs"
 PLATFORM_LOG_DIR="$SERVER_LOG_ROOT/platform"
-QUANT_LOG_DIR="$SERVER_LOG_ROOT/quant"
-QUANT_CLIENT_LOG="$QUANT_LOG_DIR/client-runner.log"
 
 # 检查是否是被嵌套调用（在打包环境内运行）
 CURRENT_DIR=$(pwd)
@@ -37,8 +33,6 @@ show_help() {
     echo "  --backend-only      仅更新后端"
     echo "  --all               更新全部（默认）"
     echo "  --restart           重启模式：终止现有服务并重新启动"
-    echo "  --with-client       同时启动一个本地 Python 采集客户端"
-    echo "  --client-id=ID      指定采集客户端标识"
     echo "  --help              显示此帮助信息"
     exit 0
 }
@@ -66,14 +60,6 @@ for arg in "$@"; do
             RESTART=true
             shift
             ;;
-        --with-client)
-            START_QUANT_CLIENT=true
-            shift
-            ;;
-        --client-id=*)
-            QUANT_CLIENT_ID="${arg#*=}"
-            shift
-            ;;
         --help|-h)
             show_help
             ;;
@@ -96,9 +82,6 @@ check_command() {
 check_command "tar"
 check_command "uwsgi"
 check_command "nginx"
-if [ $START_QUANT_CLIENT = true ]; then
-    check_command "python3"
-fi
 
 if [ $RESTART = true ]; then
     echo "🔄 重启模式：将终止现有服务并重新启动"
@@ -126,7 +109,7 @@ fi
 
 # 创建项目目录
 mkdir -p "$PROJECT_ROOT"
-mkdir -p "$PLATFORM_LOG_DIR" "$QUANT_LOG_DIR"
+mkdir -p "$PLATFORM_LOG_DIR"
 
 # 根据选项决定是否更新后端
 if [ $UPDATE_BACKEND = true ]; then
@@ -223,24 +206,6 @@ else
     echo "⏭️  跳过前端更新"
 fi
 
-if [ $START_QUANT_CLIENT = true ]; then
-    echo "🛰️ 启动本地 Python 采集客户端..."
-    : > "$QUANT_CLIENT_LOG"
-    (
-        cd "$PROJECT_ROOT/cyf/project/server"
-        while true; do
-            python3 worker/quant_data_agent.py run-once \
-                --server-url "http://127.0.0.1:${SERVER_PORT}" \
-                --client-id "$QUANT_CLIENT_ID" \
-                --user admin \
-                --password admin123 || true
-            sleep 15
-        done
-    ) >"$QUANT_CLIENT_LOG" 2>&1 &
-    echo "📄 采集客户端日志: $QUANT_CLIENT_LOG"
-    echo "✅ 采集客户端已启动 (client_id=${QUANT_CLIENT_ID})"
-fi
-
 echo ""
 echo "🎉 生产环境服务启动完成！"
 echo ""
@@ -251,17 +216,11 @@ fi
 if [ $UPDATE_FRONTEND = true ]; then
     echo "- 前端页面: http://localhost (通过Nginx访问)"
 fi
-if [ $START_QUANT_CLIENT = true ]; then
-    echo "- 采集客户端: python3 worker/quant_data_agent.py run-once"
-fi
 echo ""
 echo "🔧 管理命令："
 echo "- 查看 uWSGI 进程: pgrep uwsgi"
 echo "- 终止 uWSGI 进程: pkill -f uwsgi"
 echo "- 重启服务: $0 --restart"
-if [ $START_QUANT_CLIENT = true ]; then
-    echo "- 查看采集客户端日志: tail -f $QUANT_CLIENT_LOG"
-fi
 echo ""
 echo "📝 日志位置："
 echo "- uWSGI 平台日志: $PLATFORM_LOG_DIR/uwsgi.log"
