@@ -10,7 +10,7 @@ from model.repositories.log_repository import set_dialog, set_log
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
-from service.message_normalizer import build_parts_from_message, ensure_message_parts
+from service.message_normalizer import build_parts_from_message, ensure_message_parts, strip_file_url_markers
 from service.model_service import is_valid_model
 from service.system_prompt_service import fetch_system_prompt
 
@@ -21,7 +21,9 @@ FILE_URL_PATTERN = re.compile(r"\[FILE_URL:(https?://[^\]]+)\]")
 def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
     for msg in dialogvo:
         if msg.get("role") == "user":
-            content = msg.get("content", "")
+            content = strip_file_url_markers(msg.get("content", ""))
+            if not content:
+                continue
             return content[:max_length] + "..." if len(content) > max_length else content
     return "Untitled"
 
@@ -91,7 +93,7 @@ def generate_or_edit_image(user: str, payload, logger):
     if dialog_mode == "single":
         dialogvo = []
         processed_data = process_pic_dialog_with_urls(dialogs, logger)
-        title = dialog_title or processed_data["original_content"]
+        title = dialog_title or strip_file_url_markers(processed_data["original_content"])
     else:
         dialogvo = json.loads(dialogs)
         title = dialog_title or extract_title_from_dialog(dialogvo)

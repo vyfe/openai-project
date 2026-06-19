@@ -15,6 +15,7 @@ from service.message_normalizer import (
     convert_dialog_for_multimodal,
     ensure_message_parts,
     is_multimodal_model,
+    strip_file_url_markers,
 )
 from service.model_service import is_valid_model
 
@@ -58,7 +59,9 @@ def convert_dialog_for_model(dialogvo: list, model: str, logger=None) -> list:
 def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
     for msg in dialogvo:
         if msg.get("role") == "user":
-            content = msg.get("content", "")
+            content = strip_file_url_markers(msg.get("content", ""))
+            if not content:
+                continue
             return content[:max_length] + "..." if len(content) > max_length else content
     return "Untitled"
 
@@ -66,7 +69,7 @@ def extract_title_from_dialog(dialogvo: list, max_length: int = 50) -> str:
 def parse_dialog_mode(dialogs, dialog_mode, dialog_title=None):
     if dialog_mode == "single":
         dialogvo = [ChatCompletionUserMessageParam(role="user", content=dialogs)]
-        title = dialog_title or dialogs
+        title = dialog_title or strip_file_url_markers(dialogs)
     elif dialog_mode == "multi":
         dialogvo = json.loads(dialogs)
         title = dialog_title or extract_title_from_dialog(dialogvo)
