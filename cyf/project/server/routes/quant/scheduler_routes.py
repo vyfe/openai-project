@@ -26,7 +26,7 @@ from service.quant.schedule_service import (
 from service.quant.schedule_log_service import read_schedule_run_log_tail
 
 
-bp = Blueprint("quant_scheduler_routes", __name__)
+bp = Blueprint("quant_scheduler_routes", __name__, url_prefix="/never_guess_my_usage/quant")
 
 
 @bp.route("/scheduler/meta", methods=["GET"])

@@ -8,7 +8,7 @@ from service.quant.import_service import import_bundle, parse_bundle_bytes
 from service.quant.task_dispatch_service import claim_next_task, create_fetch_bars_task, list_tasks, mark_task_failed, mark_task_success, reset_task
 
 
-bp = Blueprint("quant_client_routes", __name__)
+bp = Blueprint("quant_client_routes", __name__, url_prefix="/never_guess_my_usage/quant")
 
 
 @bp.route("/client/tasks/create", methods=["POST"])

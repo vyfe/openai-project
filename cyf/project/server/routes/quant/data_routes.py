@@ -12,7 +12,7 @@ from service.quant.symbol_search_service import search_symbols_fallback
 from service.auth_service import require_admin_auth, require_auth
 
 
-bp = Blueprint("quant_data_routes", __name__)
+bp = Blueprint("quant_data_routes", __name__, url_prefix="/never_guess_my_usage/quant")
 
 
 @bp.route("/dashboard/overview", methods=["GET"])
