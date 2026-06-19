@@ -16,42 +16,6 @@ declare global {
 // 在ES模块中获取当前目录路径
 const __dirname = resolve('.');
 
-const ELEMENT_PLUS_OVERLAY_COMPONENTS = new Set([
-  'dialog',
-  'drawer',
-  'dropdown',
-  'dropdown-item',
-  'dropdown-menu',
-  'popconfirm',
-  'popover',
-  'tooltip',
-])
-
-const ELEMENT_PLUS_FORM_COMPONENTS = new Set([
-  'checkbox',
-  'date-picker',
-  'form',
-  'form-item',
-  'input',
-  'input-number',
-  'option',
-  'radio',
-  'radio-group',
-  'select',
-  'slider',
-  'switch',
-  'upload',
-])
-
-const ELEMENT_PLUS_DATA_COMPONENTS = new Set([
-  'pagination',
-  'skeleton',
-  'table',
-  'table-column',
-  'tag',
-  'tabs',
-  'tab-pane',
-])
 
 const normalizeModuleId = (id: string) => id.replace(/\\/g, '/')
 
@@ -63,11 +27,11 @@ const resolveElementChunk = (id: string) => {
   }
 
   if (normalizedId.includes('/node_modules/@floating-ui/')) {
-    return 'el-overlay'
+    return 'el-shared'
   }
 
   if (normalizedId.includes('/node_modules/async-validator/')) {
-    return 'el-form'
+    return 'el-core'
   }
 
   if (
@@ -83,21 +47,7 @@ const resolveElementChunk = (id: string) => {
     return null
   }
 
-  const componentMatch = normalizedId.match(/\/element-plus\/es\/components\/([^/]+)\//)
-  const componentName = componentMatch?.[1]
-
-  if (componentName && ELEMENT_PLUS_OVERLAY_COMPONENTS.has(componentName)) {
-    return 'el-overlay'
-  }
-
-  if (componentName && ELEMENT_PLUS_FORM_COMPONENTS.has(componentName)) {
-    return 'el-form'
-  }
-
-  if (componentName && ELEMENT_PLUS_DATA_COMPONENTS.has(componentName)) {
-    return 'el-data'
-  }
-
+  // 所有 element-plus 组件统一打入 el-core，避免组件间循环导入导致 TDZ 错误
   return 'el-core'
 }
 

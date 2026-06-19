@@ -111,7 +111,7 @@ def ensure_message_parts(message: Dict[str, Any]) -> Dict[str, Any]:
 # 多模态模型输入处理（model_type=3）
 # =============================================================================
 
-# 已知的图片 MIME 类型
+# 已知的图片 MIME 类型 → image_url 块
 IMAGE_CONTENT_TYPES = {
     "image/png", "image/jpeg", "image/jpg", "image/gif",
     "image/webp", "image/bmp", "image/tiff",
@@ -120,21 +120,56 @@ IMAGE_CONTENT_TYPES = {
 # 已知的图片文件扩展名
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".svg"}
 
+# 文本类文件扩展名 → 读取内容作为 text 块
+TEXT_FILE_EXTENSIONS = {
+    ".txt", ".md", ".markdown", ".json", ".csv", ".xml", ".yaml", ".yml",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".htm", ".css", ".scss", ".less",
+    ".log", ".sh", ".bash", ".zsh", ".cfg", ".ini", ".toml", ".conf",
+    ".java", ".c", ".cpp", ".h", ".hpp", ".go", ".rs", ".rb", ".php",
+    ".sql", ".r", ".m", ".swift", ".kt", ".scala", ".vue", ".svelte",
+}
 
-def _is_image_url(url: str) -> bool:
-    """通过 URL 扩展名简单判断是否为图片。"""
+# 文件处理结果类型
+class _FileResult:
+    """多模态文件处理结果。"""
+    __slots__ = ("kind", "data")
+    def __init__(self, kind: str, data: str):
+        self.kind = kind  # "image" | "text" | "unsupported"
+        self.data = data  # data URL or text content
+
+
+def _classify_file(url: str, content_type: str) -> str:
+    """根据 URL 扩展名和 Content-Type 判断文件类别：image / text / unsupported。"""
     path = urlparse(url).path.lower()
-    return any(path.endswith(ext) for ext in IMAGE_EXTENSIONS)
+    # 先看扩展名
+    for ext in IMAGE_EXTENSIONS:
+        if path.endswith(ext):
+            return "image"
+    for ext in TEXT_FILE_EXTENSIONS:
+        if path.endswith(ext):
+            return "text"
+    # 扩展名未知时，看 Content-Type
+    if content_type in IMAGE_CONTENT_TYPES:
+        return "image"
+    if content_type.startswith("text/") or content_type in {
+        "application/json", "application/xml", "application/javascript",
+        "application/x-yaml", "application/x-sh",
+    }:
+        return "text"
+    return "unsupported"
 
 
-def download_file_as_data_url(url: str, logger: Optional[logging.Logger] = None, timeout: int = 30) -> Optional[str]:
-    """从 URL 下载文件，返回 `data:<mime>;base64,<data>` 格式的 Data URL。
+def process_file_for_multimodal(
+    url: str, logger: Optional[logging.Logger] = None, timeout: int = 30
+) -> Optional[_FileResult]:
+    """下载 [FILE_URL:...] 指向的文件，按类型返回处理结果。
 
-    仅用于多模态模型的图片输入——将 [FILE_URL:...] 标记的图片转换为
-    base64 data URL，嵌入 Chat Completion API 的 image_url 内容块。
+    - 图片：返回 data URL（base64 编码），用于 image_url 块
+    - 文本文件：读取并返回文本内容，用于 text 块
+    - 不支持的格式：返回 None，保留原始 [FILE_URL:...] 标记在文本中
     """
     try:
-        response = requests.get(url, timeout=timeout, stream=True)
+        response = requests.get(url, timeout=timeout)
         if response.status_code != 200:
             if logger:
                 logger.error(f"下载文件失败: {url}, status={response.status_code}")
@@ -142,22 +177,43 @@ def download_file_as_data_url(url: str, logger: Optional[logging.Logger] = None,
         file_data = response.content
         if len(file_data) == 0:
             return None
+
         content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
-        if not content_type or content_type == "application/octet-stream":
-            # 从扩展名推断
-            path = urlparse(url).path.lower()
-            for ext, mime in [
-                (".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg"),
-                (".gif", "image/gif"), (".webp", "image/webp"),
-                (".bmp", "image/bmp"), (".tiff", "image/tiff"),
-            ]:
-                if path.endswith(ext):
-                    content_type = mime
-                    break
-            else:
-                content_type = "image/png"  # 兜底
-        b64_data = base64.b64encode(file_data).decode("utf-8")
-        return f"data:{content_type};base64,{b64_data}"
+        file_kind = _classify_file(url, content_type)
+
+        if file_kind == "image":
+            # 确定准确的 MIME 类型
+            if not content_type or content_type == "application/octet-stream":
+                path = urlparse(url).path.lower()
+                for ext, mime in [
+                    (".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg"),
+                    (".gif", "image/gif"), (".webp", "image/webp"),
+                    (".bmp", "image/bmp"), (".tiff", "image/tiff"),
+                ]:
+                    if path.endswith(ext):
+                        content_type = mime
+                        break
+                else:
+                    content_type = "image/png"
+            b64_data = base64.b64encode(file_data).decode("utf-8")
+            return _FileResult("image", f"data:{content_type};base64,{b64_data}")
+
+        elif file_kind == "text":
+            # 尝试 UTF-8 解码，失败则用 Latin-1 兜底
+            try:
+                text = file_data.decode("utf-8")
+            except UnicodeDecodeError:
+                text = file_data.decode("latin-1")
+            filename = urlparse(url).path.rsplit("/", 1)[-1] or "file"
+            if logger:
+                logger.info(f"文本文件已读取: {filename}, {len(text)} 字符")
+            return _FileResult("text", text)
+
+        else:
+            if logger:
+                logger.warning(f"不支持的文件类型（{content_type}），保留原始标记: {url}")
+            return None
+
     except Exception as exc:
         if logger:
             logger.error(f"下载文件异常: {url}, err={exc}")
@@ -185,6 +241,11 @@ def convert_user_message_for_multimodal(
 ) -> Dict[str, Any]:
     """将包含 [FILE_URL:...] 的用户消息转换为多模态 content 数组格式。
 
+    根据文件类型分别处理：
+    - 图片（png/jpg/gif 等）→ image_url 块（base64 data URL）
+    - 文本文件（txt/md/json/py 等）→ text 块（读取文件内容）
+    - 不支持的格式 → 保留原始 [FILE_URL:...] 标记在文本中
+
     输入示例: {"role": "user", "content": "描述这张图\\n[FILE_URL:http://x/a.png]"}
     输出示例: {"role": "user", "content": [{"type": "text", "text": "描述这张图"},
                                             {"type": "image_url", "image_url": {"url": "data:..."}}]}
@@ -196,7 +257,7 @@ def convert_user_message_for_multimodal(
 
     file_urls = extract_file_urls_from_content(text_content)
     if not file_urls:
-        # 没有图片，保持字符串格式
+        # 没有文件，保持字符串格式
         return message
 
     # 提取纯文本（去除 [FILE_URL:...] 标记）
@@ -208,16 +269,29 @@ def convert_user_message_for_multimodal(
         content_array.append({"type": "text", "text": clean_text})
 
     for url in file_urls:
-        data_url = download_file_as_data_url(url, logger=logger, timeout=timeout)
-        if data_url:
+        result = process_file_for_multimodal(url, logger=logger, timeout=timeout)
+        if result is None:
+            # 下载失败或不支持的格式：保留原始标记在文本中
+            filename = urlparse(url).path.rsplit("/", 1)[-1] or "file"
+            content_array.append({
+                "type": "text",
+                "text": f"\n[附件: {filename}]\n[链接: {url}]\n",
+            })
+            continue
+
+        if result.kind == "image":
             content_array.append({
                 "type": "image_url",
-                "image_url": {"url": data_url},
+                "image_url": {"url": result.data},
             })
-        elif logger:
-            logger.warning(f"跳过无法下载的图片: {url}")
+        elif result.kind == "text":
+            filename = urlparse(url).path.rsplit("/", 1)[-1] or "file"
+            content_array.append({
+                "type": "text",
+                "text": f"\n--- 文件: {filename} ---\n{result.data}\n--- 文件结束 ---\n",
+            })
 
-    # 如果所有图片都下载失败，回退到纯文本
+    # 如果 content_array 为空（极端情况），回退到原始文本
     if not content_array:
         return {"role": message.get("role", "user"), "content": text_content}
 

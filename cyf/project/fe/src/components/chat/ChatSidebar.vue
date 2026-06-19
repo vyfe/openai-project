@@ -46,6 +46,7 @@
               <el-option v-for="model in filteredModels" :key="model.value" :value="model.value">
                 <span>{{ model.label }}</span>
                 <el-tag v-if="model.recommend" size="small" type="warning" class="ml-2">{{ t('chat.recommended') }}</el-tag>
+                <el-tag v-if="model.model_type === 3" size="small" type="danger" class="ml-2">{{ t('chat.multimodal') }}</el-tag>
                 <el-tooltip :content="model.allow_net !== false ? t('chat.allowNet') : t('chat.disallowNet')">
                   <el-tag
                     size="small"

@@ -6,6 +6,7 @@
 /cyf/project/server/*.db-shm
 /cyf/project/server/*.db-wal
 **/*.log
+**/quant.db*
 /cyf/project/fe/node_*/*
 **/dist/
 .DS_STORE

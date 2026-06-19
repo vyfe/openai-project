@@ -414,6 +414,8 @@ import {
   Menu,
   View,
   ChatDotSquare,
+  CirclePlus,
+  Download,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
