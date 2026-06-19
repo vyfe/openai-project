@@ -9,6 +9,7 @@ from service.chat_service import check_test_user_limit, convert_dialog_for_model
 from service.common_service import generate_sse_error, handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
+from service.message_normalizer import build_parts_from_message, ensure_message_parts
 
 
 def register_stream_request(request_id: str):
@@ -79,7 +80,7 @@ def stream_chat(user: str, payload, logger):
                 return
             api_params = {
                 "model": model,
-                "messages": convert_dialog_for_model(dialogvo, model),
+                "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
                 "max_tokens": payload.max_response_tokens or 102400,
                 "stream": True,
                 "timeout": 300,
@@ -101,7 +102,7 @@ def stream_chat(user: str, payload, logger):
                     if delta.content:
                         content_piece = delta.content
                         full_content += content_piece
-                        yield f"data: {json.dumps({'content': content_piece, 'done': False})}\n\n"
+                        yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False})}\n\n"
                     if chunk.choices[0].finish_reason:
                         finish_reason = chunk.choices[0].finish_reason
             if was_cancelled:
@@ -111,6 +112,8 @@ def stream_chat(user: str, payload, logger):
             request_messages = stamp_latest_user_message(dialogvo)
             assistant_time = current_time_str()
             assistant_message = {"role": "assistant", "content": full_content, "time": assistant_time}
+            # 归一化为统一 MessagePart 协议
+            assistant_message = ensure_message_parts(assistant_message)
             dialog_id = set_dialog(
                 user,
                 model,
@@ -118,7 +121,7 @@ def stream_chat(user: str, payload, logger):
                 title,
                 build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
             )
-            yield f"data: {json.dumps({'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time})}\n\n"
         except Exception as api_exc:
             error_response = handle_api_exception(api_exc, logger, user=user, model=model, dialog_content=dialogs, url_index=url_index)
             yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"

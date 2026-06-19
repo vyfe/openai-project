@@ -10,6 +10,12 @@ from model.repositories.user_repository import check_test_limit_exceeded, get_us
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
+from service.message_normalizer import (
+    build_parts_from_message,
+    convert_dialog_for_multimodal,
+    ensure_message_parts,
+    is_multimodal_model,
+)
 from service.model_service import is_valid_model
 
 
@@ -35,9 +41,17 @@ def convert_message_for_gemini(message: dict) -> dict:
     return {"role": message.get("role"), "content": content_array}
 
 
-def convert_dialog_for_model(dialogvo: list, model: str) -> list:
+def convert_dialog_for_model(dialogvo: list, model: str, logger=None) -> list:
+    """根据模型类型转换对话格式。
+
+    - Gemini 模型：转换为 {type: "file_url"} 格式
+    - 多模态模型（model_type=3）：将 [FILE_URL:...] 转为 base64 image_url 内容块
+    - 其他模型：保持原样
+    """
     if is_gemini_model(model):
         return [convert_message_for_gemini(msg) for msg in dialogvo]
+    if is_multimodal_model(model):
+        return convert_dialog_for_multimodal(dialogvo, logger=logger)
     return dialogvo
 
 
@@ -103,7 +117,7 @@ def run_chat_completion(user: str, payload, logger):
         return {"msg": title}, 200
     api_params = {
         "model": model,
-        "messages": convert_dialog_for_model(dialogvo, model),
+        "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
         "max_tokens": payload.max_response_tokens or 102400,
     }
     try:
@@ -115,6 +129,8 @@ def run_chat_completion(user: str, payload, logger):
         assistant_time = current_time_str()
         assistant_message = result.choices[0].message.to_dict()
         assistant_message["time"] = assistant_time
+        # 归一化为统一 MessagePart 协议
+        assistant_message = ensure_message_parts(assistant_message)
         dialog_id = set_dialog(
             user,
             model,
@@ -125,6 +141,7 @@ def run_chat_completion(user: str, payload, logger):
         response_data = {
             "role": result.choices[0].message.role,
             "content": result.choices[0].message.content,
+            "parts": assistant_message.get("parts", build_parts_from_message({"content": result.choices[0].message.content})),
             "finish_reason": result.choices[0].finish_reason,
             "time": assistant_time,
         }

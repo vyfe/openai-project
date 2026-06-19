@@ -226,7 +226,7 @@
                   @click="retryLastExchange"
                 />
               </el-tooltip>
-              <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(message.content)" />
+              <el-button :icon="CopyDocument" circle size="small" text @click="copyMessageContent(getCopyText(message))" />
               <el-popconfirm :title="t('chat.deleteMessageConfirmation')" :confirm-button-text="t('chat.confirm')" :cancel-button-text="t('chat.cancel')"
                 @confirm="deleteMessage(index)">
                 <template #reference>
@@ -499,6 +499,7 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
             type: msg.role === 'user' ? 'user' : 'ai',
             content: msg.content || msg.desc || '', // 支持desc字段作为内容
             url: msg.url, // 添加url字段支持
+            parts: msg.parts, // 多模态部件
             time: msg.time || getCurrentTime()
           })
         })
@@ -586,6 +587,7 @@ const messages = reactive<Array<{
   type: 'user' | 'ai'
   content: string
   time: string
+  parts?: import('@/components/chat/types').MessagePart[]  // 多模态部件
   file?: File
   url?: string  // 添加url字段支持图片链接
   isError?: boolean  // 添加错误状态
@@ -1384,6 +1386,19 @@ function getCurrentDateTime() {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
 }
 
+// 从消息对象提取可复制文本：优先用 parts 中的 text 部分，回退到 content
+const getCopyText = (msg: any): string => {
+  if (msg.parts && msg.parts.length > 0) {
+    const textParts = msg.parts
+      .filter((p: any) => p.type === 'text' && p.text)
+      .map((p: any) => p.text)
+    if (textParts.length > 0) {
+      return textParts.join('\n')
+    }
+  }
+  return msg.content || ''
+}
+
 // 复制消息内容到剪贴板
 const copyMessageContent = async (content: string) => {
   try {
@@ -1628,12 +1643,12 @@ const callApi = async (
   setSessionLoading(requestSessionKey, true)
 
   try {
-    // 检查是否是图像生成模型
-    // TODO 后端返回模型模态信息
+    // 检查模型类型：2=图片生成类(dall-e等), 3=多模态类(gpt-5.4/5.5等)
     const isImageModel = formData.selectedModelType === 2;
+    const isMultimodalModel = formData.selectedModelType === 3;
 
     if (isImageModel) {
-      // 图像生成模型仍使用普通API
+      // 图像生成模型使用图片生成API
       const aiResponse: any = await chatAPI.sendImageGeneration(
         formData.selectedModel,
         userMessage.content,
@@ -1701,13 +1716,18 @@ const callApi = async (
       }
 
       // 根据是新消息还是重试消息决定如何添加到消息列表
+      const imageMsgBase: any = {
+        type: 'ai',
+        content: responseContent,
+        time: aiResponse?.time || getCurrentTime()
+      }
+      // 从图片生成响应提取多模态 parts
+      if (aiResponse?.parts) {
+        imageMsgBase.parts = aiResponse.parts
+      }
       if (isRetry && originalIndex !== undefined) {
         // 替换重试的消息
-        messages.splice(originalIndex, 1, {
-          type: 'ai',
-          content: responseContent,
-          time: aiResponse?.time || getCurrentTime()
-        });
+        messages.splice(originalIndex, 1, imageMsgBase);
       } else {
         // 添加新AI消息 - 如果responseContent是图片URL，也设置url字段
         let finalUrl = '';
@@ -1715,13 +1735,8 @@ const callApi = async (
           // 提取URL
           finalUrl = responseContent.substring(10, responseContent.length - 1);
         }
-        
-        messages.push({
-          type: 'ai',
-          content: responseContent,
-          url: finalUrl, // 设置url字段以便直接预览
-          time: aiResponse?.time || getCurrentTime()
-        });
+        imageMsgBase.url = finalUrl
+        messages.push(imageMsgBase);
       }
     } else {
       // 根据开关决定使用流式还是非流式API
@@ -1761,6 +1776,18 @@ const callApi = async (
           formData.selectedModel,
           userMessage.content,
           (content, done, finishReason, response) => {
+            // 处理非文本 part 事件（图片/文件等）
+            if (response?.part) {
+              mutateSessionMessages(requestSessionKey, (targetMessages) => {
+                if (!targetMessages[aiMessageIndex]) return
+                if (!targetMessages[aiMessageIndex].parts) {
+                  targetMessages[aiMessageIndex].parts = []
+                }
+                targetMessages[aiMessageIndex].parts!.push(response.part)
+              })
+              return
+            }
+
             mutateSessionMessages(requestSessionKey, (targetMessages) => {
               if (!targetMessages[aiMessageIndex]) {
                 targetMessages[aiMessageIndex] = {
@@ -1787,6 +1814,10 @@ const callApi = async (
                 }
                 if (response?.time) {
                   targetMessages[aiMessageIndex].time = response.time
+                }
+                // 从 done 事件提取多模态 parts
+                if (response?.parts) {
+                  targetMessages[aiMessageIndex].parts = response.parts
                 }
               })
 
@@ -1862,6 +1893,9 @@ const callApi = async (
           targetMessages[aiMessageIndex].content = response.content
           if (response.time) {
             targetMessages[aiMessageIndex].time = response.time
+          }
+          if (response.parts) {
+            targetMessages[aiMessageIndex].parts = response.parts
           }
           if (response.finish_reason === 'length') {
             targetMessages[aiMessageIndex].finishReason = response.finish_reason as 'length';
@@ -1960,8 +1994,9 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
     ElMessage.warning('请先选择一个模型')
     return
   }
-  // 检查是否是图像生成模型
+  // 检查模型类型：2=图片生成类, 3=多模态类
   const isImageModel = formData.selectedModelType === 2;
+  const isMultimodalModel = formData.selectedModelType === 3;
 
   // 提取图片尺寸信息（如果存在）
   let processedMessage = message;
@@ -2103,12 +2138,17 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
       }
 
       // 添加AI消息 - 如果有图片URL，设置url字段
-      messages.push({
+      const imgMsg: any = {
         type: 'ai',
         content: responseContent,
         url: imageUrl, // 设置url字段以便直接预览
         time: aiResponse?.time || getCurrentTime()
-      });
+      }
+      // 从图片生成响应提取多模态 parts
+      if (aiResponse?.parts) {
+        imgMsg.parts = aiResponse.parts
+      }
+      messages.push(imgMsg);
     } catch (error: any) {
       console.error('图片生成API Error:', error);
       let errorMessage = '图片生成失败，请重试';
@@ -2270,12 +2310,17 @@ const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string, c
   const messagesToInclude = validMessages.slice(-formData.contextCount) // 只取最新的几条
 
   for (const msg of messagesToInclude) {
-    dialogArray.push({
+    const dialogMsg: any = {
       role: msg.type === 'user' ? 'user' : 'assistant',
       content: msg.content,
       url: msg.url || '',
       time: msg.time
-    })
+    }
+    // 传递多模态 parts 到后端
+    if (msg.parts && msg.parts.length > 0) {
+      dialogMsg.parts = msg.parts
+    }
+    dialogArray.push(dialogMsg)
   }
 
   dialogArray.push({ role: 'user', content: currentMessage, time: currentTime || getCurrentDateTime() })

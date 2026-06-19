@@ -1,8 +1,22 @@
+// ===========================================================================
+// 多模态消息协议 —— 统一 MessagePart 类型
+// ===========================================================================
+
+/** 消息部件的联合类型 */
+export type MessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; url?: string; dataUrl?: string; alt?: string }
+  | { type: 'file'; url: string; name?: string; mimeType?: string }
+  | { type: 'tool_result'; name?: string; text?: string; data?: unknown }
+  | { type: 'error'; message: string }
+
 // 共享类型定义
 export interface Message {
   id?: number
   role: 'user' | 'assistant' | 'system'
   content: string
+  /** 多模态部件数组，优先于 content 用于渲染 */
+  parts?: MessagePart[]
   timestamp: Date
   loading?: boolean
   error?: boolean

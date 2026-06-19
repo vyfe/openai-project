@@ -10,6 +10,7 @@ from model.repositories.log_repository import set_dialog, set_log
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user
+from service.message_normalizer import build_parts_from_message, ensure_message_parts
 from service.model_service import is_valid_model
 from service.system_prompt_service import fetch_system_prompt
 
@@ -128,6 +129,8 @@ def generate_or_edit_image(user: str, payload, logger):
 
     desc = result.data[0].revised_prompt or "图片已生成"
     result_save = {"role": "assistant", "desc": desc, "url": f"{result.data[0].url}", "time": current_time_str()}
+    # 归一化为统一 MessagePart 协议
+    result_save = ensure_message_parts(result_save)
     set_log(user, 1, model, json.dumps(result.to_dict()))
     try:
         if dialog_mode == "single":

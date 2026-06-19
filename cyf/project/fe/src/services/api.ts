@@ -127,8 +127,22 @@ export const chatAPI = {
           if (parsedData.error) {
             throw new Error(parsedData.error.msg || 'API请求失败')
           }
-          onChunk(parsedData.content, parsedData.done, parsedData.finish_reason, parsedData)
-          if (parsedData.done) return
+
+          // 多模态协议：根据 event type 分别处理
+          const eventType = parsedData.type // 'text_delta' | 'part' | 'done' | undefined (legacy)
+
+          if (eventType === 'part') {
+            // 非文本部件（图片/文件等），通过 response 传递
+            onChunk('', false, undefined, { part: parsedData.part, done: false })
+          } else if (eventType === 'done') {
+            // 流结束事件
+            onChunk('', true, parsedData.finish_reason, parsedData)
+            return
+          } else {
+            // text_delta 或无 type 字段（旧格式兼容）
+            onChunk(parsedData.content || '', parsedData.done, parsedData.finish_reason, parsedData)
+            if (parsedData.done) return
+          }
         }
       }
     } finally {

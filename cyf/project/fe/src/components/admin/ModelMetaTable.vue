@@ -198,8 +198,8 @@ onMounted(() => {
       <el-table-column prop="model_desc" :label="t('admin.modelDesc')" min-width="200" />
       <el-table-column prop="model_type" :label="t('admin.modelType')" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.model_type === 1 ? 'primary' : 'success'" size="small">
-            {{ row.model_type === 1 ? t('admin.text') : t('admin.image') }}
+          <el-tag :type="row.model_type === 1 ? 'primary' : row.model_type === 2 ? 'success' : 'warning'" size="small">
+            {{ row.model_type === 1 ? t('admin.text') : row.model_type === 2 ? t('admin.image') : t('admin.multimodal') }}
           </el-tag>
         </template>
       </el-table-column>
@@ -267,6 +267,7 @@ onMounted(() => {
           <el-select v-model="formData.model_type">
             <el-option :label="t('admin.text')" :value="1" />
             <el-option :label="t('admin.image')" :value="2" />
+            <el-option :label="t('admin.multimodal')" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('admin.modelGroup')">

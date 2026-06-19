@@ -186,12 +186,18 @@ const displayFiles = computed(() => {
   })
 })
 
-// 计算属性：判断是否为图片模型
+// 计算属性：判断是否为图片模型（仅图片生成类，type=2）
 const isImageModel = computed(() => {
   return props.selectedModelType === 2
 })
 
-const canUploadAttachment = computed(() => isImageModel.value || props.selectedModelAllowNet !== false)
+// 计算属性：判断是否为多模态模型（支持图片输入，type=3）
+const isMultimodalModel = computed(() => {
+  return props.selectedModelType === 3
+})
+
+// 文件上传权限：图片模型、多模态模型或允许联网的模型
+const canUploadAttachment = computed(() => isImageModel.value || isMultimodalModel.value || props.selectedModelAllowNet !== false)
 
 // 添加键盘可见性检测
 const isKeyboardVisible = ref(false)
