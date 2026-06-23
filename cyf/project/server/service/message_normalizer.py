@@ -336,3 +336,154 @@ def get_model_type_from_cache(model_name: str) -> int:
 def is_multimodal_model(model_name: str) -> bool:
     """判断模型是否为多模态类（model_type == 3）。"""
     return get_model_type_from_cache(model_name) == 3
+
+
+# =============================================================================
+# Claude 模型消息格式转换
+# =============================================================================
+
+# Claude 支持的图片 MIME 类型（比 OpenAI 更严格）
+CLAUDE_IMAGE_CONTENT_TYPES = {
+    "image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp",
+}
+
+
+def convert_user_message_for_claude(
+    message: Dict[str, Any],
+    logger: Optional[logging.Logger] = None,
+    timeout: int = 30,
+) -> Dict[str, Any]:
+    """将包含 [FILE_URL:...] 的用户消息转换为 Claude 多模态 content 数组格式。
+
+    与 convert_user_message_for_multimodal() 的区别：
+    - 图片使用 {"type":"image","source":{"type":"base64","media_type":"...","data":"..."}}
+    - 文本文件同 OpenAI 方式，使用 {"type":"text","text":"..."}
+
+    输入示例: {"role": "user", "content": "描述这张图\\n[FILE_URL:http://x/a.png]"}
+    输出示例: {"role": "user", "content": [
+                 {"type": "text", "text": "描述这张图"},
+                 {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "..."}}
+               ]}
+    """
+    text_content = message.get("content", "")
+    if not isinstance(text_content, str):
+        # 已经是数组格式，需要转换 OpenAI 格式的 image_url 块为 Claude 格式
+        if isinstance(text_content, list):
+            converted = []
+            for block in text_content:
+                if block.get("type") == "image_url":
+                    image_url = block.get("image_url", {}).get("url", "")
+                    if image_url.startswith("data:"):
+                        # data URL 格式: data:<media_type>;base64,<data>
+                        header, b64_data = image_url.split(",", 1)
+                        media_type = header.split(";")[0].split(":")[1]
+                        converted.append({
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+                        })
+                    else:
+                        # 非 base64 URL - 下载并编码
+                        result = process_file_for_multimodal(image_url, logger=logger, timeout=timeout)
+                        if result and result.kind == "image":
+                            header, b64_data = result.data.split(",", 1)
+                            media_type = header.split(";")[0].split(":")[1]
+                            converted.append({
+                                "type": "image",
+                                "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+                            })
+                        else:
+                            converted.append({"type": "text", "text": f"[无法加载图片: {image_url}]"})
+                elif block.get("type") == "text":
+                    converted.append({"type": "text", "text": block.get("text", "")})
+                else:
+                    converted.append(block)
+            return {"role": message.get("role", "user"), "content": converted}
+        return message
+
+    file_urls = extract_file_urls_from_content(text_content)
+    if not file_urls:
+        return message
+
+    clean_text = strip_file_url_markers(text_content)
+    content_array: List[Dict[str, Any]] = []
+    if clean_text:
+        content_array.append({"type": "text", "text": clean_text})
+
+    for url in file_urls:
+        result = process_file_for_multimodal(url, logger=logger, timeout=timeout)
+        if result is None:
+            filename = urlparse(url).path.rsplit("/", 1)[-1] or "file"
+            content_array.append({
+                "type": "text",
+                "text": f"\n[附件: {filename}]\n[链接: {url}]\n",
+            })
+            continue
+
+        if result.kind == "image":
+            # result.data 是 "data:<media_type>;base64,<b64data>" 格式
+            header, b64_data = result.data.split(",", 1)
+            media_type = header.split(";")[0].split(":")[1]
+            # Claude 严格限制 MIME 类型
+            if media_type not in CLAUDE_IMAGE_CONTENT_TYPES:
+                content_array.append({
+                    "type": "text",
+                    "text": f"\n[图片(格式 {media_type} 不受 Claude 支持)]: {url}\n",
+                })
+                continue
+            content_array.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": b64_data},
+            })
+        elif result.kind == "text":
+            filename = urlparse(url).path.rsplit("/", 1)[-1] or "file"
+            content_array.append({
+                "type": "text",
+                "text": f"\n--- 文件: {filename} ---\n{result.data}\n--- 文件结束 ---\n",
+            })
+
+    if not content_array:
+        return {"role": message.get("role", "user"), "content": text_content}
+
+    return {"role": message.get("role", "user"), "content": content_array}
+
+
+def convert_dialog_for_claude(
+    dialogvo: List[Dict[str, Any]],
+    logger: Optional[logging.Logger] = None,
+) -> List[Dict[str, Any]]:
+    """为 Claude 模型转换整个对话数组中的用户消息。
+
+    仅转换 role=user 的消息；assistant/system 消息保持不变。
+    注意：system 消息会在 claude_service 中被提取为单独的 system 参数。
+    """
+    converted = []
+    for msg in dialogvo:
+        role = msg.get("role", "")
+        if role == "user":
+            converted.append(convert_user_message_for_claude(msg, logger=logger))
+        else:
+            converted.append(msg)
+    return converted
+
+
+def extract_system_from_dialog(dialogvo: List[Dict[str, Any]]) -> tuple:
+    """从对话列表中提取 system 消息，返回 (cleaned_dialog, system_prompt)。
+
+    Claude 不支持 messages 中的 system 角色，需要将 system 提取为单独参数。
+    如果有多条 system 消息，合并为一条。
+    """
+    system_parts = []
+    cleaned = []
+    for msg in dialogvo:
+        if msg.get("role") == "system":
+            content = msg.get("content", "")
+            if isinstance(content, str) and content.strip():
+                system_parts.append(content.strip())
+            elif isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "text" and block.get("text", "").strip():
+                        system_parts.append(block["text"].strip())
+        else:
+            cleaned.append(msg)
+    system_prompt = "\n\n".join(system_parts) if system_parts else None
+    return cleaned, system_prompt

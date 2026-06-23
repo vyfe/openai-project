@@ -526,3 +526,186 @@ class TestIsMultimodalModel:
     def test_image_model_returns_false(self):
         with patch("service.message_normalizer.get_model_type_from_cache", return_value=2):
             assert is_multimodal_model("dall-e-3") is False
+
+
+# ============================================================================
+# Claude 消息格式转换测试
+# ============================================================================
+
+class TestConvertUserMessageForClaude:
+    """Claude 格式的用户消息转换测试。"""
+
+    def test_no_file_urls_returns_unchanged(self):
+        from service.message_normalizer import convert_user_message_for_claude
+
+        msg = {"role": "user", "content": "hello"}
+        result = convert_user_message_for_claude(msg)
+        assert result == msg
+
+    def test_array_content_returns_unchanged_for_unknown_types(self):
+        from service.message_normalizer import convert_user_message_for_claude
+
+        msg = {"role": "user", "content": [{"type": "text", "text": "hello"}]}
+        result = convert_user_message_for_claude(msg)
+        # 纯文本数组会被原样转换
+        assert result["role"] == "user"
+        assert isinstance(result["content"], list)
+
+    @patch("service.message_normalizer.process_file_for_multimodal")
+    def test_image_file_converts_to_claude_image_block(self, mock_process):
+        from service.message_normalizer import _FileResult, convert_user_message_for_claude
+
+        mock_process.return_value = _FileResult("image", "data:image/png;base64,abc123")
+        msg = {"role": "user", "content": "描述这张图\n[FILE_URL:http://x.com/a.png]"}
+        result = convert_user_message_for_claude(msg)
+
+        assert result["role"] == "user"
+        assert isinstance(result["content"], list)
+        assert len(result["content"]) == 2
+        assert result["content"][0] == {"type": "text", "text": "描述这张图"}
+        # Claude 格式：image block 使用 source 嵌套结构
+        assert result["content"][1]["type"] == "image"
+        assert result["content"][1]["source"]["type"] == "base64"
+        assert result["content"][1]["source"]["media_type"] == "image/png"
+        assert result["content"][1]["source"]["data"] == "abc123"
+
+    @patch("service.message_normalizer.process_file_for_multimodal")
+    def test_text_file_converts_to_text_block(self, mock_process):
+        from service.message_normalizer import _FileResult, convert_user_message_for_claude
+
+        mock_process.return_value = _FileResult("text", "file content here")
+        msg = {"role": "user", "content": "分析这个文件\n[FILE_URL:http://x.com/doc.txt]"}
+        result = convert_user_message_for_claude(msg)
+
+        assert isinstance(result["content"], list)
+        assert len(result["content"]) == 2
+        assert result["content"][0] == {"type": "text", "text": "分析这个文件"}
+        assert "doc.txt" in result["content"][1]["text"]
+        assert "file content here" in result["content"][1]["text"]
+
+    @patch("service.message_normalizer.process_file_for_multimodal")
+    def test_unsupported_file_keeps_reference(self, mock_process):
+        from service.message_normalizer import convert_user_message_for_claude
+
+        mock_process.return_value = None
+        msg = {"role": "user", "content": "看看这个文件\n[FILE_URL:http://x.com/unknown.xyz]"}
+        result = convert_user_message_for_claude(msg)
+
+        assert isinstance(result["content"], list)
+        assert len(result["content"]) == 2
+        assert "unknown.xyz" in result["content"][1]["text"]
+        assert "[附件:" in result["content"][1]["text"]
+
+    @patch("service.message_normalizer.process_file_for_multimodal")
+    def test_unsupported_image_type_generates_text_reference(self, mock_process):
+        """Claude 不支持的图片格式（如 bmp/tiff）会转为文本引用。"""
+        from service.message_normalizer import _FileResult, convert_user_message_for_claude
+
+        mock_process.return_value = _FileResult("image", "data:image/bmp;base64,xyz")
+        msg = {"role": "user", "content": "看图\n[FILE_URL:http://x.com/a.bmp]"}
+        result = convert_user_message_for_claude(msg)
+
+        assert isinstance(result["content"], list)
+        # 格式不受支持，第二个块应为文本引用而非 image 块
+        assert result["content"][1]["type"] == "text"
+        assert "不受 Claude 支持" in result["content"][1]["text"]
+
+    def test_already_array_content_with_image_url_gets_converted(self):
+        from service.message_normalizer import convert_user_message_for_claude
+
+        msg = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "描述"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc123"}},
+            ],
+        }
+        result = convert_user_message_for_claude(msg)
+        assert result["content"][1]["type"] == "image"
+        assert result["content"][1]["source"]["type"] == "base64"
+        assert result["content"][1]["source"]["media_type"] == "image/png"
+        assert result["content"][1]["source"]["data"] == "abc123"
+
+
+class TestConvertDialogForClaude:
+    """Claude 对话数组转换测试。"""
+
+    def test_converts_user_messages_only(self):
+        from service.message_normalizer import convert_dialog_for_claude
+
+        dialogvo = [
+            {"role": "system", "content": "you are helpful"},
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+
+        with patch("service.message_normalizer.convert_user_message_for_claude") as mock_convert:
+            mock_convert.side_effect = lambda msg, **kw: (
+                {"role": msg["role"], "content": [{"type": "text", "text": "converted"}]}
+                if msg["role"] == "user"
+                else msg
+            )
+            result = convert_dialog_for_claude(dialogvo)
+
+        assert result[0] == {"role": "system", "content": "you are helpful"}
+        assert result[2] == {"role": "assistant", "content": "hi"}
+        assert isinstance(result[1]["content"], list)
+
+    def test_empty_dialog(self):
+        from service.message_normalizer import convert_dialog_for_claude
+
+        assert convert_dialog_for_claude([]) == []
+
+
+class TestExtractSystemFromDialog:
+    """system 消息提取测试。"""
+
+    def test_single_system_message(self):
+        from service.message_normalizer import extract_system_from_dialog
+
+        dialogvo = [
+            {"role": "system", "content": "you are helpful"},
+            {"role": "user", "content": "hello"},
+        ]
+        cleaned, system_prompt = extract_system_from_dialog(dialogvo)
+
+        assert system_prompt == "you are helpful"
+        assert len(cleaned) == 1
+        assert cleaned[0]["role"] == "user"
+
+    def test_multiple_system_messages_concatenated(self):
+        from service.message_normalizer import extract_system_from_dialog
+
+        dialogvo = [
+            {"role": "system", "content": "rule 1"},
+            {"role": "system", "content": "rule 2"},
+            {"role": "user", "content": "hello"},
+        ]
+        cleaned, system_prompt = extract_system_from_dialog(dialogvo)
+
+        assert system_prompt == "rule 1\n\nrule 2"
+        assert len(cleaned) == 1
+
+    def test_no_system_message(self):
+        from service.message_normalizer import extract_system_from_dialog
+
+        dialogvo = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ]
+        cleaned, system_prompt = extract_system_from_dialog(dialogvo)
+
+        assert system_prompt is None
+        assert len(cleaned) == 2
+
+    def test_empty_system_content(self):
+        from service.message_normalizer import extract_system_from_dialog
+
+        dialogvo = [
+            {"role": "system", "content": ""},
+            {"role": "user", "content": "hello"},
+        ]
+        cleaned, system_prompt = extract_system_from_dialog(dialogvo)
+
+        assert system_prompt is None
+        assert len(cleaned) == 1

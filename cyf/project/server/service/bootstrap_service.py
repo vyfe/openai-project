@@ -62,6 +62,7 @@ def bootstrap_runtime(logger):
     initialize_database()
     ensure_quant_runtime_dirs()
     runtime_state.build_clients()
+    runtime_state.build_claude_clients()
     start_blacklist_cleanup_thread()
     start_model_meta_scheduler(logger)
     _start_feishu_ws_async(logger)

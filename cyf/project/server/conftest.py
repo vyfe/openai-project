@@ -77,6 +77,10 @@ def test_settings(tmp_db_dir):
         quant_feishu_verification_token="",
         quant_feishu_encrypt_key="",
         quant_feishu_debug_suffix="",
+        # Claude SDK 配置（可选覆盖，为空则复用 [api] 段配置）
+        claude_api_key="",
+        claude_api_hosts=[],
+        claude_api_version="",
     )
 
 

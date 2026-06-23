@@ -8,7 +8,7 @@ from model.repositories.log_repository import set_dialog, set_log
 from service.chat_service import check_test_user_limit, convert_dialog_for_model, is_valid_model, prepare_dialog
 from service.common_service import generate_sse_error, handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
-from service.host_service import get_client_for_user
+from service.host_service import get_client_for_user, is_claude_model, get_claude_client_for_user
 from service.message_normalizer import build_parts_from_message, ensure_message_parts
 
 
@@ -75,38 +75,71 @@ def stream_chat(user: str, payload, logger):
     def generate():
         full_content = ""
         was_cancelled = False
+        url_index = None
         try:
             if is_stream_cancelled(request_id):
                 return
-            api_params = {
-                "model": model,
-                "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
-                "max_tokens": payload.max_response_tokens or 102400,
-                "stream": True,
-                "timeout": 300,
-            }
-            client, url_index = get_client_for_user(user)
-            stream = client.chat.completions.create(**api_params)
-            set_stream_object(request_id, stream)
-            finish_reason = None
-            for chunk in stream:
-                if is_stream_cancelled(request_id):
-                    was_cancelled = True
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
-                    break
-                if chunk.choices:
-                    delta = chunk.choices[0].delta
-                    if delta.content:
-                        content_piece = delta.content
+
+            # === Claude 流式分支 ===
+            if is_claude_model(model):
+                from service.claude_service import stream_claude_chat
+
+                claude_client, url_index = get_claude_client_for_user(user)
+                stream_gen = stream_claude_chat(
+                    client=claude_client,
+                    model=model,
+                    dialogvo=dialogvo,
+                    max_tokens=payload.max_response_tokens or 102400,
+                    logger=logger,
+                )
+                finish_reason = None
+                for event in stream_gen:
+                    if is_stream_cancelled(request_id):
+                        was_cancelled = True
+                        break
+                    event_type = event[0]
+                    if event_type == "text_delta":
+                        content_piece = event[1]
                         full_content += content_piece
                         yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False})}\n\n"
-                    if chunk.choices[0].finish_reason:
-                        finish_reason = chunk.choices[0].finish_reason
-            if was_cancelled:
-                return
+                    elif event_type == "done":
+                        _, content, finish_reason = event
+                if was_cancelled:
+                    return
+
+            else:
+                # === 原有 OpenAI 流式分支 ===
+                api_params = {
+                    "model": model,
+                    "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
+                    "max_tokens": payload.max_response_tokens or 102400,
+                    "stream": True,
+                    "timeout": 300,
+                }
+                client, url_index = get_client_for_user(user)
+                stream = client.chat.completions.create(**api_params)
+                set_stream_object(request_id, stream)
+                finish_reason = None
+                for chunk in stream:
+                    if is_stream_cancelled(request_id):
+                        was_cancelled = True
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+                        break
+                    if chunk.choices:
+                        delta = chunk.choices[0].delta
+                        if delta.content:
+                            content_piece = delta.content
+                            full_content += content_piece
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False})}\n\n"
+                        if chunk.choices[0].finish_reason:
+                            finish_reason = chunk.choices[0].finish_reason
+                if was_cancelled:
+                    return
+
+            # === 公共完成处理 ===
             tokens_used = len(full_content.encode("utf-8")) // 4
             set_log(user, tokens_used, model, json.dumps({"content": full_content}))
             request_messages = stamp_latest_user_message(dialogvo)

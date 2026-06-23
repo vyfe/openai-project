@@ -1,5 +1,5 @@
 [common]
-upload_dir=
+upload_dir=/home/www/downloads
 # 用户配置支持两种格式：
 # 1. 旧格式（一行）：users=admin:admin123:key,user1:password1
 # 2. 新格式（多行，YAML风格）：
@@ -13,9 +13,11 @@ users=
   user2:password234:optional_api_key
 test_user=test_user
 test_ip_default_limit=20
-test_exceed_msg=异常123
+test_exceed_msg=当前ip试用次数已满，请联系vx:pata_data_studio获取正式账号！
+# HTTP Host 头，用于反代场景（可选）
+host=
 [log]
-sqlite3_file=
+sqlite3_file=./logs.db
 [runtime_log]
 # 运行日志根目录。LLM / Quant / Ops / Platform 会在此目录下分流。
 root_dir=
@@ -32,11 +34,11 @@ compress_backups=true
 enable_sql_execute=
 [quant]
 # 独立量化数据库。不要和 log.sqlite3_file 共用，避免被日志清理策略误伤。
-sqlite3_file=
+sqlite3_file=./quant.db
 # 量化 bundle 运行目录。当前主要用于预留运行时目录，建议给独立路径。
-bundle_dir=
+bundle_dir=./quant_bundles
 # 股票记忆 Markdown 存储目录。
-memory_dir=
+memory_dir=./quant_memory
 # 调度执行日志目录。留空时默认使用 <runtime_log.root_dir>/quant/runs。
 schedule_log_dir=
 # 调度执行日志保留天数。过期文件会被清理。

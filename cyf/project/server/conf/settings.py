@@ -46,6 +46,10 @@ class Settings:
     quant_feishu_verification_token: str
     quant_feishu_encrypt_key: str
     quant_feishu_debug_suffix: str
+    # Claude SDK 配置（可选，为空则复用 [api] 段配置）
+    claude_api_key: str
+    claude_api_hosts: list[str]
+    claude_api_version: str
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -110,6 +114,10 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         quant_feishu_verification_token=_get_str(conf, "quant", "feishu_verification_token", fallback=""),
         quant_feishu_encrypt_key=_get_str(conf, "quant", "feishu_encrypt_key", fallback=""),
         quant_feishu_debug_suffix=_get_str(conf, "quant", "feishu_debug_suffix", fallback=""),
+        # Claude SDK 配置（可选，为空则复用 [api] 段配置）
+        claude_api_key=_get_str(conf, "claude", "api_key", fallback=""),
+        claude_api_hosts=[h.strip() for h in conf.get("claude", "api_host", fallback="").split(",") if h.strip()],
+        claude_api_version=_get_str(conf, "claude", "api_version", fallback=""),
     )
 
 

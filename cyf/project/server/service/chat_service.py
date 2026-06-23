@@ -9,9 +9,10 @@ from model.repositories.model_meta_repository import get_system_prompt_by_id
 from model.repositories.user_repository import check_test_limit_exceeded, get_user_api_key, increment_test_limit
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
-from service.host_service import get_client_for_user
+from service.host_service import get_client_for_user, is_claude_model
 from service.message_normalizer import (
     build_parts_from_message,
+    convert_dialog_for_claude,
     convert_dialog_for_multimodal,
     ensure_message_parts,
     is_multimodal_model,
@@ -45,10 +46,13 @@ def convert_message_for_gemini(message: dict) -> dict:
 def convert_dialog_for_model(dialogvo: list, model: str, logger=None) -> list:
     """根据模型类型转换对话格式。
 
+    - Claude 模型（model_grp=claude）：转换为 Claude 多模态格式
     - Gemini 模型：转换为 {type: "file_url"} 格式
     - 多模态模型（model_type=3）：将 [FILE_URL:...] 转为 base64 image_url 内容块
     - 其他模型：保持原样
     """
+    if is_claude_model(model):
+        return convert_dialog_for_claude(dialogvo, logger=logger)
     if is_gemini_model(model):
         return [convert_message_for_gemini(msg) for msg in dialogvo]
     if is_multimodal_model(model):
@@ -118,6 +122,53 @@ def run_chat_completion(user: str, payload, logger):
     dialogvo, title = prepare_dialog(dialogs, payload.dialog_mode, payload.dialog_title, payload.system_prompt_id, logger)
     if dialogvo is None:
         return {"msg": title}, 200
+
+    # === Claude 分支 ===
+    if is_claude_model(model):
+        try:
+            from service.host_service import get_claude_client_for_user
+            from service.claude_service import run_claude_chat_completion
+
+            client, url_index = get_claude_client_for_user(user)
+            result_data = run_claude_chat_completion(
+                client=client,
+                model=model,
+                dialogvo=dialogvo,
+                max_tokens=payload.max_response_tokens or 102400,
+                logger=logger,
+            )
+            tokens = result_data.get("usage", {}).get("total_tokens", 0)
+            set_log(user, tokens, model, json.dumps(result_data.get("raw_response", {})))
+
+            request_messages = stamp_latest_user_message(dialogvo)
+            assistant_time = current_time_str()
+            assistant_message = {
+                "role": "assistant",
+                "content": result_data["content"],
+                "time": assistant_time,
+            }
+            assistant_message = ensure_message_parts(assistant_message)
+            dialog_id = set_dialog(
+                user,
+                model,
+                "chat",
+                title,
+                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+            )
+            response_data = {
+                "role": "assistant",
+                "content": result_data["content"],
+                "parts": result_data.get("parts", build_parts_from_message({"content": result_data["content"]})),
+                "finish_reason": result_data.get("finish_reason", "end_turn"),
+                "time": assistant_time,
+            }
+            if dialog_id:
+                response_data["dialog_id"] = dialog_id
+            return response_data, 200
+        except Exception as api_exc:
+            return handle_api_exception(api_exc, logger, user=user, model=model, dialog_content=dialogs, url_index=0), 200
+
+    # === 原有 OpenAI 分支 ===
     api_params = {
         "model": model,
         "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
