@@ -9,7 +9,7 @@ from model.repositories.model_meta_repository import get_system_prompt_by_id
 from model.repositories.user_repository import check_test_limit_exceeded, get_user_api_key, increment_test_limit
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
-from service.host_service import get_client_for_user, is_claude_model
+from service.host_service import get_client_for_user, get_claude_client_for_user, is_claude_model
 from service.message_normalizer import (
     build_parts_from_message,
     convert_dialog_for_claude,
@@ -18,6 +18,7 @@ from service.message_normalizer import (
     is_multimodal_model,
     strip_file_url_markers,
 )
+from service.claude_service import run_claude_chat_completion
 from service.model_service import is_valid_model
 
 
@@ -126,9 +127,6 @@ def run_chat_completion(user: str, payload, logger):
     # === Claude 分支 ===
     if is_claude_model(model):
         try:
-            from service.host_service import get_claude_client_for_user
-            from service.claude_service import run_claude_chat_completion
-
             client, url_index = get_claude_client_for_user(user)
             result_data = run_claude_chat_completion(
                 client=client,

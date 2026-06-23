@@ -3,6 +3,7 @@ Flask-Cors
 Flask-sock==0.7.0
 requests
 openai
+anthropic
 peewee
 pandas
 akshare

@@ -8,7 +8,8 @@ from model.repositories.log_repository import set_dialog, set_log
 from service.chat_service import check_test_user_limit, convert_dialog_for_model, is_valid_model, prepare_dialog
 from service.common_service import generate_sse_error, handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
-from service.host_service import get_client_for_user, is_claude_model, get_claude_client_for_user
+from service.host_service import get_client_for_user, get_claude_client_for_user, is_claude_model
+from service.claude_service import stream_claude_chat
 from service.message_normalizer import build_parts_from_message, ensure_message_parts
 
 
@@ -82,8 +83,6 @@ def stream_chat(user: str, payload, logger):
 
             # === Claude 流式分支 ===
             if is_claude_model(model):
-                from service.claude_service import stream_claude_chat
-
                 claude_client, url_index = get_claude_client_for_user(user)
                 stream_gen = stream_claude_chat(
                     client=claude_client,
