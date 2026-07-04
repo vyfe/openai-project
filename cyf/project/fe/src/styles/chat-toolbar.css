@@ -1,0 +1,356 @@
+/* =========================
+   ChatToolbar — toolbar layout & component styles
+   (extracted from chat-content.css + font-size-control.css)
+   ========================= */
+
+/* Toolbar base */
+.chat-toolbar {
+  padding: 10px 12px;
+  background: var(--overlay-1);
+  border-bottom: 1px solid var(--line-1);
+}
+
+.toolbar-desktop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.toolbar-mobile {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mobile-toolbar-btn {
+  width: 44px;
+  height: 44px;
+}
+
+/* Dialog title editor */
+.dialog-title-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.dialog-title-editor .el-input {
+  flex: 1;
+}
+
+.dialog-title-editor .update-title-btn {
+  height: 22px;
+  padding: 6px 6px;
+  font-size: 14px;
+  min-width: 80px;
+  align-self: center;
+}
+
+.update-title-btn-mobile {
+  height: 40px;
+  padding: 10px 16px;
+  font-size: 16px;
+  margin-top: 8px;
+}
+
+/* Font size controls */
+.font-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.font-size-label {
+  white-space: nowrap;
+  font-size: 14px;
+  color: #606266;
+  transition: color 0.3s ease;
+}
+
+.font-size-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: #f4f4f5;
+  border-radius: 25px;
+  padding: 2px;
+  border: 1px solid #dcdfe6;
+  transition: all 0.3s ease;
+  margin-left: 20px;
+}
+
+.font-size-selector:hover {
+  border-color: #c0c4cc;
+  box-shadow: 0 0 0 2px rgba(144, 147, 164, 0.1);
+}
+
+.font-size-slider-bg {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  height: calc(100% - 4px);
+  width: calc(33.333% - 2px);
+  background: #c97a2b;
+  border-radius: 25px;
+  transition: all 0.4s cubic-bezier(0.65, 0, 0.35, 1);
+  z-index: 0;
+  box-shadow: 0 2px 4px rgba(201, 122, 43, 0.2);
+}
+
+.font-size-options {
+  position: relative;
+  display: flex;
+  gap: 0;
+  z-index: 1;
+}
+
+.font-size-option {
+  position: relative;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #909399;
+  cursor: pointer;
+  border-radius: 25px;
+  transition: all 0.3s ease;
+  z-index: 2;
+  min-width: 40px;
+  text-align: center;
+}
+
+.font-size-option:hover {
+  color: #606266;
+  background-color: transparent;
+}
+
+.font-size-option.active {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.font-size-controls[data-value="small"] .font-size-slider-bg { transform: translateX(0); }
+.font-size-controls[data-value="medium"] .font-size-slider-bg { transform: translateX(100%); }
+.font-size-controls[data-value="large"] .font-size-slider-bg { transform: translateX(200%); }
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-buttons .el-button {
+  transition: all 0.3s cubic-bezier(0.65, 0, 0.35, 1);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.action-buttons .el-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.8s;
+  z-index: -1;
+}
+
+.action-buttons .el-button:hover::before { left: 100%; }
+.action-buttons .el-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+.action-buttons .el-button:active { transform: translateY(0); }
+
+.action-buttons .el-button .el-icon { transition: transform 0.3s ease; }
+.action-buttons .el-button:hover .el-icon { transform: scale(1.1); }
+
+/* Export hint */
+.export-hint {
+  font-size: 12px;
+  color: rgba(120, 120, 120, 0.9);
+  line-height: 1.4;
+  max-width: 360px;
+}
+
+.export-hint-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  color: #d89a60;
+}
+
+.export-hint-btn:hover {
+  background: rgba(216, 154, 96, 0.12);
+}
+
+/* Context window card */
+.context-window-card {
+  min-width: 132px;
+  height: 32px;
+  border-radius: 8px !important;
+  padding: 0 10px !important;
+  border-color: var(--line-1) !important;
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+}
+
+.context-window-card > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-window-card__label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.context-window-card__value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.context-window-card--hot {
+  border-color: rgba(220, 38, 38, 0.55) !important;
+  background: rgba(254, 226, 226, 0.92) !important;
+  color: #991b1b !important;
+}
+
+.context-window-card--hot .context-window-card__label,
+.context-window-card--hot .context-window-card__value { color: #991b1b; }
+
+.context-window-card--drawer {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+/* Mobile drawer */
+.mobile-toolbar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.mobile-form-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #c97a2b;
+}
+
+.drawer-button {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.drawer-button:last-child { margin-bottom: 0; }
+
+/* Dark theme overrides */
+body.dark-theme .chat-toolbar {
+  border-bottom-color: var(--line-1);
+  background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+  color: var(--text-1);
+}
+
+body.dark-theme .font-size-label { color: #c6cbd3; }
+body.dark-theme .font-size-selector { background: #2d2d2d; border-color: #555; }
+body.dark-theme .font-size-option { color: #a0a0a0; }
+body.dark-theme .font-size-option:hover { color: #c0c0c0; }
+body.dark-theme .font-size-option.active { color: #ffffff; }
+body.dark-theme .font-size-slider-bg { background: #aa6624; box-shadow: 0 2px 4px rgba(170, 102, 36, 0.2); }
+body.dark-theme .font-size-selector:hover { border-color: #787878; box-shadow: 0 0 0 2px rgba(120, 120, 120, 0.1); }
+
+body.dark-theme .export-hint { color: rgba(200, 200, 200, 0.75); }
+body.dark-theme .export-hint-btn { color: rgba(220, 230, 255, 0.85); }
+body.dark-theme .export-hint-btn:hover { background: rgba(220, 230, 255, 0.12); }
+
+body.dark-theme .context-window-card--hot {
+  border-color: rgba(248, 113, 113, 0.6) !important;
+  background: rgba(127, 29, 29, 0.45) !important;
+  color: #fca5a5 !important;
+}
+body.dark-theme .context-window-card--hot .context-window-card__label,
+body.dark-theme .context-window-card--hot .context-window-card__value { color: #fca5a5; }
+
+body.dark-theme .dialog-title-editor .el-input__wrapper {
+  background: color-mix(in srgb, var(--bg-2) 80%, transparent) !important;
+  border-color: var(--line-1) !important;
+  color: var(--text-1);
+  box-shadow: none !important;
+}
+
+body.dark-theme .dialog-title-editor .el-input__inner {
+  color: var(--text-1) !important;
+}
+
+body.dark-theme .dialog-title-editor .el-input__inner::placeholder {
+  color: var(--text-2);
+}
+
+body.dark-theme .mobile-form-label { color: var(--text-1); }
+body.dark-theme .mobile-toolbar-content {
+  background-color: var(--bg-2);
+  color: var(--text-1);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .toolbar-desktop { display: none; }
+  .toolbar-mobile { display: flex; }
+
+  .dialog-title-editor {
+    width: 100%;
+    margin-right: 0;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: auto;
+  }
+
+  .dialog-title-editor .el-input { margin-bottom: 8px; }
+
+  .font-size-controls {
+    width: 100%;
+    margin-right: 0;
+    flex-wrap: wrap;
+    flex-direction: row;
+    justify-content: start;
+  }
+
+  .font-size-label { font-size: 13px; margin-bottom: 8px; }
+  .font-size-option { padding: 5px 10px; min-width: 36px; font-size: 12px; }
+
+  .action-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-buttons .el-button {
+    width: 100%;
+    margin: 2px 0;
+  }
+
+  .toggle-input-btn {
+    bottom: 30%;
+    right: 40px;
+  }
+}
+
+/* Dark mobile overrides */
+@media (max-width: 768px) {
+  body.dark-theme .toolbar-mobile {
+    background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+  }
+}
