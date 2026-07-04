@@ -156,6 +156,14 @@ export const chatAPI = {
     })
   },
 
+  handoff: (dialogId: number, model?: string) => {
+    const data: any = {
+      dialog_id: dialogId
+    }
+    if (model) data.model = model
+    return api.post('/never_guess_my_usage/handoff', data)
+  },
+
   sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number, roleSetting?: any) => {
     const data: any = {
       model,

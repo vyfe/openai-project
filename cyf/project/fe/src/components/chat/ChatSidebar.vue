@@ -140,7 +140,7 @@
             <span>{{ t('chat.carryHistory') }}</span>
             <el-tag size="small" type="info">{{ formData.contextCount }} {{ t('chat.units') }}</el-tag>
           </div>
-          <el-slider v-model="formData.contextCount" :min="0" :max="50" :step="1" :marks="{ 0: '0', 25: '25', 50: '50' }" />
+          <el-slider v-model="formData.contextCount" :min="0" :max="200" :step="1" :marks="{ 0: '0', 50: '50', 100: '100', 200: '200' }" />
           <div class="context-hint">{{ t('chat.setZeroToSendCurrentOnly') }}</div>
         </div>
 

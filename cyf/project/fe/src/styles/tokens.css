@@ -75,3 +75,16 @@
   --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
   --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
 }
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-mid: 0ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

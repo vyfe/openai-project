@@ -13,13 +13,14 @@ from conf.runtime import runtime_state
 from dto.auth_dto import LoginRequest, RefreshTokenRequest, RegisterRequest, ResetPasswordRequest
 from dto.chat_dto import ChatRequest, ImageChatRequest, StreamCancelRequest, StreamChatRequest
 from dto.common import get_request_data
-from dto.dialog_dto import DialogContentRequest, DialogDeleteRequest, DialogTitleUpdateRequest
+from dto.dialog_dto import DialogContentRequest, DialogDeleteRequest, DialogTitleUpdateRequest, HandoffRequest
 from model.repositories.user_repository import create_user, get_user_browser_conf, get_user_by_username, set_user_browser_conf
 from service.auth_service import issue_auth_tokens, refresh_access_token, require_auth, revoke_user_tokens, verify_credentials
 from service.chat_service import run_chat_completion
 from service.common_service import generate_sse_error
 from service.dialog_service import delete_user_dialogs, get_dialog_content, get_recent_dialogs, rename_dialog
 from service.image_service import generate_or_edit_image
+from service.handoff_service import create_handoff_dialog
 from service.model_service import get_cached_models, get_grouped_models
 from service.notification_service import fetch_notification_count, fetch_notifications
 from service.stream_service import cancel_stream_request, stream_chat
@@ -172,6 +173,17 @@ def dialog_stream_cancel(user, password):
 def dialog_pic(user, password):
     payload = ImageChatRequest.from_data(get_request_data(as_text=True))
     return generate_or_edit_image(user, payload, llm_logger)
+
+
+@public_bp.route("/handoff", methods=["POST"])
+@require_auth
+def dialog_handoff(user, password):
+    try:
+        payload = HandoffRequest.from_data(get_request_data(as_text=True))
+        return create_handoff_dialog(user, payload.dialog_id, payload.model, llm_logger)
+    except Exception as exc:
+        llm_logger.error("handoff 上下文压缩失败: %s", exc)
+        return {"success": False, "msg": f"handoff 上下文压缩失败: {exc}"}, 200
 
 
 @public_bp.route("/split_his", methods=["POST"])

@@ -274,32 +274,27 @@ body.dark-theme .chat-sidebar.sidebar-mobile {
 
 /* 暗色主题 */
 .dark-theme .sidebar-nav {
-  background: var(--bg-2);
+  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
 }
 
 .dark-theme .sidebar-nav-btn {
-  color: #9ca3af;
+  color: var(--text-2);
 }
 
 .dark-theme .sidebar-nav-btn:hover {
-  background: rgba(55, 65, 81, 0.5);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--bg-1) 70%, transparent);
+  transform: none;
 }
 
 .dark-theme .sidebar-nav-btn.active {
-  background: var(--line-1);
-  color: #d89a60;
+  background: color-mix(in srgb, var(--bg-2) 70%, var(--accent-1-soft) 30%);
+  color: var(--text-1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 28%, transparent);
 }
 
-/* 暗色主题下的底部指示条 */
 .dark-theme .sidebar-nav-btn::after {
-  background: linear-gradient(90deg, #d89a60, #ebc7a9);
-}
-
-.dark-theme .sidebar-nav-btn.active::after {
-  width: 100%;
-  opacity: 1;
-  left: 0;
+  display: none;
 }
 
 /* 移动端适配 */
@@ -677,18 +672,21 @@ body.dark-theme .import-export-hint {
 
 .sidebar-nav {
   margin-top: 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--line-1);
-  border-radius: var(--r-sm);
-  padding: 3px;
+  background: color-mix(in srgb, var(--bg-1) 62%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--line-1) 45%, transparent);
+  border-radius: 12px;
+  padding: 4px;
 }
 
 .sidebar-nav-btn {
   color: var(--text-2);
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
   box-shadow: none;
   transform: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-nav-btn::after {
@@ -697,14 +695,19 @@ body.dark-theme .import-export-hint {
 
 .sidebar-nav-btn:hover {
   color: var(--text-1);
-  background: var(--bg-1);
+  background: color-mix(in srgb, var(--bg-1) 78%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   transform: none;
 }
 
 .sidebar-nav-btn.active {
   color: var(--text-1);
-  background: var(--bg-1);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--accent-1-soft) 45%, var(--bg-1) 55%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 4px rgba(201, 122, 43, 0.12), inset 0 1px 0 rgba(255,255,255,0.4);
+  border: 1px solid color-mix(in srgb, var(--accent-1) 22%, transparent);
 }
 
 .dialog-list {
@@ -785,13 +788,17 @@ body.dark-theme .import-export-hint {
 }
 
 body.dark-theme .chat-sidebar,
-body.dark-theme .sidebar-nav,
 body.dark-theme .sidebar-section-card,
 body.dark-theme .dialog-list,
 body.dark-theme .role-tabs,
 body.dark-theme .enhanced-role-section,
 body.dark-theme .model-description {
   border-color: var(--line-1) !important;
+}
+
+body.dark-theme .sidebar-nav {
+  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+  border-color: color-mix(in srgb, var(--line-1) 40%, transparent);
 }
 
 body.dark-theme .sidebar-nav-btn,
@@ -806,4 +813,412 @@ body.dark-theme .role-tab.active,
 body.dark-theme .enhanced-role-group-btn.active {
   color: var(--text-1) !important;
   background: color-mix(in srgb, var(--bg-2) 70%, var(--accent-1-soft) 30%) !important;
+}
+
+body.dark-theme .sidebar-nav-btn.active {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+  border-color: color-mix(in srgb, var(--accent-1) 28%, transparent);
+}
+
+/* =========================
+   Migrated from chat-shell.css — unique rules not covered elsewhere
+   ========================= */
+
+/* Sidebar close button */
+.sidebar-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1001;
+}
+
+/* Dialog item detail styles */
+.dialog-item {
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent-1-soft) 48%, var(--bg-1) 52%);
+  border: 1px solid var(--line-1);
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  position: relative;
+}
+
+.dialog-item:hover {
+  background: color-mix(in srgb, var(--accent-1-soft) 58%, var(--bg-1) 42%);
+}
+
+.dialog-item:last-child {
+  margin-bottom: 0;
+}
+
+.dialog-item.selected {
+  background: color-mix(in srgb, var(--accent-1-soft) 72%, var(--bg-1) 28%);
+  outline: 2px solid color-mix(in srgb, var(--accent-1) 58%, transparent);
+  border-color: var(--accent-1);
+}
+
+.dialog-title {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--accent-1);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dialog-checkbox {
+  margin-right: 8px;
+}
+
+.delete-btn {
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0.2s, opacity 0.2s;
+}
+
+.dialog-item:hover .delete-btn {
+  visibility: visible;
+  opacity: 1;
+}
+
+.dialog-content {
+  flex: 1;
+  width: 100%;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dialog-date {
+  flex: 0 0 auto;
+  max-width: 50%;
+  font-size: 12px;
+  color: #d89a60;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.no-dialogs {
+  padding: 10px;
+  color: #d89a60;
+  font-style: italic;
+  text-align: center;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.edit-mode-actions {
+  display: flex;
+}
+
+/* Enhanced role system */
+.enhanced-role-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(201, 122, 43, 0.3);
+}
+
+.enhanced-role-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.enhanced-role-interface {
+  margin-top: 12px;
+}
+
+.enhanced-role-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.enhanced-role-group-btn {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #c5d6ea;
+  background: #f5f8fc;
+  color: #4d5a69;
+  font-size: 13px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.enhanced-role-group-btn:hover {
+  border-color: #8bb5e8;
+  background: #eef5fe;
+}
+
+.enhanced-role-group-btn.active {
+  border-color: #c97a2b;
+  background: #eaf3ff;
+  color: #1f73c9;
+  font-weight: 600;
+}
+
+.enhanced-role-list {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-1) 36%, var(--line-1) 64%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-1-soft) 52%, var(--bg-1) 48%);
+  -webkit-overflow-scrolling: touch;
+}
+
+.enhanced-role-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--accent-1-soft) 40%, var(--bg-1) 60%);
+  border-radius: 3px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-thumb {
+  background: rgba(201, 122, 43, 0.45);
+  border-radius: 3px;
+}
+
+.enhanced-role-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 122, 43, 0.62);
+}
+
+.enhanced-role-item {
+  margin-bottom: 8px;
+}
+
+.enhanced-role-item:last-child {
+  margin-bottom: 0;
+}
+
+.enhanced-role-radio {
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.role-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  flex: 1;
+}
+
+.role-name {
+  font-weight: 500;
+  color: #303133;
+  margin: 0;
+  padding: 0;
+}
+
+.role-desc {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.4;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  word-break: break-word;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  hyphens: auto;
+}
+
+/* System prompt textarea custom styles */
+.system-prompt-section {
+  margin-top: 20px;
+}
+
+.system-prompt-section h3 {
+  color: #c97a2b;
+  font-size: 16px;
+  margin-bottom: 12px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner) {
+  background: rgba(232, 240, 255, 0.3);
+  border: 1px solid #c0d8e8;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow-y: auto;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar) {
+  width: 6px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-track) {
+  background: color-mix(in srgb, var(--accent-1-soft) 38%, var(--bg-1) 62%);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-thumb) {
+  background: rgba(201, 122, 43, 0.5);
+  border-radius: 3px;
+}
+
+.system-prompt-section :deep(.el-textarea__inner::-webkit-scrollbar-thumb:hover) {
+  background: rgba(201, 122, 43, 0.7);
+}
+
+.system-prompt-section :deep(.el-textarea__inner:focus) {
+  border-color: #9dbda0;
+  box-shadow: 0 0 0 2px rgba(144, 180, 248, 0.2);
+}
+
+/* Send preference section */
+.send-preference-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(144, 180, 248, 0.3);
+}
+
+.send-preference-wrapper {
+  padding: 12px 0;
+}
+
+.send-preference-hint {
+  font-size: 12px;
+  color: #d89a60;
+  margin-top: 8px;
+}
+
+/* Settings section */
+.settings-section h3 {
+  color: #c97a2b;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+/* Dark theme overrides for migrated rules */
+body.dark-theme .enhanced-role-section {
+  border-top: 1px dashed color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .enhanced-role-list {
+  border: 1px solid #c97a2b;
+  background: rgba(50, 50, 50, 0.3);
+  color: var(--text-1);
+}
+
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-track {
+  background: rgba(50, 50, 50, 0.3);
+}
+
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-thumb {
+  background: rgba(201, 122, 43, 0.5);
+}
+
+body.dark-theme .enhanced-role-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 122, 43, 0.7);
+}
+
+body.dark-theme .enhanced-role-radio {
+  background: rgba(50, 50, 50, 0.3);
+  border: 1px solid #4c4d4f;
+  color: var(--text-1);
+  min-height: 64px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+body.dark-theme .role-name {
+  color: var(--text-1);
+}
+
+body.dark-theme .role-desc {
+  color: var(--text-2);
+  word-break: break-word;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  hyphens: auto;
+}
+
+body.dark-theme .enhanced-role-group-btn {
+  border-color: var(--line-1);
+  background: color-mix(in srgb, var(--bg-1) 80%, var(--accent-2-soft) 20%);
+  color: var(--text-1);
+}
+
+body.dark-theme .enhanced-role-group-btn:hover {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--bg-1) 70%, var(--accent-2-soft) 30%);
+}
+
+body.dark-theme .enhanced-role-group-btn.active {
+  border-color: var(--accent-1);
+  background: color-mix(in srgb, var(--bg-1) 65%, var(--accent-1-soft) 35%);
+  color: var(--text-1);
+}
+
+body.dark-theme .no-dialogs {
+  color: var(--text-2);
+}
+
+body.dark-theme .dialog-date {
+  color: var(--text-2);
+}
+
+body.dark-theme .send-preference-section {
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .send-preference-hint,
+body.dark-theme .system-prompt-hint {
+  color: var(--text-2);
+}
+
+body.dark-theme .system-prompt-section {
+  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
+}
+
+body.dark-theme .system-prompt-section h3 {
+  color: var(--text-1);
+}
+
+body.dark-theme .system-prompt-section :deep(.el-textarea__inner) {
+  background: color-mix(in srgb, var(--bg-2) 66%, transparent);
+  border: 1px solid var(--line-1);
+  color: var(--text-1);
+  padding: 12px;
 }

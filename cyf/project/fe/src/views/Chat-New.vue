@@ -139,6 +139,7 @@
           @loading-change="handleTabLoadingChange"
           @session-dialog-created="handleSessionDialogCreated"
           @role-setting-loaded="handleRoleSettingLoaded"
+          @handoff-created="handleHandoffCreated"
           v-model="formData"
         />
       </div>
@@ -248,6 +249,7 @@ type ChatTab = {
   activeEnhancedGroup: string
   selectedEnhancedRole: string
   activeRoleId: string
+  contextTotalTokens: number
 }
 
 // 组件间共享状态
@@ -274,6 +276,7 @@ const formData = reactive({
   dialogHistory: [] as any[],
   loadingHistory: false,
   isLoading: false,
+  contextTotalTokens: 0,
   fontSize: localStorage.getItem('fontSize') || 'medium', // 字体大小控制
   // 添加状态跟踪用户是否手动滚动离开了底部
   isScrolledToBottom: true,
@@ -352,6 +355,7 @@ const chatTabs = ref<ChatTab[]>([{
   unread: false,
   ...getModelStateByModelName(formData.selectedModel || ''),
   ...getRoleStateFromForm(),
+  contextTotalTokens: 0,
 }])
 const activeTabKey = ref(chatTabs.value[0].key)
 
@@ -443,6 +447,7 @@ const syncFormDataFromActiveTab = () => {
   formData.activeEnhancedGroup = tab.activeEnhancedGroup
   formData.selectedEnhancedRole = tab.selectedEnhancedRole
   formData.activeRoleId = tab.activeRoleId
+  formData.contextTotalTokens = Number(tab.contextTotalTokens || 0)
 }
 
 const createChatTab = (dialogId: number | null = null, title: string = '', modelName?: string) => {
@@ -455,6 +460,7 @@ const createChatTab = (dialogId: number | null = null, title: string = '', model
     unread: false,
     ...modelState,
     ...getRoleStateFromForm(),
+    contextTotalTokens: 0,
   }
   chatTabs.value.push(tab)
   activeTabKey.value = tab.key
@@ -514,6 +520,24 @@ const handleRoleSettingLoaded = (payload: { sessionKey: string, roleSetting: any
   if (payload.sessionKey === activeTabKey.value) {
     syncFormDataFromActiveTab()
   }
+}
+
+const handleHandoffCreated = async (payload: { dialogId: number, dialogName: string, modelName: string, usage?: any }) => {
+  await loadDialogHistory()
+  const modelState = getModelStateByModelName(payload.modelName || '')
+  const tab: ChatTab = {
+    key: `tab_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    title: payload.dialogName || `对话 ${payload.dialogId}`,
+    dialogId: payload.dialogId,
+    loading: false,
+    unread: false,
+    ...modelState,
+    ...getRoleStateFromForm(),
+    contextTotalTokens: Number(payload.usage?.total_tokens || 0),
+  }
+  chatTabs.value.push(tab)
+  activeTabKey.value = tab.key
+  syncFormDataFromActiveTab()
 }
 
 const removeChatTab = (targetKey: string | number) => {
@@ -753,6 +777,7 @@ watch(() => formData.currentDialogId, (newId) => {
     activeTab.modelValue = modelState.modelValue
     activeTab.currentModelDesc = modelState.currentModelDesc
     Object.assign(activeTab, getRoleStateFromForm())
+    activeTab.contextTotalTokens = 0
     syncFormDataFromActiveTab()
     return
   }
@@ -792,6 +817,12 @@ watch(() => formData.dialogTitle, (newTitle) => {
   const tab = getActiveTab()
   if (!tab) return
   tab.title = (newTitle || '').trim()
+})
+
+watch(() => formData.contextTotalTokens, (newTotal) => {
+  const tab = getActiveTab()
+  if (!tab) return
+  tab.contextTotalTokens = Number(newTotal || 0)
 })
 </script>
 

@@ -10,3 +10,10 @@ body {
   color: var(--text-1);
   transition: background-color var(--dur-mid) var(--ease-standard), color var(--dur-mid) var(--ease-standard);
 }
+
+/* Keyboard focus visibility for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

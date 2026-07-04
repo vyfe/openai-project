@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 DialogMessage = Dict[str, Any]
 RoleSetting = Dict[str, Any]
+UsageMetadata = Dict[str, Any]
 
 
 def current_time_str() -> str:
@@ -31,20 +32,30 @@ def parse_role_setting(raw_role_setting: Any) -> Optional[RoleSetting]:
     return None
 
 
-def parse_dialog_context(raw_context: Any) -> Tuple[List[DialogMessage], Optional[RoleSetting]]:
+def parse_dialog_payload(raw_context: Any) -> Tuple[List[DialogMessage], Optional[RoleSetting], Optional[UsageMetadata]]:
     if raw_context is None or raw_context == "":
-        return [], None
+        return [], None, None
     if isinstance(raw_context, str):
         parsed = json.loads(raw_context)
     else:
         parsed = raw_context
     if isinstance(parsed, list):
-        return parsed, None
+        return parsed, None, None
     if isinstance(parsed, dict):
         context = parsed.get("context", [])
         role_setting = parsed.get("role_setting")
-        return context if isinstance(context, list) else [], role_setting if isinstance(role_setting, dict) else None
-    return [], None
+        usage = parsed.get("usage")
+        return (
+            context if isinstance(context, list) else [],
+            role_setting if isinstance(role_setting, dict) else None,
+            usage if isinstance(usage, dict) else None,
+        )
+    return [], None, None
+
+
+def parse_dialog_context(raw_context: Any) -> Tuple[List[DialogMessage], Optional[RoleSetting]]:
+    context, role_setting, _ = parse_dialog_payload(raw_context)
+    return context, role_setting
 
 
 def stamp_dialog_messages(messages: List[DialogMessage], timestamp: Optional[str] = None) -> List[DialogMessage]:
@@ -75,9 +86,11 @@ def stamp_latest_user_message(messages: List[DialogMessage], timestamp: Optional
     return next_messages
 
 
-def build_dialog_context_payload(messages: List[DialogMessage], role_setting: Any = None) -> str:
+def build_dialog_context_payload(messages: List[DialogMessage], role_setting: Any = None, usage: Any = None) -> str:
     payload = {
         "context": preserve_dialog_messages(messages),
         "role_setting": parse_role_setting(role_setting),
     }
+    if isinstance(usage, dict):
+        payload["usage"] = deepcopy(usage)
     return json.dumps(payload, ensure_ascii=False)

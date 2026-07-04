@@ -9,6 +9,7 @@ import {
 import {
   quantBacktestAPI,
   quantDataAPI,
+  quantIndustryAPI,
   quantImAPI,
   quantMemoryAPI,
   quantOperationAPI,
@@ -246,6 +247,7 @@ function createQuantWorkbench() {
   const backtestRuns = ref<BacktestRunRecord[]>([])
   const scheduleConfigs = ref<ScheduleConfigRecord[]>([])
   const scheduleRuns = ref<ScheduleRunRecord[]>([])
+  const industryBoards = ref<any[]>([])
   const promptTemplates = ref<PromptTemplateRecord[]>([])
   const reports = ref<ReportRecord[]>([])
   const memoryFiles = ref<MemoryFileRecord[]>([])
@@ -436,7 +438,10 @@ function createQuantWorkbench() {
     analysisSaveAllSignals: true,
     memorySymbols: [] as string[],
     memoryLookbackDays: 120,
-    memoryLimit: 50
+    memoryLimit: 50,
+    industryBoardIds: [] as number[],
+    industryTargets: ['market', 'announcements', 'news', 'research_reports', 'indicators'] as string[],
+    industryChannelIds: [] as number[]
   })
 
   const promptForm = reactive({
@@ -855,7 +860,10 @@ function createQuantWorkbench() {
       analysisSaveAllSignals: true,
       memorySymbols: [],
       memoryLookbackDays: 120,
-      memoryLimit: 50
+      memoryLimit: 50,
+      industryBoardIds: [],
+      industryTargets: ['market', 'announcements', 'news', 'research_reports', 'indicators'],
+      industryChannelIds: []
     })
   }
 
@@ -885,6 +893,9 @@ function createQuantWorkbench() {
     scheduleForm.memorySymbols = payload.symbols || []
     scheduleForm.memoryLookbackDays = payload.lookback_days || 120
     scheduleForm.memoryLimit = payload.limit || 50
+    scheduleForm.industryBoardIds = payload.board_ids || (payload.board_id ? [payload.board_id] : [])
+    scheduleForm.industryTargets = payload.targets || ['market', 'announcements', 'news', 'research_reports', 'indicators']
+    scheduleForm.industryChannelIds = payload.channel_ids || []
   }
 
   const buildSchedulePayload = () => {
@@ -903,6 +914,18 @@ function createQuantWorkbench() {
         symbols: scheduleForm.memorySymbols,
         lookback_days: scheduleForm.memoryLookbackDays,
         limit: scheduleForm.memoryLimit
+      }
+    }
+    if (scheduleForm.taskType === 'industry_collect') {
+      return {
+        board_ids: scheduleForm.industryBoardIds,
+        targets: scheduleForm.industryTargets
+      }
+    }
+    if (scheduleForm.taskType === 'industry_report') {
+      return {
+        board_ids: scheduleForm.industryBoardIds,
+        channel_ids: scheduleForm.industryChannelIds
       }
     }
     return {
@@ -1057,6 +1080,12 @@ function createQuantWorkbench() {
   const loadSymbols = async () => {
     const response: any = await quantDataAPI.symbols({ limit: 1200 })
     symbolOptions.value = response.data || []
+  }
+
+  const loadIndustryBoards = async () => {
+    await quantIndustryAPI.initDefaults()
+    const response: any = await quantIndustryAPI.boards({ status: 'active' })
+    industryBoards.value = response.data || []
   }
 
   const loadImportBatches = async () => {
@@ -1471,6 +1500,7 @@ function createQuantWorkbench() {
     if (scheduleForm.taskType === 'data_sync' && !scheduleForm.dataSymbols.length) return ElMessage.warning('拉数任务至少选择一个标的')
     if (scheduleForm.taskType === 'analysis_report' && !scheduleForm.analysisStrategyIds.length) return ElMessage.warning('测试报告至少选择一个策略')
     if (scheduleForm.taskType === 'memory_digest' && scheduleForm.memoryLimit < 1) return ElMessage.warning('记忆梳理的标的数量至少为 1')
+    if (['industry_collect', 'industry_report'].includes(scheduleForm.taskType) && !scheduleForm.industryBoardIds.length) return ElMessage.warning('行业任务至少选择一个板块')
     loading.savingSchedule = true
     try {
       const payload = {
@@ -1815,6 +1845,7 @@ function createQuantWorkbench() {
         loadOverview(),
         loadProviders(),
         loadSymbols(),
+        loadIndustryBoards(),
         loadImportBatches(),
         loadTasks(),
         loadStrategies(),
@@ -1865,6 +1896,7 @@ function createQuantWorkbench() {
     backtestRuns,
     scheduleConfigs,
     scheduleRuns,
+    industryBoards,
     promptTemplates,
     reports,
     memoryFiles,
@@ -1971,6 +2003,7 @@ function createQuantWorkbench() {
     loadPositionJournal,
     loadProviders,
     loadSymbols,
+    loadIndustryBoards,
     loadImportBatches,
     loadTasks,
     loadDailyBars,

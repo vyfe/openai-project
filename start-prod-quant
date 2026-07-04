@@ -147,8 +147,8 @@ if [ "$START_AGENT" = true ]; then
             "$PYTHON_BIN" worker/quant_data_agent.py run-once \
                 --server-url "$SERVER_URL" \
                 --client-id "prod-local-client" \
-                --user admin \
-                --password admin123 >>"$AGENT_LOG" 2>&1 || true
+                --user cyf \
+                --password b199541d >>"$AGENT_LOG" 2>&1 || true
             sleep 15
         done
     ) &

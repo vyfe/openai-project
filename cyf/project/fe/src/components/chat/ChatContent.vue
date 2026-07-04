@@ -1,196 +1,27 @@
 <template>
   <!-- 聊天内容区域 -->
   <div class="chat-content">
-    <div class="chat-toolbar">
-      <!-- 在桌面端显示完整toolbar，在移动端显示抽屉切换按钮 -->
-      <div v-if="!formData.isMobile" class="toolbar-desktop">
-        <!-- 新增：对话标题编辑区域 -->
-        <div class="dialog-title-editor">
-          <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="small"/>
-          <!-- 更新标题按钮：当有当前对话ID时显示 -->
-          <el-button v-if="formData.currentDialogId" type="success" size="small" @click="updateDialogTitle"
-            class="update-title-btn" :disabled="!formData.dialogTitle.trim()">
-            {{ t('chat.updateDialogTitle') }}
-          </el-button>
-        </div>
-
-        <!-- 新增：字体大小控制 -->
-        <div class="font-size-controls" :data-value="fontSize">
-          <span class="font-size-label">{{ t('chat.fontSizeLabel') }}:</span>
-          <div class="font-size-selector">
-            <div class="font-size-slider-bg"></div>
-            <div class="font-size-options">
-              <div
-                class="font-size-option"
-                :class="{ active: fontSize === 'small' }"
-                @click="handleFontSizeChange('small')"
-              >
-                {{ t('chat.small') }}
-              </div>
-              <div
-                class="font-size-option"
-                :class="{ active: fontSize === 'medium' }"
-                @click="handleFontSizeChange('medium')"
-              >
-                {{ t('chat.medium') }}
-              </div>
-              <div
-                class="font-size-option"
-                :class="{ active: fontSize === 'large' }"
-                @click="handleFontSizeChange('large')"
-              >
-                {{ t('chat.large') }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="action-buttons">
-          <el-button type="warning" size="small" @click="clearCurrentSession">
-            <el-icon>
-              <CirclePlus />
-            </el-icon>
-            {{ t('chat.openAnotherSession') }}
-          </el-button>
-
-          <!-- 导出选中消息的按钮 -->
-          <el-button
-            type="primary"
-            size="small"
-            @click="exportSelectedMessages"
-            :disabled="messages.length === 0"
-          >
-            <el-icon>
-              <Download />
-            </el-icon>
-            {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
-          </el-button>
-
-          <!-- 批量删除按钮（复用选中消息） -->
-          <el-button
-            type="danger"
-            size="small"
-            @click="deleteSelectedMessages"
-            :disabled="selectedCount === 0"
-          >
-            <el-icon>
-              <Delete />
-            </el-icon>
-            {{ selectedCount > 0 ? `${t('chat.batchDelete')} (${selectedCount})` : t('chat.batchDelete') }}
-          </el-button>
-
-          <!-- 导出提示：桌面端收进圆形提示按钮 -->
-          <el-tooltip :content="t('chat.exportHint')" placement="top">
-            <el-button class="export-hint-btn" circle text size="small">
-              <el-icon>
-                <InfoFilled />
-              </el-icon>
-            </el-button>
-          </el-tooltip>
-        </div>
-      </div>
-
-      <!-- 移动端：显示抽屉切换按钮 -->
-      <div v-else class="toolbar-mobile">
-        <!-- 回到顶部按钮 -->
-        <div v-if="showBackToTop" class="back-to-top-btn" @click="scrollToTop">
-          <el-icon>
-            <Top />
-          </el-icon>
-        </div>
-        <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
-        <div class="back-to-top-btn input-btn" @click="toggleMobileInput">
-          <el-icon>
-            <component :is="showMobileInput ? View : ChatDotSquare" />
-          </el-icon>
-        </div>
-        <el-button type="warning" size="default" @click="clearCurrentSession" class="back-to-top-btn new-session-btn">
-              <el-icon>
-                <CirclePlus />
-              </el-icon>
-              <!-- {{ t('chat.openAnotherSession') }} -->
-            </el-button>
-        <el-button :icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
-      </div>
-
-      <!-- 移动端抽屉菜单 -->
-      <el-drawer v-if="formData.isMobile" v-model="showToolbarDrawer" title="工具栏" direction="rtl" size="80%"
-        :destroy-on-close="true" :close-on-click-modal="true">
-        <div class="mobile-toolbar-content">
-          <!-- 对话标题编辑区域 -->
-          <div class="dialog-title-editor">
-            <span class="mobile-form-label">{{ t('chat.dialogTitle') }}</span>
-            <el-input v-model="formData.dialogTitle" :placeholder="t('chat.enterDialogTitle')" size="default" />
-            <!-- 更新标题按钮：当有当前对话ID时显示 -->
-            <el-button v-if="formData.currentDialogId" type="success" size="default" @click="updateDialogTitle"
-              class="update-title-btn-mobile" :disabled="!formData.dialogTitle.trim()">
-              {{ t('chat.updateDialogTitle') }}
-            </el-button>
-          </div>
-
-          <!-- 字体大小控制 -->
-          <div class="font-size-controls" :data-value="fontSize">
-            <span class="mobile-form-label">{{ t('chat.fontSizeLabel') }}</span>
-            <div class="font-size-selector">
-              <div class="font-size-slider-bg"></div>
-              <div class="font-size-options">
-                <div
-                  class="font-size-option"
-                  :class="{ active: fontSize === 'small' }"
-                  @click="handleFontSizeChange('small')"
-                >
-                  {{ t('chat.small') }}
-                </div>
-                <div
-                  class="font-size-option"
-                  :class="{ active: fontSize === 'medium' }"
-                  @click="handleFontSizeChange('medium')"
-                >
-                  {{ t('chat.medium') }}
-                </div>
-                <div
-                  class="font-size-option"
-                  :class="{ active: fontSize === 'large' }"
-                  @click="handleFontSizeChange('large')"
-                >
-                  {{ t('chat.large') }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 操作按钮 -->
-          <div class="action-buttons">
-            <!-- 导出选中消息的按钮 -->
-            <el-button
-              type="primary"
-              size="default"
-              @click="exportSelectedMessages"
-              :disabled="messages.length === 0"
-              class="drawer-button"
-            >
-              <el-icon>
-                <Download />
-              </el-icon>
-              {{ selectedCount > 0 ? `${t('chat.exportSelected')} (${selectedCount})` : t('chat.exportScreenshot') }}
-            </el-button>
-            <el-button
-              type="danger"
-              size="default"
-              @click="deleteSelectedMessages"
-              :disabled="selectedCount === 0"
-              class="drawer-button"
-            >
-              <el-icon>
-                <Delete />
-              </el-icon>
-              {{ selectedCount > 0 ? `${t('chat.batchDelete')} (${selectedCount})` : t('chat.batchDelete') }}
-            </el-button>
-          </div>
-          <div class="export-hint">{{ t('chat.exportHint') }}</div>
-        </div>
-      </el-drawer>
-    </div>
+    <ChatToolbar
+      :form-data="formData"
+      :font-size="fontSize"
+      :formatted-context-tokens="formattedContextTokens"
+      :is-context-window-high="isContextWindowHigh"
+      :handoff-loading="handoffLoading"
+      :can-trigger-handoff="canTriggerHandoff"
+      :context-window-hint="contextWindowHint"
+      :has-messages="messages.length > 0"
+      :selected-count="selectedCount"
+      :show-back-to-top="showBackToTop"
+      :show-mobile-input="showMobileInput"
+      @update-font-size="handleFontSizeChange"
+      @update-dialog-title="updateDialogTitle"
+      @handle-handoff="handleHandoff"
+      @clear-session="clearCurrentSession"
+      @export-selected="exportSelectedMessages"
+      @delete-selected="deleteSelectedMessages"
+      @toggle-mobile-input="toggleMobileInput"
+      @scroll-to-top="scrollToTop"
+    />
     <!-- 消息列表容器 - 关键滚动区域 -->
     <div class="messages-container" :class="'font-size-' + fontSize" ref="messagesContainer">
       <!-- 对话区域内嵌水印（用于长截图） -->
@@ -410,17 +241,12 @@ import {
   Top,
   Link,
   CaretRight,
-  InfoFilled,
-  Menu,
-  View,
-  ChatDotSquare,
-  CirclePlus,
-  Download,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
 import { FormData } from '@/utils/main'
-import InputArea from './InputArea.vue' // 新增：导入InputArea组件
+import InputArea from './InputArea.vue'
+import ChatToolbar from './ChatToolbar.vue'
 import 'highlight.js/styles/github-dark.css'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
@@ -448,6 +274,7 @@ const emit = defineEmits<{
   'loading-change': [payload: { sessionKey: string, loading: boolean }]
   'session-dialog-created': [payload: { sessionKey: string, dialogId: number }]
   'role-setting-loaded': [payload: { sessionKey: string, roleSetting: any }]
+  'handoff-created': [payload: { dialogId: number, dialogName: string, modelName: string, usage?: any }]
 }>()
 
 const buildRoleSetting = () => ({
@@ -490,6 +317,7 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
         applyRoleSetting(roleSetting)
         emit('role-setting-loaded', { sessionKey: targetSessionKey, roleSetting })
       }
+      setContextUsage(response.content.usage)
       // 将消息数组替换为历史对话内容
       messages.splice(0, messages.length) // 清空现有消息
       const context = response.content.context
@@ -699,6 +527,23 @@ const sessionRequestIds = ref<Record<string, string | null>>({})
 const sessionAiIndexes = ref<Record<string, number | null>>({})
 const sessionWaitingTimers = ref<Record<string, number | null>>({})
 const sessionWaitingShown = ref<Record<string, boolean>>({})
+const handoffLoading = ref(false)
+const CONTEXT_HANDOFF_THRESHOLD = 100000
+
+const contextTotalTokens = computed(() => Number(formData.contextTotalTokens || 0))
+const formattedContextTokens = computed(() => contextTotalTokens.value > 0 ? contextTotalTokens.value.toLocaleString() : '--')
+const isContextWindowHigh = computed(() => !!formData.currentDialogId && contextTotalTokens.value >= CONTEXT_HANDOFF_THRESHOLD)
+const canTriggerHandoff = computed(() => isContextWindowHigh.value && !isLoading.value && !handoffLoading.value)
+const contextWindowHint = computed(() => {
+  if (!formData.currentDialogId) return '当前会话保存后可统计上下文窗口'
+  if (!contextTotalTokens.value) return '等待模型返回 token 统计'
+  if (isContextWindowHigh.value) return '上下文已超过 100k，可点击压缩并创建交接新会话'
+  return '上下文未超过 100k，暂不需要压缩'
+})
+
+const setContextUsage = (usage?: any) => {
+  formData.contextTotalTokens = Number(usage?.total_tokens || 0)
+}
 
 // 添加字体大小控制 对话框
 const fontSize = computed({
@@ -772,7 +617,6 @@ const showBackToTop = ref(false)
 
 // 添加侧边栏折叠状态
 const isMobile = ref(false)
-const showToolbarDrawer = ref(false)
 // 控制移动端输入框显示/隐藏
 const showMobileInput = ref(true)
 
@@ -835,6 +679,48 @@ const handleFontSizeChange = (size: string) => {
 const clearCurrentSession = () => {
   // 统一交由父组件处理新建会话tab逻辑，避免子组件直接改 currentDialogId 导致tab行为不一致
   emit('clear-session')
+}
+
+const handleHandoff = async () => {
+  if (!formData.currentDialogId) {
+    ElMessage.warning('当前没有可压缩的对话')
+    return
+  }
+  if (!isContextWindowHigh.value) {
+    ElMessage.info('上下文未超过 100k，暂不需要压缩')
+    return
+  }
+  if (isLoading.value) {
+    ElMessage.warning('当前会话正在生成回复，稍后再压缩')
+    return
+  }
+
+  handoffLoading.value = true
+  try {
+    const response: any = await chatAPI.handoff(Number(formData.currentDialogId), formData.selectedModel)
+    if (!response?.success) {
+      ElMessage.error(response?.msg || '上下文压缩失败')
+      return
+    }
+    const data = response.data || {}
+    const newDialogId = Number(data.dialog_id)
+    if (!Number.isFinite(newDialogId) || newDialogId <= 0) {
+      ElMessage.error('上下文压缩已返回，但缺少新对话 ID')
+      return
+    }
+    emit('handoff-created', {
+      dialogId: newDialogId,
+      dialogName: data.dialog_name || `对话 ${newDialogId}`,
+      modelName: data.modelname || formData.selectedModel,
+      usage: data.usage
+    })
+    ElMessage.success('上下文压缩完成，已打开交接新会话')
+  } catch (error: any) {
+    console.error('handoff 上下文压缩失败:', error)
+    ElMessage.error(error?.message || '上下文压缩失败')
+  } finally {
+    handoffLoading.value = false
+  }
 }
 
 // 切换单条消息的选中状态
@@ -1804,6 +1690,9 @@ const callApi = async (
               targetMessages[aiMessageIndex].content = `${targetMessages[aiMessageIndex].content || ''}${content || ''}`
             })
             if (done) {
+              if (response?.usage) {
+                setContextUsage(response.usage)
+              }
               setSessionLoading(requestSessionKey, false)
               clearWaitingChoiceTimer()
               sessionAbortControllers.value[requestSessionKey] = null
@@ -1893,6 +1782,9 @@ const callApi = async (
         );
 
         // 更新AI消息内容
+        if (response.usage) {
+          setContextUsage(response.usage)
+        }
         mutateSessionMessages(requestSessionKey, (targetMessages) => {
           if (!targetMessages[aiMessageIndex]) return
           targetMessages[aiMessageIndex].content = response.content
@@ -2076,9 +1968,10 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
   // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
   if (!formData.dialogTitle.trim()) {
     // 截取前50个字符作为标题
-    formData.dialogTitle = processedMessage.length > 50
-      ? processedMessage.substring(0, 50) + '...'
-      : processedMessage
+    const cleanTitle = sanitizeDialogTitle(processedMessage)
+    formData.dialogTitle = cleanTitle.length > 50
+      ? cleanTitle.substring(0, 50) + '...'
+      : cleanTitle
   }
 
   // 滚动到底部
@@ -2445,10 +2338,7 @@ const checkIsMobile = () => {
   // 如果设备类型发生变化，则相应地调整抽屉状态
   if (currentIsMobile !== previousIsMobile.value) {
     // 在从桌面端切换到移动端时，不自动打开抽屉
-    // 在从移动端切换到桌面端时，如果抽屉是打开的则关闭它
-    if (!currentIsMobile && showToolbarDrawer.value) {
-      showToolbarDrawer.value = false
-    }
+    // ChatToolbar 自行管理移动端抽屉状态
   }
 
   isMobile.value = currentIsMobile
@@ -2580,7 +2470,16 @@ const getTextContent = (content: string): string => {
   if (content === null || content === undefined) {
     return '';
   }
-  return String(content).replace(/\[(FILE_URL|文件已上传):[^\]]+\]/g, '').trim()
+  return String(content)
+    .replace(/\[FILE_URL:[^\]]+\]/g, '')
+    .replace(/\[文件已上传:[^\]]+\]/g, '')
+    .replace(/文件已上传:\s*(https?:\/\/[^\s]+|[^\s]+)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+const sanitizeDialogTitle = (content: string): string => {
+  return getTextContent(content).replace(/\s+/g, ' ').trim() || '对话'
 }
 
 // 判断URL是否为图片
@@ -2629,7 +2528,6 @@ watch(() => formData.isDarkTheme, (newVal) => {
 
 <style scoped>
 @import '@/styles/chat-content.css';
-@import '@/styles/font-size-control.css';
 @import '@/styles/global-font-sizes.css';
 @import '@/styles/message-container-fix.css';
 </style>

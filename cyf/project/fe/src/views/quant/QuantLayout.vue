@@ -9,9 +9,9 @@
             </svg>
           </button>
           <div>
-            <div class="quant-eyebrow">A Share Quant Console</div>
+            <div class="quant-eyebrow">A-SHARE OPERATIONS</div>
             <h1 class="quant-title">量化工作台</h1>
-            <p class="quant-subtitle">按模块拆分数据、策略、调度、AI 和记忆，让后续能力可以持续演进。</p>
+            <p class="quant-subtitle">数据入库、策略执行、行业跟踪和报告推送集中在一条日常作业线上。</p>
           </div>
         </div>
         <div class="quant-header__right">
@@ -50,8 +50,8 @@
       <main class="quant-main-panel" v-loading="workbench.loading.bootstrap">
         <div class="quant-workspace">
           <aside class="quant-nav-panel">
-            <h2 class="quant-nav-title">模块导航</h2>
-            <p class="quant-nav-subtitle">按后端服务边界拆页，后续开发直接对应模块扩展。</p>
+            <h2 class="quant-nav-title">工作分区</h2>
+            <p class="quant-nav-subtitle">先查数据链路，再看信号、行业和调度。</p>
             <nav class="quant-nav-list">
               <RouterLink
                 v-for="item in navItems"
@@ -107,6 +107,7 @@ const summaryCards = computed(() => (unref(workbench.dashboardCards) || []).filt
 const allNavItems = [
   { label: '总览', to: '/quant/overview', icon: DataBoard, adminOnly: false },
   { label: '数据中心', to: '/quant/data', icon: Search, adminOnly: false },
+  { label: '行业看板', to: '/quant/industry', icon: Histogram, adminOnly: false },
   { label: '策略中心', to: '/quant/strategy', icon: MagicStick, adminOnly: true },
   { label: '执行记录', to: '/quant/runs', icon: VideoPlay, adminOnly: false },
   { label: '操作登记', to: '/quant/operations', icon: DocumentChecked, adminOnly: false },

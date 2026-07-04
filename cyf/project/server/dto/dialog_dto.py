@@ -33,3 +33,15 @@ class DialogTitleUpdateRequest:
         raw = data.get("dialog_id")
         dialog_id = int(raw) if raw is not None and str(raw).strip() else None
         return cls(dialog_id=dialog_id, new_title=str(data.get("new_title", "")).strip())
+
+
+@dataclass
+class HandoffRequest:
+    dialog_id: Optional[int]
+    model: str
+
+    @classmethod
+    def from_data(cls, data):
+        raw = data.get("dialog_id")
+        dialog_id = int(raw) if raw is not None and str(raw).strip() else None
+        return cls(dialog_id=dialog_id, model=str(data.get("model", "")).strip())

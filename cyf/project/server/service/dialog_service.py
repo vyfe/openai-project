@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from model.repositories.log_repository import delete_dialogs, get_dialog_context, get_dialog_list, update_dialog_title
-from service.dialog_context_service import parse_dialog_context
+from service.dialog_context_service import parse_dialog_payload
 
 
 def get_recent_dialogs(user: str, days: int = 15):
@@ -14,8 +14,8 @@ def get_dialog_content(user: str, dialog_id: int):
     result = get_dialog_context(user, int(dialog_id))
     if not result:
         return None
-    context, role_setting = parse_dialog_context(result.context)
-    return {"chattype": result.chattype, "context": context, "role_setting": role_setting}
+    context, role_setting, usage = parse_dialog_payload(result.context)
+    return {"chattype": result.chattype, "context": context, "role_setting": role_setting, "usage": usage}
 
 
 def delete_user_dialogs(user: str, dialog_ids: list) -> int:

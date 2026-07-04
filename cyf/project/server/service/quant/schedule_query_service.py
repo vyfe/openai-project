@@ -16,7 +16,9 @@ from service.quant.trade_calendar_service import resolve_trade_date_for_schedule
 TASK_TYPE_DATA_SYNC = "data_sync"
 TASK_TYPE_ANALYSIS = "analysis_report"
 TASK_TYPE_MEMORY_DIGEST = "memory_digest"
-SUPPORTED_SCHEDULE_TYPES = {TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST}
+TASK_TYPE_INDUSTRY_COLLECT = "industry_collect"
+TASK_TYPE_INDUSTRY_REPORT = "industry_report"
+SUPPORTED_SCHEDULE_TYPES = {TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST, TASK_TYPE_INDUSTRY_COLLECT, TASK_TYPE_INDUSTRY_REPORT}
 RUN_STATUS_PENDING = "pending"
 RUN_STATUS_RUNNING = "running"
 RUN_STATUS_SUCCESS = "success"
@@ -66,6 +68,13 @@ def validate_schedule(task_type: str, cron_expr: str, payload: dict):
         lookback_days = int(payload.get("lookback_days", 120) or 120)
         if lookback_days < 1:
             raise ValueError("memory_digest.lookback_days 必须大于 0")
+    if normalized_task_type == TASK_TYPE_INDUSTRY_COLLECT:
+        targets = payload.get("targets") or []
+        if targets and not isinstance(targets, list):
+            raise ValueError("industry_collect.targets 必须是数组")
+    if normalized_task_type == TASK_TYPE_INDUSTRY_REPORT:
+        if not (payload.get("board_id") or payload.get("board_key") or payload.get("board_ids") or payload.get("board_keys")):
+            raise ValueError("industry_report 至少需要一个 board_id 或 board_key")
 
 
 def serialize_schedule(item: QuantScheduleConfig) -> dict:

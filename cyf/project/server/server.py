@@ -3,6 +3,7 @@ from conf.logging_config import configure_logging
 from routes.admin_routes import admin_bp
 from routes.public_routes import public_bp
 from routes.quant.im_memory_routes import bp as quant_im_memory_bp
+from routes.quant.industry_routes import bp as quant_industry_bp
 from routes.quant.strategy_routes import bp as quant_strategy_bp
 from routes.quant.trade_routes import bp as quant_trade_bp
 from routes.quant_routes import quant_bp
@@ -23,6 +24,7 @@ app.register_blueprint(quant_trade_bp)
 app.register_blueprint(quant_data_bp)
 app.register_blueprint(quant_scheduler_bp)
 app.register_blueprint(quant_client_bp)
+app.register_blueprint(quant_industry_bp)
 
 
 bootstrap_runtime(app.logger)

@@ -1,212 +1,4 @@
-/* ChatContent组件的样式 */
-.chat-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0; /* 关键：防止flex项目溢出 */
-  overflow: hidden;
-  max-height: 100%; /* 确保不超出父容器 */
-}
-
-.chat-toolbar {
-  padding: 12px;
-  background: rgba(245, 245, 245, 0.5);
-  border-bottom: 1px solid rgba(144, 180, 248, 0.3);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.toolbar-desktop {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  gap: 12px;
-}
-
-.dialog-title-editor {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 300px; /* 确保在小屏幕上也有足够的空间 */
-}
-
-.dialog-title-editor .el-input {
-  flex: 1;
-}
-
-/* 更新标题按钮样式，使其与对话框项目高度一致 */
-.dialog-title-editor .update-title-btn {
-  height: 22px; /* 与对话框项目的大致高度一致 */
-  padding: 6px 6px; /* 适当的内边距 */
-  font-size: 14px; /* 与对话框项目文字大小相近 */
-  min-width: 80px; /* 确保按钮有足够宽度显示文字 */
-  align-self: center; /* 与输入框垂直居中对齐 */
-}
-
-/* 移动端更新标题按钮样式 */
-.update-title-btn-mobile {
-  height: 40px; /* 移动端稍大一些的按钮 */
-  padding: 10px 16px;
-  font-size: 16px;
-  margin-top: 8px;
-}
-
-.font-size-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  position: relative;
-}
-
-.font-size-label {
-  white-space: nowrap;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.export-hint {
-  font-size: 12px;
-  color: rgba(120, 120, 120, 0.9);
-  line-height: 1.4;
-  max-width: 360px;
-}
-
-.export-hint-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 50%;
-  color: #d89a60;
-}
-
-.export-hint-btn:hover {
-  background: rgba(216, 154, 96, 0.12);
-}
-
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden; /* 防止横向滚动造成的问题 */
-  padding: 10px; /* 从20px减少到10px */
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 10px; /* 从20px减少到10px */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  min-height: 0; /* 关键：防止flex项目溢出其容器 */
-  max-height: 100%; /* 严格限制最大高度 */
-  height: auto; /* 让高度自适应内容，但在容器范围内 */
-}
-
-.message {
-  display: flex;
-  gap: 6px; /* 从12px减少到6px */
-  animation: fadeIn 0.3s ease-out;
-}
-
-.message.user {
-  flex-direction: row-reverse;
-}
-
-.message-avatar {
-  width: 30px; /* 从36px减少到30px */
-  height: 30px; /* 从36px减少到30px */
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
-    linear-gradient(135deg, #c98f54, #6f8f64);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  flex-shrink: 0;
-  font-size: 12px; /* 添加字体大小，使其更适合缩小的头像 */
-  box-shadow: 0 6px 14px rgba(201, 122, 43, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  position: relative;
-  overflow: hidden;
-}
-
-.message-avatar::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
-  pointer-events: none;
-}
-
-.message.user .message-avatar {
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
-    linear-gradient(135deg, #d4a06b, #ba7f49);
-  box-shadow: 0 6px 14px rgba(201, 122, 43, 0.25);
-}
-
-.message.ai .message-avatar {
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 45%),
-    linear-gradient(135deg, #7ad87a, #36b37e);
-  box-shadow: 0 6px 14px rgba(54, 179, 126, 0.25);
-}
-
-.message-content {
-  flex: 1;
-  max-width: calc(100% - 42px); /* 调整最大宽度以适应缩小的头像 */
-}
-
-.message-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: #666;
-}
-
-.message-author {
-  font-weight: bold;
-  color: #333;
-}
-
-.message-time {
-  font-size: 12px;
-  color: #999;
-  margin: 0 10px;
-}
-
-.message-actions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.message-actions > * {
-  display: inline-flex;
-  align-items: center;
-}
-
-.message-actions .el-button {
-  margin: 0 !important;
-}
-
-.message-actions .el-popconfirm {
-  display: inline-flex;
-  align-items: center;
-}
-
-.message-text {
-  line-height: 1.6;
-  word-wrap: break-word;
-}
-
+/* Message image/video/audio constraints */
 .message-text img,
 .message-text video,
 .message-text audio {
@@ -214,55 +6,42 @@
   height: auto;
 }
 
+/* Table structural rules (colors handled by Round 4) */
 .message-text table {
   width: 100%;
   border-collapse: collapse;
-  margin: 5px 0; /* 从10px减少到5px */
-  overflow: auto; /* 允许滚动 */
-  display: block; /* 使其可以滚动 */
-  border: 1px solid #ddd; /* 添加表格外边框 */
-  max-width: 100%; /* 确保不超过容器宽度 */
-  position: relative; /* 为内部滚动条定位 */
+  overflow: auto;
+  display: block;
+  max-width: 100%;
+  position: relative;
 }
 
 .message-text :deep(th),
 .message-text :deep(td) {
-  border: 1px solid #ddd; /* 为表格单元格添加边框 */
-  padding: 4px; /* 从8px减少到4px */
   text-align: left;
 }
 
-.message-text :deep(th) {
-  background-color: #f5f5f5;
-  border: 1px solid #ddd; /* 为表头添加边框 */
-  padding: 4px; /* 从8px减少到4px */
-}
-
+/* Code block structural rules (colors handled by Round 4) */
 .message-text :deep(pre) {
-  padding: 8px; /* 从12px减少到8px */
   border-radius: 6px;
   overflow-x: auto;
-  margin: 5px 0; /* 从10px减少到5px */
-  line-height: 1.4; /* 从1.5减少到1.4 */
-  max-width: 100%; /* 确保不超过容器宽度 */
-  display: block; /* 确保是块级元素 */
-  white-space: pre; /* 保持空格和换行 */
-  word-wrap: normal; /* 禁止单词换行 */
-  word-break: normal; /* 保持正常单词断行 */
-  position: relative; /* 为内部滚动条定位 */
+  max-width: 100%;
+  display: block;
+  white-space: pre;
+  word-wrap: normal;
+  word-break: normal;
+  position: relative;
 }
 
 .message-text :deep(code) {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  white-space: pre-wrap; /* 保持空格，但允许换行 */
-  word-wrap: break-word; /* 在长单词或URL地址内部进行换行 */
-  word-break: break-word; /* 在字符间断行 */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-word;
   max-width: 100%;
-  overflow-x: auto; /* 当内容超出时显示滚动条 */
+  overflow-x: auto;
   display: inline;
-  padding: 2px 4px; /* 添加内边距以改善视觉效果 */
-  background-color: rgba(245, 245, 245, 0.5); /* 为行内代码添加背景色 */
-  border-radius: 4px; /* 圆角效果 */
+  border-radius: 4px;
 }
 
 .message-text :deep(.code-block-wrapper) {
@@ -299,11 +78,12 @@
 
 /*  */
 
+/* Blockquote structural — colors handled by Round 4 */
 .message-text blockquote {
-  border-left: 3px solid #a0aec0; /* 从4px减少到3px */
-  padding-left: 8px; /* 从12px减少到8px */
-  margin: 5px 0; /* 从10px减少到5px */
-  color: #718096;
+  border-left: 3px solid var(--line-1);
+  padding-left: 8px;
+  margin: 5px 0;
+  color: var(--text-2);
 }
 
 .message-text :deep(ul),
@@ -559,43 +339,6 @@
   content: counter(item) ". "; /* 使用计数器值作为序号，从设定的起始值开始 */
 }
 
-.copyright-watermark-inline,
-.github-link-inline,
-.conversation-title-inline {
-  text-align: center;
-  font-size: 12px;
-  color: #999;
-  margin-top: 20px;
-}
-
-.conversation-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-  margin: 20px 0 10px 0;
-  text-align: center;
-}
-
-.github-link-inline {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-}
-
-.github-link-inline a {
-  color: #666;
-  text-decoration: none;
-}
-
-.github-link-inline a:hover {
-  text-decoration: underline;
-}
-
-.wechat-info {
-  color: #666;
-}
-
 .image-preview-dialog :deep(.el-dialog__body) {
   padding: 0 !important;
   display: flex;
@@ -613,45 +356,6 @@
 @media (max-width: 768px) {
   .chat-content {
     height: 100%;
-  }
-
-  .chat-toolbar {
-    padding: 8px;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .toolbar-mobile {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .mobile-toolbar-btn {
-    width: 44px;
-    height: 44px;
-  }
-
-  .dialog-title-editor {
-    flex-direction: column;
-    align-items: stretch;
-    min-width: auto;
-  }
-
-  .dialog-title-editor .el-input {
-    margin-bottom: 8px;
-  }
-
-  .font-size-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
-
-  .action-buttons .el-button {
-    width: 100%;
   }
 
   .messages-container {
@@ -677,11 +381,6 @@
     padding: 8px;
   }
 
-  /* 移动端按钮定位 */
-  .toggle-input-btn {
-    bottom: 30%;
-    right: 40px; 
-  }
 }
 
 /* 动画 */
@@ -772,37 +471,27 @@
   }
 }
 
-/* 暗色主题支持 */
-body.dark-theme .chat-content {
-  color: var(--text-1);
-}
-
-body.dark-theme .chat-toolbar {
-  background: rgba(40, 40, 40, 0.5);
-  border-bottom-color: rgba(80, 120, 180, 0.3);
-}
-
 body.dark-theme .export-hint {
   color: rgba(200, 200, 200, 0.75);
 }
 
 body.dark-theme .message-avatar {
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 48%),
     linear-gradient(135deg, #70553a, #4f5f45);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
-  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 body.dark-theme .message.user .message-avatar {
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 48%),
     linear-gradient(135deg, #ba8653, #8f633b);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 body.dark-theme .message.ai .message-avatar {
-  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0) 45%),
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 48%),
     linear-gradient(135deg, #2f8f6a, #1f6b52);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 body.dark-theme .export-hint-btn {
@@ -884,24 +573,6 @@ body.dark-theme .message-text :deep(.code-copy-btn:hover) {
 }
 
 
-body.dark-theme .conversation-title,
-body.dark-theme .copyright-watermark-inline,
-body.dark-theme .github-link-inline {
-  color: #a0aec0;
-}
-
-body.dark-theme .github-link-inline a {
-  color: #a0aec0;
-}
-
-body.dark-theme .toggle-input-btn {
-  background: rgba(80, 160, 80, 0.8);
-}
-
-body.dark-theme .toggle-input-btn:hover {
-  background: rgba(100, 180, 100, 1);
-}
-
 /* 自定义滚动条样式，仅在内容超长时显示，使其与内部组件样式对齐 */
 .message-text pre::-webkit-scrollbar,
 .message-text code::-webkit-scrollbar,
@@ -981,15 +652,6 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
   border-color: #fff;
 }
 
-/* =========================
-   Round 4: message readability
-   ========================= */
-.chat-toolbar {
-  padding: 10px 12px;
-  background: var(--overlay-1);
-  border-bottom: 1px solid var(--line-1);
-}
-
 .messages-container {
   padding: 16px 18px;
   gap: 14px;
@@ -1008,29 +670,50 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
 }
 
 .message {
+  display: flex;
   gap: 10px;
   align-items: flex-start;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.message.user {
+  flex-direction: row-reverse;
 }
 
 .message-avatar {
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: var(--bg-2);
-  color: var(--text-2);
-  border: 1px solid var(--line-1);
-  box-shadow: none;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.85), transparent 48%),
+              linear-gradient(135deg, #c98f54, #6f8f64);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 0 4px 10px rgba(201,122,43,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .message-avatar::after {
-  display: none;
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+  pointer-events: none;
 }
 
-.message.user .message-avatar,
+.message.user .message-avatar {
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.85), transparent 48%),
+              linear-gradient(135deg, #d4a06b, #ba7f49);
+}
+
 .message.ai .message-avatar {
-  background: var(--bg-2);
-  color: var(--text-2);
-  box-shadow: none;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.85), transparent 48%),
+              linear-gradient(135deg, #7ad87a, #36b37e);
 }
 
 .message-content {
@@ -1041,7 +724,7 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
 .message-content-ai {
   border: 1px solid var(--line-1);
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 12px 16px;
   background: var(--bg-1);
   box-shadow: none;
 }
@@ -1051,6 +734,9 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
 }
 
 .message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 6px;
   font-size: 12px;
   color: var(--text-2);
@@ -1070,15 +756,19 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
 }
 
 .message-actions {
+  display: flex;
+  align-items: center;
   margin-left: auto;
-  gap: 2px;
+  gap: 4px;
   opacity: 0.82;
 }
 
 .message-text {
   color: var(--text-1);
   font-size: 14px;
-  line-height: 1.68;
+  line-height: 1.72;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .message-text :deep(p) {
@@ -1148,10 +838,6 @@ body.dark-theme .conversation-title {
   color: var(--text-1);
 }
 
-body.dark-theme .chat-toolbar {
-  border-bottom-color: var(--line-1);
-}
-
 @media (max-width: 768px) {
   .messages-container {
     padding: 12px 10px;
@@ -1174,7 +860,7 @@ body.dark-theme .chat-toolbar {
   .message-content-user,
   .message-content-ai {
     border-radius: 12px;
-    padding: 8px 10px;
+    padding: 10px 14px;
   }
 
   .message-text {

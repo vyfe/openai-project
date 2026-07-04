@@ -44,6 +44,11 @@ const router = createRouter({
           component: () => import('@/views/quant/pages/QuantDataPage.vue')
         },
         {
+          path: 'industry',
+          name: 'QuantIndustry',
+          component: () => import('@/views/quant/pages/QuantIndustryPage.vue')
+        },
+        {
           path: 'strategy',
           name: 'QuantStrategy',
           component: () => import('@/views/quant/pages/QuantStrategyPage.vue')

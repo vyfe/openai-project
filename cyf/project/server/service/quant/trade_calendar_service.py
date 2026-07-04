@@ -34,8 +34,11 @@ def _fallback_is_trade_day(day: date) -> bool:
 def is_trade_day(day: date, calendar_name: str = DEFAULT_CALENDAR) -> bool:
     if xcals is None:
         return _fallback_is_trade_day(day)
-    calendar = xcals.get_calendar(_normalize_calendar_name(calendar_name))
-    return calendar.is_session(day)
+    try:
+        calendar = xcals.get_calendar(_normalize_calendar_name(calendar_name))
+        return calendar.is_session(day)
+    except Exception:
+        return _fallback_is_trade_day(day)
 
 
 def previous_trade_day(day: date, calendar_name: str = DEFAULT_CALENDAR) -> date:

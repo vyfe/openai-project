@@ -4,9 +4,10 @@ import json
 import logging
 from datetime import datetime, timedelta
 
-from quant.entities import QuantPositionJournal, QuantScheduleConfig, QuantScheduleRun
+from quant.entities import QuantPositionJournal, QuantReportRecord, QuantScheduleConfig, QuantScheduleRun
 from service.quant.common import normalize_symbol
 from service.quant.im_delivery_service import send_position_summary_to_channel, send_report_to_channel
+from service.quant.industry_service import collect_industry, get_industry_board, get_industry_dashboard, render_industry_daily_markdown
 from service.quant.memory_service import curate_symbol_memories
 from service.quant.report_service import create_report_for_run
 from service.quant.schedule_log_service import build_schedule_log_path, schedule_run_log_context
@@ -131,6 +132,88 @@ def execute_memory_digest(run: QuantScheduleRun) -> dict:
     return {"mode": "local_memory_digest", "lookback_days": lookback_days, "files": curated, "count": len(curated)}
 
 
+def _payload_list(payload: dict, key: str) -> list:
+    value = payload.get(key)
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return [value]
+
+
+def execute_industry_collect(run: QuantScheduleRun) -> dict:
+    payload = json.loads(run.payload_json or "{}")
+    targets = _payload_list(payload, "targets") or None
+    board_ids = _payload_list(payload, "board_ids")
+    board_keys = _payload_list(payload, "board_keys")
+    if payload.get("board_id"):
+        board_ids.append(payload.get("board_id"))
+    if payload.get("board_key"):
+        board_keys.append(payload.get("board_key"))
+    if not board_ids and not board_keys:
+        return collect_industry(targets=targets)
+    results = []
+    for board_id in board_ids:
+        results.append(collect_industry(board_id=int(board_id), targets=targets))
+    for board_key in board_keys:
+        results.append(collect_industry(board_key=str(board_key), targets=targets))
+    return {"boards": len(results), "results": results}
+
+
+def execute_industry_report(run: QuantScheduleRun) -> dict:
+    payload = json.loads(run.payload_json or "{}")
+    board_ids = _payload_list(payload, "board_ids")
+    board_keys = _payload_list(payload, "board_keys")
+    if payload.get("board_id"):
+        board_ids.append(payload.get("board_id"))
+    if payload.get("board_key"):
+        board_keys.append(payload.get("board_key"))
+    channel_ids = _payload_list(payload, "channel_ids")
+    reports, deliveries = [], []
+    targets = [(int(board_id), "") for board_id in board_ids] + [(None, str(board_key)) for board_key in board_keys]
+    for board_id, board_key in targets:
+        board = get_industry_board(board_id=board_id, board_key=board_key)
+        dashboard = get_industry_dashboard(board_id=board.id)
+        markdown = render_industry_daily_markdown(board_id=board.id)
+        trade_date = run.trade_date or datetime.now().date()
+        report_key = f"industry-{board.board_key}-{trade_date.isoformat()}-{run.id}"
+        report = QuantReportRecord.create(
+            report_key=report_key,
+            strategy_id=0,
+            run_id=None,
+            schedule_run_id=run.id,
+            trade_date=trade_date,
+            report_type="industry_daily_report",
+            status="success",
+            bundle_version="industry-bundle-v1",
+            prompt_version="industry-template-v1",
+            title=f"{board.name} 行业跟踪日报",
+            analysis_bundle_json=json.dumps(dashboard, ensure_ascii=False),
+            report_draft_json=json.dumps({"mode": "template", "board_key": board.board_key}, ensure_ascii=False),
+            final_markdown=markdown,
+            memory_references_json="[]",
+            meta_json=json.dumps({"board_id": board.id, "board_key": board.board_key}, ensure_ascii=False),
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        report_dict = report.to_dict()
+        reports.append(report_dict)
+        for raw_channel_id in channel_ids:
+            deliveries.append(send_report_to_channel(report.id, channel_id=int(raw_channel_id)))
+    return {
+        "trade_date": run.trade_date.isoformat() if run.trade_date else None,
+        "reports": reports,
+        "deliveries": deliveries,
+        "summary": {
+            "report_count": len(reports),
+            "delivery_count": len(deliveries),
+            "mode": "industry_daily_report",
+        },
+    }
+
+
 def execute_schedule_run(run_id: int) -> dict:
     run = QuantScheduleRun.get_by_id(run_id)
     if run.status not in (RUN_STATUS_PENDING, RUN_STATUS_RETRY):
@@ -150,6 +233,10 @@ def execute_schedule_run(run_id: int) -> dict:
                 result = execute_analysis_report(run)
             elif run.task_type == "memory_digest":
                 result = execute_memory_digest(run)
+            elif run.task_type == "industry_collect":
+                result = execute_industry_collect(run)
+            elif run.task_type == "industry_report":
+                result = execute_industry_report(run)
             else:
                 raise ValueError(f"不支持的调度任务类型: {run.task_type}")
             run.status = RUN_STATUS_SUCCESS

@@ -10,6 +10,7 @@ from service.common_service import generate_sse_error, handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user, get_claude_client_for_user, is_claude_model
 from service.claude_service import stream_claude_chat
+from service.llm_usage_service import estimate_total_tokens
 from service.message_normalizer import build_parts_from_message, ensure_message_parts
 
 
@@ -139,7 +140,8 @@ def stream_chat(user: str, payload, logger):
                     return
 
             # === 公共完成处理 ===
-            tokens_used = len(full_content.encode("utf-8")) // 4
+            usage = estimate_total_tokens(full_content)
+            tokens_used = usage["total_tokens"]
             set_log(user, tokens_used, model, json.dumps({"content": full_content}))
             request_messages = stamp_latest_user_message(dialogvo)
             assistant_time = current_time_str()
@@ -151,9 +153,9 @@ def stream_chat(user: str, payload, logger):
                 model,
                 "chat",
                 title,
-                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting, usage),
             )
-            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time, 'usage': usage})}\n\n"
         except Exception as api_exc:
             error_response = handle_api_exception(api_exc, logger, user=user, model=model, dialog_content=dialogs, url_index=url_index)
             yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"

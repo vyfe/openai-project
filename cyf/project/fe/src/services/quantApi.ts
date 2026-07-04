@@ -24,6 +24,23 @@ export const quantDataAPI = {
     quantApi.get('/never_guess_my_usage/quant/symbols', { params })
 }
 
+export const quantIndustryAPI = {
+  boards: (params?: { status?: string }) =>
+    quantApi.get('/never_guess_my_usage/quant/industry/boards', { params }),
+  initDefaults: () =>
+    quantApi.post('/never_guess_my_usage/quant/industry/defaults', {}),
+  collect: (data: { board_id?: number; board_key?: string; targets?: string[] }) =>
+    quantApi.post('/never_guess_my_usage/quant/industry/collect', data),
+  dashboard: (params?: { board_id?: number; board_key?: string; days?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/industry/dashboard', { params }),
+  news: (params?: { board_id?: number; symbol?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/industry/news', { params }),
+  researchReports: (params?: { board_id?: number; symbol?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/industry/research_reports', { params }),
+  reportPreview: (params?: { board_id?: number; board_key?: string }) =>
+    quantApi.get('/never_guess_my_usage/quant/industry/report/preview', { params })
+}
+
 export const quantTaskAPI = {
   create: (data: {
     symbols?: string[]

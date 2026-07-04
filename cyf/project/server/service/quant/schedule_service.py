@@ -19,6 +19,8 @@ from service.quant.schedule_query_service import (
     RUN_STATUS_SUCCESS,
     TASK_TYPE_ANALYSIS,
     TASK_TYPE_DATA_SYNC,
+    TASK_TYPE_INDUSTRY_COLLECT,
+    TASK_TYPE_INDUSTRY_REPORT,
     TASK_TYPE_MEMORY_DIGEST,
     SUPPORTED_SCHEDULE_TYPES,
     acquire_runnable_runs,
@@ -41,4 +43,3 @@ from service.quant.schedule_query_service import (
     validate_schedule,
     build_run_key,
 )
-

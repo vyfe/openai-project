@@ -67,14 +67,6 @@ body.dark-theme .sidebar-close-btn {
   color: var(--text-1);
 }
 
-body.dark-theme .model-selector h3 {
-  color: var(--text-1);
-}
-
-body.dark-theme .dialog-history-section h3 {
-  color: var(--text-1);
-}
-
 body.dark-theme .dialog-list {
   border: 1px solid var(--line-1);
   background: color-mix(in srgb, var(--bg-2) 78%, transparent);
@@ -104,28 +96,12 @@ body.dark-theme .dialog-date {
   color: var(--text-2);
 }
 
-body.dark-theme .no-dialogs {
-  color: var(--text-2);
-}
-
 body.dark-theme .delete-btn {
   color: var(--text-1);
 }
 
 body.dark-theme .context-label {
   color: var(--text-1);
-}
-
-body.dark-theme .system-prompt-section {
-  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
-}
-
-body.dark-theme .system-prompt-section h3 {
-  color: var(--text-1);
-}
-
-body.dark-theme .system-prompt-hint {
-  color: var(--text-2);
 }
 
 /* 深色主题下的系统提示输入框样式 */
@@ -161,14 +137,6 @@ body.dark-theme .role-tab.active {
 /* 为增强角色的tab文字添加深色样式（白色字） */
 body.dark-theme .role-tab.enhanced-role {
   color: var(--text-1);
-}
-
-body.dark-theme .send-preference-section {
-  border-top: 1px solid color-mix(in srgb, var(--line-1) 30%, transparent);
-}
-
-body.dark-theme .send-preference-hint {
-  color: var(--text-2);
 }
 
 body.dark-theme .chat-content {
@@ -679,13 +647,14 @@ body.dark-theme .system-prompt-section .el-textarea__inner::-webkit-resizer{
   min-width: 0;
   background-color: color-mix(in srgb, var(--accent-1-soft) 72%, var(--bg-1) 28%);
   color: var(--accent-1);
-  padding: 2px 6px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-1) 30%, transparent);
   border-radius: 10px;
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 80px;
+  max-width: 120px;
 }
 
 body.dark-theme .dialog-model {

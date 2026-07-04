@@ -42,6 +42,20 @@ body.dark-theme .el-input.is-disabled .el-input__inner {
   -webkit-text-fill-color: var(--el-disabled-text-color) !important;
 }
 
+body.dark-theme .el-input__wrapper {
+  background-color: var(--bg-2) !important;
+  border-color: var(--line-1) !important;
+  box-shadow: none !important;
+}
+
+body.dark-theme .el-input__inner {
+  color: var(--text-1) !important;
+}
+
+body.dark-theme .el-input__inner::placeholder {
+  color: var(--text-2) !important;
+}
+
 /* Element Plus dark theme unified by tokens */
 body.dark-theme .el-button,
 body.dark-theme .el-select__wrapper,

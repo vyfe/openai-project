@@ -7,6 +7,8 @@ from service.auth_service import require_admin_auth, require_auth
 from service.quant.schedule_service import (
     TASK_TYPE_ANALYSIS,
     TASK_TYPE_DATA_SYNC,
+    TASK_TYPE_INDUSTRY_COLLECT,
+    TASK_TYPE_INDUSTRY_REPORT,
     TASK_TYPE_MEMORY_DIGEST,
     available_strategy_options,
     create_schedule_config,
@@ -35,7 +37,7 @@ def quant_scheduler_meta(user, password):
     del user, password
     return success_response(
         data={
-            "task_types": [TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST],
+            "task_types": [TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST, TASK_TYPE_INDUSTRY_COLLECT, TASK_TYPE_INDUSTRY_REPORT],
             "market_calendars": ["A_SHARE"],
             "strategy_options": available_strategy_options(),
             "latest_market_data_date": latest_market_data_date(),

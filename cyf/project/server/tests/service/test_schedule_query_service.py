@@ -47,6 +47,16 @@ class TestValidateSchedule:
     def test_memory_digest_ok(self):
         validate_schedule("memory_digest", "20 15 * * 1-5", {"lookback_days": 120})
 
+    def test_industry_collect_ok(self):
+        validate_schedule("industry_collect", "20 15 * * 1-5", {"board_ids": [1], "targets": ["market"]})
+
+    def test_industry_report_needs_board(self):
+        with pytest.raises(ValueError, match="至少需要一个 board_id"):
+            validate_schedule("industry_report", "20 15 * * 1-5", {})
+
+    def test_industry_report_ok(self):
+        validate_schedule("industry_report", "20 15 * * 1-5", {"board_key": "tungsten"})
+
     def test_unsupported_task_type(self):
         with pytest.raises(ValueError, match="不支持的 task_type"):
             validate_schedule("unknown", "20 15 * * 1-5", {})

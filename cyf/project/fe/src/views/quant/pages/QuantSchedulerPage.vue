@@ -73,6 +73,8 @@
                 <el-option label="定时拉数" value="data_sync" />
                 <el-option label="测试报告" value="analysis_report" />
                 <el-option label="记忆梳理" value="memory_digest" />
+                <el-option label="行业采集" value="industry_collect" />
+                <el-option label="行业日报" value="industry_report" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -211,6 +213,65 @@
           <el-form label-position="top">
             <el-form-item label="附带未通过信号">
               <el-checkbox v-model="workbench.scheduleForm.analysisSaveAllSignals">保存全部信号，方便复盘</el-checkbox>
+            </el-form-item>
+          </el-form>
+        </template>
+
+        <template v-else-if="workbench.scheduleForm.taskType === 'industry_collect'">
+          <el-form label-position="top">
+            <el-form-item label="行业板块">
+              <el-select
+                v-model="workbench.scheduleForm.industryBoardIds"
+                multiple
+                filterable
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="选择需要采集的行业板块"
+              >
+                <el-option v-for="item in workbench.industryBoards" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top">
+            <el-form-item label="采集范围">
+              <el-checkbox-group v-model="workbench.scheduleForm.industryTargets">
+                <el-checkbox label="market">行情资金</el-checkbox>
+                <el-checkbox label="announcements">公告</el-checkbox>
+                <el-checkbox label="news">新闻</el-checkbox>
+                <el-checkbox label="research_reports">研报</el-checkbox>
+                <el-checkbox label="indicators">指标</el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </el-form>
+        </template>
+
+        <template v-else-if="workbench.scheduleForm.taskType === 'industry_report'">
+          <el-form label-position="top">
+            <el-form-item label="行业板块">
+              <el-select
+                v-model="workbench.scheduleForm.industryBoardIds"
+                multiple
+                filterable
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="选择需要生成日报的行业板块"
+              >
+                <el-option v-for="item in workbench.industryBoards" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top">
+            <el-form-item label="自动推送 IM 通道（可选）">
+              <el-select
+                v-model="workbench.scheduleForm.industryChannelIds"
+                multiple
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="生成行业日报后自动推送"
+              >
+                <el-option v-for="item in workbench.imChannels" :key="item.id" :label="item.name" :value="item.id" />
+              </el-select>
             </el-form-item>
           </el-form>
         </template>

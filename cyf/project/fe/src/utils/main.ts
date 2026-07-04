@@ -15,6 +15,7 @@ export interface FormData {
     dialogHistory: any[];
     loadingHistory: boolean;
     isLoading: boolean;
+    contextTotalTokens: number;
     models: Array<{ group: string, label: string, value: string, recommend?: boolean, allow_net?: boolean, model_desc?: string, model_type?: number }>;
     groupedModels: Record<string, any[]>;
     providers: string[];

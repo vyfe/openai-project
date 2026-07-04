@@ -123,6 +123,7 @@ def app(test_settings, test_db):
     from routes.quant.data_routes import bp as quant_data_bp
     from routes.quant.scheduler_routes import bp as quant_scheduler_bp
     from routes.quant.client_routes import bp as quant_client_bp
+    from routes.quant.industry_routes import bp as quant_industry_bp
 
     _app = create_app()
     _app.register_blueprint(public_bp)
@@ -134,6 +135,7 @@ def app(test_settings, test_db):
     _app.register_blueprint(quant_data_bp)
     _app.register_blueprint(quant_scheduler_bp)
     _app.register_blueprint(quant_client_bp)
+    _app.register_blueprint(quant_industry_bp)
     _app.config["TESTING"] = True
     return _app
 

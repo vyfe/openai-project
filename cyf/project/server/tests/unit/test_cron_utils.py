@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from service.quant.cron_utils import CronExpression, cron_matches
+from service.quant.trade_calendar_service import resolve_trade_date_for_schedule
 
 
 class TestCronExpressionParsing:
@@ -85,3 +86,7 @@ class TestCronExpressionMatching:
         assert cron.matches(datetime(2025, 1, 13, 10, 0)) is True
         assert cron.matches(datetime(2025, 1, 13, 10, 5)) is True
         assert cron.matches(datetime(2025, 1, 13, 10, 3)) is False
+
+
+def test_trade_calendar_out_of_range_falls_back_to_weekday():
+    assert resolve_trade_date_for_schedule(datetime(2026, 7, 5, 12, 0)).isoformat() == "2026-07-03"

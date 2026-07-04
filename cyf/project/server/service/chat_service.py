@@ -10,6 +10,7 @@ from model.repositories.user_repository import check_test_limit_exceeded, get_us
 from service.common_service import handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user, get_claude_client_for_user, is_claude_model
+from service.llm_usage_service import normalize_usage
 from service.message_normalizer import (
     build_parts_from_message,
     convert_dialog_for_claude,
@@ -126,6 +127,7 @@ def run_chat_completion(user: str, payload, logger):
 
     # === Claude 分支 ===
     if is_claude_model(model):
+        url_index = 0
         try:
             client, url_index = get_claude_client_for_user(user)
             result_data = run_claude_chat_completion(
@@ -135,7 +137,8 @@ def run_chat_completion(user: str, payload, logger):
                 max_tokens=payload.max_response_tokens or 102400,
                 logger=logger,
             )
-            tokens = result_data.get("usage", {}).get("total_tokens", 0)
+            usage = normalize_usage(result_data.get("usage", {}))
+            tokens = usage.get("total_tokens", 0)
             set_log(user, tokens, model, json.dumps(result_data.get("raw_response", {})))
 
             request_messages = stamp_latest_user_message(dialogvo)
@@ -151,7 +154,7 @@ def run_chat_completion(user: str, payload, logger):
                 model,
                 "chat",
                 title,
-                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting, usage),
             )
             response_data = {
                 "role": "assistant",
@@ -159,6 +162,7 @@ def run_chat_completion(user: str, payload, logger):
                 "parts": result_data.get("parts", build_parts_from_message({"content": result_data["content"]})),
                 "finish_reason": result_data.get("finish_reason", "end_turn"),
                 "time": assistant_time,
+                "usage": usage,
             }
             if dialog_id:
                 response_data["dialog_id"] = dialog_id
@@ -172,10 +176,12 @@ def run_chat_completion(user: str, payload, logger):
         "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
         "max_tokens": payload.max_response_tokens or 102400,
     }
+    url_index = 0
     try:
         client, url_index = get_client_for_user(user)
         result = client.chat.completions.create(**api_params)
-        tokens = result.usage.total_tokens
+        usage = normalize_usage(result.usage)
+        tokens = usage.get("total_tokens", 0)
         set_log(user, tokens, model, json.dumps(result.to_dict()))
         request_messages = stamp_latest_user_message(dialogvo)
         assistant_time = current_time_str()
@@ -188,7 +194,7 @@ def run_chat_completion(user: str, payload, logger):
             model,
             "chat",
             title,
-            build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting),
+            build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting, usage),
         )
         response_data = {
             "role": result.choices[0].message.role,
@@ -196,6 +202,7 @@ def run_chat_completion(user: str, payload, logger):
             "parts": assistant_message.get("parts", build_parts_from_message({"content": result.choices[0].message.content})),
             "finish_reason": result.choices[0].finish_reason,
             "time": assistant_time,
+            "usage": usage,
         }
         if dialog_id:
             response_data["dialog_id"] = dialog_id
