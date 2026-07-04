@@ -40,13 +40,11 @@ npm run build
 echo "✅ 前端构建完成"
 
 # 打包前端构建结果
-cd dist
-tar -czvf ../dist/fe.tar.gz ./
+tar -czvf "$PROJECT_ROOT/dist/fe.tar.gz" -C "$PROJECT_ROOT/cyf/project/fe/dist" ./
 
 echo "✅ 前端打包完成"
 
 mkdir -p $PROJECT_ROOT/dist
-cp $PROJECT_ROOT/cyf/project/fe/dist/fe.tar.gz $PROJECT_ROOT/dist/
 cp $PROJECT_ROOT/cyf/project/server/dist/server.tar.gz $PROJECT_ROOT/dist/
 echo "🎉 打包&移动完成！"
 
@@ -58,4 +56,3 @@ echo ""
 echo "💡 接下来步骤："
 echo "1. 将这两个压缩包上传到服务器"
 echo "2. 在服务器上运行 start-prod.sh 脚本部署服务"
-
