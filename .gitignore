@@ -2,6 +2,7 @@ cyf/project/*/conf/conf.ini
 cyf/project/*/conf/role_init.sql
 # 密钥
 cyf/project/*/conf/key.*
+cyf/project/server/logs
 cyf/project/server/*.db
 cyf/project/server/*.db-shm
 cyf/project/server/*.db-wal
@@ -13,5 +14,6 @@ cyf/project/fe/node_*/*
 .codex/
 .idea/
 .joycode/
+.playwright-mcp/
 **/__pycache__/
 cyf/project/server/.pip_cache_timestamp
