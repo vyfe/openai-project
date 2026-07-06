@@ -1,13 +1,17 @@
 import json
+from datetime import datetime
 
 from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, parse_json_list, success_response
+from quant.entities import QuantInstrument
+from quant_client.bundle_builder import build_fetch_bundle
 from service.quant.dashboard_service import get_dashboard_overview
 from service.quant.import_service import fetch_import_batches, import_bundle, parse_bundle_bytes
 from service.quant.position_service import enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
 from service.quant.query_service import fetch_daily_bars
+from service.quant.common import infer_exchange, normalize_code, normalize_symbol
 from service.quant.symbol_search_service import search_symbols_fallback
 from service.auth_service import require_admin_auth, require_auth
 
@@ -90,6 +94,100 @@ def quant_data_backfill(user, password):
         return success_response(data=result, msg="历史补数任务已创建")
     except Exception as exc:
         return error_response(f"创建历史补数任务失败: {exc}")
+
+
+@bp.route("/symbols/upsert", methods=["POST"])
+@require_admin_auth
+def quant_symbol_upsert():
+    try:
+        data = get_request_data()
+        raw_symbol = str(data.get("symbol") or data.get("code") or "").strip()
+        if not raw_symbol:
+            return error_response("symbol 不能为空")
+
+        symbol = normalize_symbol(raw_symbol)
+        code = normalize_code(symbol)
+        exchange = str(data.get("exchange") or infer_exchange(symbol)).strip().upper()
+        name = str(data.get("name") or "").strip()
+        source = str(data.get("source") or "manual").strip() or "manual"
+        now = datetime.now()
+        payload = {
+            "symbol": symbol,
+            "code": code,
+            "exchange": exchange,
+            "market": "A_SHARE",
+            "name": name,
+            "source": source,
+            "status": "active",
+            "created_at": now,
+            "updated_at": now,
+        }
+        QuantInstrument.insert(payload).on_conflict(
+            conflict_target=[QuantInstrument.symbol],
+            update={
+                QuantInstrument.code: code,
+                QuantInstrument.exchange: exchange,
+                QuantInstrument.market: "A_SHARE",
+                QuantInstrument.name: name,
+                QuantInstrument.source: source,
+                QuantInstrument.status: "active",
+                QuantInstrument.updated_at: now,
+            },
+        ).execute()
+        saved = QuantInstrument.get(QuantInstrument.symbol == symbol)
+        return success_response(
+            data={
+                "symbol": saved.symbol,
+                "code": saved.code,
+                "exchange": saved.exchange,
+                "market": saved.market,
+                "name": saved.name,
+                "source": saved.source,
+                "status": saved.status,
+            },
+            msg="股票池已更新",
+        )
+    except Exception as exc:
+        return error_response(f"保存股票失败: {exc}")
+
+
+@bp.route("/data/fetch_now", methods=["POST"])
+@require_admin_auth
+def quant_data_fetch_now():
+    try:
+        data = get_request_data()
+        symbols = parse_json_list(data.get("symbols"))
+        if not symbols:
+            raw_symbols = str(data.get("symbols_text", "")).strip()
+            if raw_symbols:
+                symbols = [item.strip() for item in raw_symbols.split(",") if item.strip()]
+        if not symbols:
+            return error_response("symbols 不能为空")
+
+        start_date = str(data.get("start_date", "")).strip()
+        end_date = str(data.get("end_date", "")).strip()
+        if not start_date or not end_date:
+            return error_response("start_date 和 end_date 不能为空")
+
+        bundle = build_fetch_bundle(
+            provider_name=str(data.get("provider", "auto")).strip() or "auto",
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            adjust_flag=str(data.get("adjust_flag", "qfq")).strip() or "qfq",
+        )
+        payload_bytes = json.dumps(bundle, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        result = import_bundle(bundle, payload_bytes=payload_bytes)
+        return success_response(
+            data={
+                **result,
+                "source": bundle.get("source"),
+                "records_total": len(bundle.get("records") or []),
+            },
+            msg="手动拉数并导入成功",
+        )
+    except Exception as exc:
+        return error_response(f"手动拉数失败: {exc}")
 
 
 @bp.route("/data/daily_bars", methods=["GET"])

@@ -28,6 +28,7 @@ task_type_var: ContextVar[str] = ContextVar("task_type", default="")
 
 _RUNTIME_ROTATED_LOG_PATTERN = re.compile(r".+\.log\.\d{4}-\d{2}-\d{2}$")
 _SCHEDULE_RUN_LOG_PATTERN = re.compile(r"^schedule-run-\d+-\d{8}T\d{6}\.log$")
+_SCHEDULE_RUN_LOG_GZ_PATTERN = re.compile(r"^schedule-run-\d+-\d{8}T\d{6}\.log\.gz$")
 
 
 @dataclass(frozen=True)
@@ -149,23 +150,39 @@ def cleanup_runtime_logs() -> int:
     archive_days = max(plain_days, int(runtime_state.settings.runtime_log_archive_retention_days or 30))
     cutoff_plain = datetime.now() - timedelta(days=plain_days)
     cutoff_archive = datetime.now() - timedelta(days=archive_days)
-    seen_roots = set()
-    for root in (runtime_log_root(), schedule_run_log_dir()):
-        if root in seen_roots:
-            continue
-        seen_roots.add(root)
-        for dirpath, _, filenames in os.walk(root):
-            for filename in filenames:
-                full_path = os.path.join(dirpath, filename)
-                if _maybe_archive_runtime_log(full_path, filename, cutoff_plain):
+    for dirpath, _, filenames in os.walk(runtime_log_root()):
+        for filename in filenames:
+            full_path = os.path.join(dirpath, filename)
+            if _maybe_archive_runtime_log(full_path, filename, cutoff_plain):
+                removed += 1
+                continue
+            if _should_remove_runtime_log(full_path, filename, cutoff_archive):
+                try:
+                    os.remove(full_path)
                     removed += 1
+                except OSError:
                     continue
-                if _should_remove_runtime_log(full_path, filename, cutoff_archive):
-                    try:
-                        os.remove(full_path)
-                        removed += 1
-                    except OSError:
-                        continue
+    return removed
+
+
+def cleanup_schedule_run_logs(retention_days: int | None = None) -> int:
+    removed = 0
+    days = max(1, int(retention_days or runtime_state.settings.quant_schedule_log_retention_days or 7))
+    cutoff = datetime.now() - timedelta(days=days)
+    for dirpath, _, filenames in os.walk(schedule_run_log_dir()):
+        for filename in filenames:
+            if not _is_schedule_run_log_file(filename):
+                continue
+            full_path = os.path.join(dirpath, filename)
+            if not os.path.isfile(full_path):
+                continue
+            if datetime.fromtimestamp(os.path.getmtime(full_path)) >= cutoff:
+                continue
+            try:
+                os.remove(full_path)
+                removed += 1
+            except OSError:
+                continue
     return removed
 
 
@@ -188,11 +205,17 @@ def _maybe_archive_runtime_log(full_path: str, filename: str, cutoff_plain: date
 
 
 def _is_archivable_log_file(filename: str) -> bool:
-    return bool(_RUNTIME_ROTATED_LOG_PATTERN.match(filename) or _SCHEDULE_RUN_LOG_PATTERN.match(filename))
+    return bool(_RUNTIME_ROTATED_LOG_PATTERN.match(filename))
+
+
+def _is_schedule_run_log_file(filename: str) -> bool:
+    return bool(_SCHEDULE_RUN_LOG_PATTERN.match(filename) or _SCHEDULE_RUN_LOG_GZ_PATTERN.match(filename))
 
 
 def _should_remove_runtime_log(full_path: str, filename: str, cutoff_archive: datetime) -> bool:
     if not os.path.isfile(full_path):
+        return False
+    if _is_schedule_run_log_file(filename):
         return False
     if not filename.endswith(".gz"):
         return False

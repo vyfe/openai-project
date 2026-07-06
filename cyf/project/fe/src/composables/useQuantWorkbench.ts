@@ -234,9 +234,21 @@ export type PositionSummaryRecord = {
   sources?: string[]
 }
 
+export type SymbolOption = {
+  symbol: string
+  code: string
+  exchange: string
+  name?: string
+  source?: string
+  type?: string
+}
+
 function createQuantWorkbench() {
   const providers = ref<string[]>([])
-  const symbolOptions = ref<Array<{ symbol: string; code: string; exchange: string; name?: string }>>([])
+  const symbolOptions = ref<SymbolOption[]>([])
+  const symbolSearchOptions = ref<SymbolOption[]>([])
+  const symbolSearchKeyword = ref('')
+  const visibleSymbolOptions = computed(() => (symbolSearchKeyword.value ? symbolSearchOptions.value : symbolOptions.value))
   const importBatches = ref<any[]>([])
   const clientTasks = ref<any[]>([])
   const dailyBars = ref<any[]>([])
@@ -286,6 +298,9 @@ function createQuantWorkbench() {
     runs: false,
     signals: false,
     createTask: false,
+    symbolSearch: false,
+    savingSymbol: false,
+    fetchNow: false,
     operations: false,
     savingOperation: false,
     backtests: false,
@@ -329,6 +344,12 @@ function createQuantWorkbench() {
     adjustFlag: 'qfq',
     note: '',
     leaseSeconds: 600
+  })
+
+  const stockPoolForm = reactive({
+    keyword: '',
+    selectedSymbol: '',
+    selectedOption: null as SymbolOption | null
   })
 
   const backfillForm = reactive({
@@ -1082,6 +1103,91 @@ function createQuantWorkbench() {
     symbolOptions.value = response.data || []
   }
 
+  const mergeSymbolOptions = (items: SymbolOption[] = []) => {
+    const merged = new Map<string, SymbolOption>()
+    for (const item of symbolOptions.value) {
+      if (item?.symbol) merged.set(item.symbol, item)
+    }
+    for (const item of items) {
+      if (!item?.symbol) continue
+      merged.set(item.symbol, { ...merged.get(item.symbol), ...item })
+    }
+    symbolOptions.value = Array.from(merged.values()).sort((a, b) => a.symbol.localeCompare(b.symbol))
+  }
+
+  const normalizeSymbolInputOption = (value: string): SymbolOption | null => {
+    const raw = String(value || '').trim()
+    if (!raw) return null
+    const upper = raw.toUpperCase()
+    if (!/^\d{6}(\.(SH|SZ|BJ))?$/.test(upper)) return null
+    const code = upper.includes('.') ? upper.split('.')[0] : upper
+    let exchange = upper.includes('.') ? upper.split('.')[1] : ''
+    if (!exchange) {
+      if (/^[659]/.test(code)) exchange = 'SH'
+      else if (/^[023]/.test(code)) exchange = 'SZ'
+      else if (/^[48]/.test(code)) exchange = 'BJ'
+    }
+    const symbol = exchange ? `${code}.${exchange}` : upper
+    return { symbol, code, exchange, name: '' }
+  }
+
+  const searchSymbols = async (keyword: string) => {
+    const finalKeyword = String(keyword || '').trim()
+    symbolSearchKeyword.value = finalKeyword
+    if (!finalKeyword) {
+      symbolSearchOptions.value = []
+      return []
+    }
+    symbolSearchOptions.value = []
+    loading.symbolSearch = true
+    try {
+      const response: any = await quantDataAPI.symbolSearch({ keyword: finalKeyword, limit: 20 })
+      const results: SymbolOption[] = response.data || []
+      const direct = normalizeSymbolInputOption(finalKeyword)
+      const withDirect = direct && !results.some(item => item.symbol === direct.symbol)
+        ? [direct, ...results]
+        : results
+      symbolSearchOptions.value = withDirect
+      return withDirect
+    } finally {
+      loading.symbolSearch = false
+    }
+  }
+
+  const handleStockPoolSelect = (symbol: string) => {
+    const matched = [...symbolSearchOptions.value, ...symbolOptions.value].find(item => item.symbol === symbol)
+    stockPoolForm.selectedSymbol = symbol
+    stockPoolForm.selectedOption = matched || normalizeSymbolInputOption(symbol)
+  }
+
+  const addSelectedSymbolToPool = async () => {
+    const option = stockPoolForm.selectedOption || normalizeSymbolInputOption(stockPoolForm.selectedSymbol || stockPoolForm.keyword)
+    if (!option?.symbol) {
+      ElMessage.warning('先搜索并选择一个股票')
+      return
+    }
+    loading.savingSymbol = true
+    try {
+      const response: any = await quantDataAPI.upsertSymbol({
+        symbol: option.symbol,
+        code: option.code,
+        exchange: option.exchange,
+        name: option.name || '',
+        source: option.source || 'manual_search'
+      })
+      const saved = response.data || option
+      mergeSymbolOptions([saved])
+      stockPoolForm.selectedSymbol = saved.symbol
+      stockPoolForm.selectedOption = saved
+      ElMessage.success(`已加入股票池：${saved.symbol}${saved.name ? ` · ${saved.name}` : ''}`)
+      await loadSymbols()
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加入股票池失败')
+    } finally {
+      loading.savingSymbol = false
+    }
+  }
+
   const loadIndustryBoards = async () => {
     await quantIndustryAPI.initDefaults()
     const response: any = await quantIndustryAPI.boards({ status: 'active' })
@@ -1268,6 +1374,35 @@ function createQuantWorkbench() {
       ElMessage.error(error?.message || '创建任务失败')
     } finally {
       loading.createTask = false
+    }
+  }
+
+  const fetchNowFromTaskForm = async () => {
+    if (!taskForm.symbols.length || !taskForm.startDate || !taskForm.endDate) {
+      ElMessage.warning('请先补全股票池和时间范围')
+      return
+    }
+    loading.fetchNow = true
+    try {
+      const response: any = await quantDataAPI.fetchNow({
+        symbols: taskForm.symbols,
+        start_date: taskForm.startDate,
+        end_date: taskForm.endDate,
+        provider: taskForm.provider,
+        adjust_flag: taskForm.adjustFlag
+      })
+      const result = response.data || {}
+      ElMessage.success(`手动拉数完成：导入 ${result.records_imported ?? result.records_total ?? 0} 条`)
+      if (taskForm.symbols[0]) {
+        dailyQuery.symbol = taskForm.symbols[0]
+        dailyQuery.startDate = taskForm.startDate
+        dailyQuery.endDate = taskForm.endDate
+      }
+      await Promise.all([loadImportBatches(), loadSymbols(), loadDailyBars(), loadOverview()])
+    } catch (error: any) {
+      ElMessage.error(error?.message || '手动拉数失败')
+    } finally {
+      loading.fetchNow = false
     }
   }
 
@@ -1886,6 +2021,8 @@ function createQuantWorkbench() {
   return {
     providers,
     symbolOptions,
+    symbolSearchOptions,
+    visibleSymbolOptions,
     importBatches,
     clientTasks,
     dailyBars,
@@ -1924,6 +2061,7 @@ function createQuantWorkbench() {
     loading,
     dailyQuery,
     taskForm,
+    stockPoolForm,
     backfillForm,
     defaultRuleConfig,
     breakoutRuleConfig,
@@ -2003,6 +2141,9 @@ function createQuantWorkbench() {
     loadPositionJournal,
     loadProviders,
     loadSymbols,
+    searchSymbols,
+    handleStockPoolSelect,
+    addSelectedSymbolToPool,
     loadIndustryBoards,
     loadImportBatches,
     loadTasks,
@@ -2017,6 +2158,7 @@ function createQuantWorkbench() {
     loadScheduleRuns,
     loadScheduleRunLog,
     createTask,
+    fetchNowFromTaskForm,
     createBackfillTask,
     resetTask,
     saveStrategy,

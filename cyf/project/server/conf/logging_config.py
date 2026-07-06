@@ -13,6 +13,7 @@ from conf.runtime import runtime_state
 from conf.runtime_logging import (
     client_ip_var,
     cleanup_runtime_logs,
+    cleanup_schedule_run_logs,
     configure_logger,
     duration_ms_var,
     method_var,
@@ -85,6 +86,7 @@ def configure_logging(app: Flask, debug: bool = False):
     _configure_named_loggers()
     _bind_app_logger(app)
     cleanup_runtime_logs()
+    cleanup_schedule_run_logs()
     _register_request_logging(app)
     _start_log_maintenance_thread()
     return app.logger
@@ -95,6 +97,7 @@ def configure_root_logging(debug: bool = True):
     _configure_root_logger()
     _configure_named_loggers()
     cleanup_runtime_logs()
+    cleanup_schedule_run_logs()
     return logging.getLogger()
 
 
@@ -136,6 +139,7 @@ def _start_log_maintenance_thread():
         while not _LOG_MAINTENANCE_STOP.is_set():
             try:
                 cleanup_runtime_logs()
+                cleanup_schedule_run_logs()
             except Exception:
                 logging.getLogger("llm.web").exception("runtime log cleanup failed")
             _LOG_MAINTENANCE_STOP.wait(timeout=6 * 60 * 60)

@@ -59,15 +59,64 @@
           </div>
           <div class="quant-toolbar">
             <el-button type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">创建任务</el-button>
+            <el-button plain :icon="Download" @click="workbench.fetchNowFromTaskForm" :loading="workbench.loading.fetchNow">手动拉数验证</el-button>
             <el-button plain :icon="Promotion" @click="workbench.createBackfillTask" :loading="workbench.loading.createTask">补历史数据</el-button>
+          </div>
+        </div>
+
+        <div class="quant-mini-section quant-mini-section--first">
+          <div class="quant-mini-section__title">
+            <span>搜索并加入股票池</span>
+            <span class="quant-muted">支持股票代码、名称和拼音；加入后所有股票池下拉立即可选。</span>
+          </div>
+          <div class="quant-symbol-add-row">
+            <el-select
+              v-model="workbench.stockPoolForm.selectedSymbol"
+              filterable
+              remote
+              clearable
+              reserve-keyword
+              allow-create
+              default-first-option
+              placeholder="输入 000657 / 中钨高新"
+              :remote-method="workbench.searchSymbols"
+              :loading="workbench.loading.symbolSearch"
+              @change="workbench.handleStockPoolSelect"
+            >
+              <el-option
+                v-for="item in workbench.visibleSymbolOptions"
+                :key="item.symbol"
+                :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                :value="item.symbol"
+              />
+            </el-select>
+            <el-button type="primary" :loading="workbench.loading.savingSymbol" @click="workbench.addSelectedSymbolToPool">加入股票池</el-button>
           </div>
         </div>
 
         <div class="quant-form-stack">
           <el-form label-position="top">
             <el-form-item label="股票池">
-              <el-select v-model="workbench.taskForm.symbols" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择一个或多个标的">
-                <el-option v-for="item in workbench.symbolOptions" :key="item.symbol" :label="item.symbol" :value="item.symbol" />
+              <el-select
+                v-model="workbench.taskForm.symbols"
+                multiple
+                filterable
+                remote
+                reserve-keyword
+                allow-create
+                default-first-option
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="搜索或选择一个或多个标的"
+                :remote-method="workbench.searchSymbols"
+                :loading="workbench.loading.symbolSearch"
+              >
+                <el-option
+                  v-for="item in workbench.visibleSymbolOptions"
+                  :key="item.symbol"
+                  :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                  :value="item.symbol"
+                />
               </el-select>
             </el-form-item>
           </el-form>
@@ -116,8 +165,26 @@
           <div class="quant-form-grid quant-form-grid--two">
             <el-form label-position="top">
               <el-form-item label="股票池">
-                <el-select v-model="workbench.backfillForm.symbols" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择要补数的股票">
-                  <el-option v-for="item in workbench.symbolOptions" :key="item.symbol" :label="item.symbol" :value="item.symbol" />
+                <el-select
+                  v-model="workbench.backfillForm.symbols"
+                  multiple
+                  filterable
+                  remote
+                  reserve-keyword
+                  allow-create
+                  default-first-option
+                  collapse-tags
+                  collapse-tags-tooltip
+                  placeholder="搜索或选择要补数的股票"
+                  :remote-method="workbench.searchSymbols"
+                  :loading="workbench.loading.symbolSearch"
+                >
+                  <el-option
+                    v-for="item in workbench.visibleSymbolOptions"
+                    :key="item.symbol"
+                    :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                    :value="item.symbol"
+                  />
                 </el-select>
               </el-form-item>
             </el-form>
@@ -196,7 +263,7 @@
 </template>
 
 <script setup lang="ts">
-import { Promotion, RefreshRight, Search } from '@element-plus/icons-vue'
+import { Download, Promotion, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 
 const workbench = useQuantWorkbench()

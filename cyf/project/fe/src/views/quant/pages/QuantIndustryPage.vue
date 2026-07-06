@@ -22,6 +22,36 @@
         <el-button plain @click="loadPreview" :loading="loading.preview">日报预览</el-button>
       </div>
 
+      <div class="quant-mini-section quant-mini-section--first">
+        <div class="quant-mini-section__title">
+          <span>添加行业标的</span>
+          <span class="quant-muted">只保存到当前行业，不自动采集；保存后可手动点“行情资金”。</span>
+        </div>
+        <div class="quant-symbol-add-row">
+          <el-select
+            v-model="industrySymbolForm.selectedSymbol"
+            filterable
+            remote
+            clearable
+            reserve-keyword
+            allow-create
+            default-first-option
+            placeholder="输入股票代码或名称"
+            :remote-method="searchSymbols"
+            :loading="loading.symbolSearch"
+            @change="handleIndustrySymbolSelect"
+          >
+            <el-option
+              v-for="item in symbolSearchOptions"
+              :key="item.symbol"
+              :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+              :value="item.symbol"
+            />
+          </el-select>
+          <el-button type="primary" :loading="loading.addSymbol" @click="addIndustrySymbol">添加到行业</el-button>
+        </div>
+      </div>
+
       <el-alert
         v-if="lastCollectResult"
         class="quant-industry-alert"
@@ -48,6 +78,19 @@
           </div>
         </article>
         <div v-if="!(dashboard?.latest_cards || []).length" class="quant-empty-card">暂无行情快照</div>
+      </div>
+
+      <div class="quant-mini-section">
+        <div class="quant-mini-section__title">
+          <span>当前行业标的</span>
+          <span class="quant-muted">未出现行情卡片的标的需要先采集行情。</span>
+        </div>
+        <div class="quant-pill-list">
+          <span v-for="item in industrySymbols" :key="item.symbol" class="quant-pill">
+            {{ item.symbol }}{{ item.name ? ` · ${item.name}` : '' }}
+          </span>
+          <span v-if="!industrySymbols.length" class="quant-muted">暂无标的</span>
+        </div>
       </div>
     </section>
 
@@ -120,7 +163,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, RefreshRight } from '@element-plus/icons-vue'
-import { quantIndustryAPI } from '@/services/quantApi'
+import { quantDataAPI, quantIndustryAPI } from '@/services/quantApi'
 
 const boards = ref<any[]>([])
 const selectedBoardId = ref<number | null>(null)
@@ -128,6 +171,11 @@ const dashboard = ref<any>(null)
 const lastCollectResult = ref<any>(null)
 const reportPreview = ref('')
 const previewVisible = ref(false)
+const symbolSearchOptions = ref<any[]>([])
+const industrySymbolForm = reactive({
+  selectedSymbol: '',
+  selectedOption: null as any
+})
 const loading = reactive({
   boards: false,
   dashboard: false,
@@ -135,10 +183,13 @@ const loading = reactive({
   collectMarket: false,
   collectNews: false,
   collectReports: false,
-  preview: false
+  preview: false,
+  symbolSearch: false,
+  addSymbol: false
 })
 
 const activeBoard = computed(() => boards.value.find(item => item.id === selectedBoardId.value) || dashboard.value?.board)
+const industrySymbols = computed(() => activeBoard.value?.symbols || dashboard.value?.symbols || [])
 const collectSummary = computed(() => {
   const result = lastCollectResult.value
   if (!result) return ''
@@ -153,6 +204,95 @@ const collectSummary = computed(() => {
   if (result.errors?.length) fragments.push(`错误 ${result.errors.length}`)
   return fragments.join('，')
 })
+
+function normalizeSymbolInputOption(value: string) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const upper = raw.toUpperCase()
+  if (!/^\d{6}(\.(SH|SZ|BJ))?$/.test(upper)) return null
+  const code = upper.includes('.') ? upper.split('.')[0] : upper
+  let exchange = upper.includes('.') ? upper.split('.')[1] : ''
+  if (!exchange) {
+    if (/^[659]/.test(code)) exchange = 'SH'
+    else if (/^[023]/.test(code)) exchange = 'SZ'
+    else if (/^[48]/.test(code)) exchange = 'BJ'
+  }
+  const symbol = exchange ? `${code}.${exchange}` : upper
+  return { symbol, code, exchange, name: '' }
+}
+
+async function searchSymbols(keyword: string) {
+  const finalKeyword = String(keyword || '').trim()
+  if (!finalKeyword) {
+    symbolSearchOptions.value = []
+    return
+  }
+  loading.symbolSearch = true
+  try {
+    const response: any = await quantDataAPI.symbolSearch({ keyword: finalKeyword, limit: 20 })
+    const results = response.data || []
+    const direct = normalizeSymbolInputOption(finalKeyword)
+    symbolSearchOptions.value = direct && !results.some((item: any) => item.symbol === direct.symbol)
+      ? [direct, ...results]
+      : results
+  } finally {
+    loading.symbolSearch = false
+  }
+}
+
+function handleIndustrySymbolSelect(symbol: string) {
+  industrySymbolForm.selectedSymbol = symbol
+  industrySymbolForm.selectedOption = symbolSearchOptions.value.find(item => item.symbol === symbol) || normalizeSymbolInputOption(symbol)
+}
+
+async function addIndustrySymbol() {
+  const board = activeBoard.value
+  if (!board) return ElMessage.warning('先选择行业板块')
+  const option = industrySymbolForm.selectedOption || normalizeSymbolInputOption(industrySymbolForm.selectedSymbol)
+  if (!option?.symbol) return ElMessage.warning('先搜索并选择一个股票')
+  if ((industrySymbols.value || []).some((item: any) => item.symbol === option.symbol)) {
+    return ElMessage.info('该股票已在当前行业中')
+  }
+  loading.addSymbol = true
+  try {
+    const nextSymbols = [
+      ...(industrySymbols.value || []).map((item: any) => ({
+        symbol: item.symbol,
+        name: item.name || '',
+        role: item.role || '',
+        weight: item.weight || 1,
+        status: item.status || 'active',
+        keywords: item.keywords || []
+      })),
+      {
+        symbol: option.symbol,
+        name: option.name || '',
+        role: '',
+        weight: 1,
+        status: 'active',
+        keywords: [option.name, option.code || option.symbol].filter(Boolean)
+      }
+    ]
+    await quantIndustryAPI.saveBoard({
+      board_key: board.board_key,
+      name: board.name,
+      description: board.description || '',
+      keywords: board.keywords || [],
+      symbols: nextSymbols,
+      status: board.status || 'active'
+    })
+    ElMessage.success(`已添加行业标的：${option.symbol}${option.name ? ` · ${option.name}` : ''}`)
+    industrySymbolForm.selectedSymbol = ''
+    industrySymbolForm.selectedOption = null
+    symbolSearchOptions.value = []
+    await loadBoards()
+    await loadDashboard()
+  } catch (error: any) {
+    ElMessage.error(error?.message || '添加行业标的失败')
+  } finally {
+    loading.addSymbol = false
+  }
+}
 
 async function loadBoards() {
   loading.boards = true

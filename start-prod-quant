@@ -20,6 +20,10 @@ LOG_ROOT="$SERVER_DIR/logs"
 QUANT_LOG_DIR="$LOG_ROOT/quant"
 AGENT_LOG="$QUANT_LOG_DIR/agent.log"
 SCHEDULER_LOG="$QUANT_LOG_DIR/scheduler.log"
+RUN_DIR="$SERVER_DIR/run"
+LAUNCHER_PID_FILE="$RUN_DIR/start-prod-quant.pid"
+AGENT_PID_FILE="$RUN_DIR/quant-agent.pid"
+SCHEDULER_PID_FILE="$RUN_DIR/quant-scheduler.pid"
 
 # 默认选项
 START_AGENT=false
@@ -61,25 +65,137 @@ fi
 
 # 生产 Python
 PYTHON_BIN="python3"
+CURRENT_LINEAGE=" "
+
+is_running_pid() {
+    local pid="${1:-}"
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+prepare_current_lineage() {
+    local pid="$$"
+    local ppid
+    CURRENT_LINEAGE=" "
+    while [[ "$pid" =~ ^[0-9]+$ ]] && [ "$pid" -gt 0 ]; do
+        CURRENT_LINEAGE="${CURRENT_LINEAGE}${pid} "
+        ppid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
+        if [ -z "$ppid" ] || [ "$ppid" = "$pid" ]; then
+            break
+        fi
+        pid="$ppid"
+    done
+}
+
+is_current_lineage_pid() {
+    local pid="${1:-}"
+    [[ "$CURRENT_LINEAGE" == *" $pid "* ]]
+}
+
+append_pid() {
+    local pid="${1:-}"
+    if ! is_running_pid "$pid"; then
+        return
+    fi
+    if is_current_lineage_pid "$pid" || [ "$pid" = "${BASHPID:-$$}" ]; then
+        return
+    fi
+    STOP_PIDS+=("$pid")
+}
+
+append_pid_file() {
+    local file="$1"
+    if [ -f "$file" ]; then
+        append_pid "$(tr -cd '0-9' < "$file" 2>/dev/null || true)"
+    fi
+}
+
+append_pgrep() {
+    local pattern="$1"
+    local pid
+    while IFS= read -r pid; do
+        append_pid "$pid"
+    done < <(pgrep -f "$pattern" 2>/dev/null || true)
+}
+
+unique_stop_pids() {
+    local seen=" "
+    local pid
+    UNIQUE_STOP_PIDS=()
+    for pid in "${STOP_PIDS[@]:-}"; do
+        if [[ "$seen" != *" $pid "* ]]; then
+            UNIQUE_STOP_PIDS+=("$pid")
+            seen="$seen$pid "
+        fi
+    done
+}
+
+expand_descendant_pids() {
+    local changed=true
+    local pid
+    local child
+    while [ "$changed" = true ]; do
+        changed=false
+        unique_stop_pids
+        for pid in "${UNIQUE_STOP_PIDS[@]:-}"; do
+            while IFS= read -r child; do
+                if ! is_running_pid "$child" || is_current_lineage_pid "$child"; then
+                    continue
+                fi
+                if [[ " ${STOP_PIDS[*]:-} " != *" $child "* ]]; then
+                    STOP_PIDS+=("$child")
+                    changed=true
+                fi
+            done < <(pgrep -P "$pid" 2>/dev/null || true)
+        done
+    done
+}
+
+terminate_pids() {
+    expand_descendant_pids
+    unique_stop_pids
+    if [ "${#UNIQUE_STOP_PIDS[@]}" -eq 0 ]; then
+        echo "ℹ️  未发现需要停止的旧量化进程"
+        return
+    fi
+
+    echo "⚠️  终止量化进程: ${UNIQUE_STOP_PIDS[*]}"
+    kill "${UNIQUE_STOP_PIDS[@]}" 2>/dev/null || true
+    sleep 3
+
+    local alive=()
+    local pid
+    for pid in "${UNIQUE_STOP_PIDS[@]}"; do
+        if is_running_pid "$pid"; then
+            alive+=("$pid")
+        fi
+    done
+
+    if [ "${#alive[@]}" -gt 0 ]; then
+        echo "⚠️  强制终止残留量化进程: ${alive[*]}"
+        kill -9 "${alive[@]}" 2>/dev/null || true
+        sleep 1
+    fi
+}
 
 stop_quant_processes() {
     echo "🔍 查找并停止现有量化进程..."
+    STOP_PIDS=()
+    prepare_current_lineage
 
-    # Agent
-    AGENT_PIDS=$(pgrep -f "quant_data_agent\.py run-once" 2>/dev/null || true)
-    if [ -n "$AGENT_PIDS" ]; then
-        echo "⚠️  终止数据采集 Agent 进程: $AGENT_PIDS"
-        kill $AGENT_PIDS 2>/dev/null || kill -9 $AGENT_PIDS 2>/dev/null || true
-    fi
+    # 优先使用新版本写入的 PID 文件，能覆盖外层轮询 shell。
+    append_pid_file "$AGENT_PID_FILE"
+    append_pid_file "$SCHEDULER_PID_FILE"
+    append_pid_file "$LAUNCHER_PID_FILE"
 
-    # Scheduler
-    SCHEDULER_PIDS=$(pgrep -f "quant_scheduler_worker\.py" 2>/dev/null || true)
-    if [ -n "$SCHEDULER_PIDS" ]; then
-        echo "⚠️  终止调度 Worker 进程: $SCHEDULER_PIDS"
-        kill $SCHEDULER_PIDS 2>/dev/null || kill -9 $SCHEDULER_PIDS 2>/dev/null || true
-    fi
+    # 兼容旧版本或手工启动：同时匹配外层脚本、Agent 子命令和 Scheduler。
+    append_pgrep "start-prod-quant"
+    append_pgrep "worker/quant_data_agent\.py"
+    append_pgrep "quant_data_agent\.py"
+    append_pgrep "worker/quant_scheduler_worker\.py"
+    append_pgrep "quant_scheduler_worker\.py"
 
-    sleep 2
+    terminate_pids
+    rm -f "$AGENT_PID_FILE" "$SCHEDULER_PID_FILE" "$LAUNCHER_PID_FILE"
     echo "✅ 已有量化进程已清理"
 }
 
@@ -131,6 +247,8 @@ trap 'echo "❌ 脚本异常退出"; cleanup; exit 1' ERR
 
 # 准备日志目录
 mkdir -p "$QUANT_LOG_DIR"
+mkdir -p "$RUN_DIR"
+echo "$$" > "$LAUNCHER_PID_FILE"
 
 echo "🚀 量化子系统生产环境启动"
 echo "📡 后端地址: $SERVER_URL"
@@ -153,6 +271,7 @@ if [ "$START_AGENT" = true ]; then
         done
     ) &
     AGENT_PID=$!
+    echo "$AGENT_PID" > "$AGENT_PID_FILE"
     echo "✅ 数据采集 Agent 已启动 (PID: $AGENT_PID, 轮询间隔: 15s)"
 fi
 
@@ -164,6 +283,7 @@ if [ "$START_SCHEDULER" = true ]; then
         exec "$PYTHON_BIN" worker/quant_scheduler_worker.py
     ) >>"$SCHEDULER_LOG" 2>&1 &
     SCHEDULER_PID=$!
+    echo "$SCHEDULER_PID" > "$SCHEDULER_PID_FILE"
     echo "✅ 定时调度 Worker 已启动 (PID: $SCHEDULER_PID, 轮询间隔: ≤30s)"
 fi
 

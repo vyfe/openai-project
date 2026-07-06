@@ -449,6 +449,11 @@
   margin-top: 14px;
 }
 
+.quant-mini-section--first {
+  margin-top: 0;
+  margin-bottom: 14px;
+}
+
 .quant-mini-section__title {
   display: flex;
   align-items: center;
@@ -458,6 +463,13 @@
   color: var(--q-ink);
   font-size: 13px;
   font-weight: 720;
+}
+
+.quant-symbol-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .quant-mini-list {
@@ -909,5 +921,9 @@
   .quant-header__left,
   .quant-header__right {
     flex-wrap: wrap;
+  }
+
+  .quant-symbol-add-row {
+    grid-template-columns: 1fr;
   }
 }

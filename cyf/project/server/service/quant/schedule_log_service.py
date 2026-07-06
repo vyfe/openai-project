@@ -5,7 +5,7 @@ import os
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime
 
-from conf.runtime_logging import build_plain_file_handler, build_schedule_run_log_path, cleanup_runtime_logs, run_id_var, task_type_var
+from conf.runtime_logging import build_plain_file_handler, build_schedule_run_log_path, cleanup_schedule_run_logs, run_id_var, task_type_var
 
 
 def build_schedule_log_path(run_id: int, started_at: datetime | None = None) -> str:
@@ -30,8 +30,7 @@ def schedule_run_log_context(logger: logging.Logger, log_path: str, *, run_id: i
 
 
 def cleanup_expired_schedule_logs(retention_days: int | None = None) -> int:
-    del retention_days
-    return cleanup_runtime_logs()
+    return cleanup_schedule_run_logs(retention_days=retention_days)
 
 
 def read_schedule_run_log_tail(log_path: str, limit_lines: int = 200) -> str:

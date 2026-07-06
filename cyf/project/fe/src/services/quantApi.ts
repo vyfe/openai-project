@@ -9,6 +9,18 @@ export const quantDataAPI = {
   dashboardOverview: () => quantApi.get('/never_guess_my_usage/quant/dashboard/overview'),
   dailyBars: (params: { symbol: string; start_date?: string; end_date?: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/daily_bars', { params }),
+  symbolSearch: (params: { keyword: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/symbols/search', { params }),
+  upsertSymbol: (data: { symbol: string; code?: string; exchange?: string; name?: string; source?: string }) =>
+    quantApi.post('/never_guess_my_usage/quant/symbols/upsert', data),
+  fetchNow: (data: {
+    symbols?: string[]
+    symbols_text?: string
+    start_date: string
+    end_date: string
+    provider?: string
+    adjust_flag?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/data/fetch_now', data),
   backfill: (data: {
     symbols?: string[]
     symbols_text?: string
@@ -29,6 +41,14 @@ export const quantIndustryAPI = {
     quantApi.get('/never_guess_my_usage/quant/industry/boards', { params }),
   initDefaults: () =>
     quantApi.post('/never_guess_my_usage/quant/industry/defaults', {}),
+  saveBoard: (data: {
+    board_key: string
+    name: string
+    description?: string
+    keywords?: string[]
+    symbols?: any[]
+    status?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/industry/board/save', data),
   collect: (data: { board_id?: number; board_key?: string; targets?: string[] }) =>
     quantApi.post('/never_guess_my_usage/quant/industry/collect', data),
   dashboard: (params?: { board_id?: number; board_key?: string; days?: number }) =>
