@@ -26,28 +26,15 @@ const resolveElementChunk = (id: string) => {
     return 'el-icons'
   }
 
-  if (normalizedId.includes('/node_modules/@floating-ui/')) {
-    return 'el-shared'
-  }
-
   if (normalizedId.includes('/node_modules/async-validator/')) {
     return 'el-core'
   }
 
-  if (
-    normalizedId.includes('/node_modules/dayjs/') ||
-    normalizedId.includes('/node_modules/@vueuse/core/') ||
-    normalizedId.includes('/node_modules/@vueuse/shared/') ||
-    normalizedId.includes('/node_modules/lodash-unified/')
-  ) {
-    return 'el-shared'
-  }
-
+  // element-plus 主体统一打入 el-core；其依赖（floating-ui/dayjs/vueuse/lodash-unified）
+  // 由 manualChunks 兜底到 vendor，避免 el-shared ↔ el-core 循环。
   if (!normalizedId.includes('/node_modules/element-plus/')) {
     return null
   }
-
-  // 所有 element-plus 组件统一打入 el-core，避免组件间循环导入导致 TDZ 错误
   return 'el-core'
 }
 
