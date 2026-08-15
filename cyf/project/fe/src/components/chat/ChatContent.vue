@@ -228,7 +228,7 @@
 </el-dialog>
 </template>
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, watch, onUnmounted, computed } from 'vue'
+import { ref, reactive, nextTick, onMounted, onBeforeUnmount, watch, onUnmounted, computed } from "vue"
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
@@ -253,6 +253,8 @@ import 'katex/dist/katex.min.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { highlightCode } from '@/utils/highlight'
+import { extractMermaidBlocks } from '@/utils/mermaidExtract'
+import { renderMermaidPlaceholders } from '@/utils/mermaid'
 
 // 配置 marked 启用 GFM（GitHub Flavored Markdown）支持
 // 确保 **粗体** 和 *斜体* 语法能正确解析
@@ -1221,7 +1223,7 @@ const restoreCodeBlocks = (html: string, protectedBlocks: string[]) => {
 
 const sanitizeRichHtml = (html: string) => {
   return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden', 'data-code', 'type'],
+    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden', 'data-code', 'type', 'data-source', 'data-source-hash', 'data-rendered'],
   })
 }
 
@@ -1230,6 +1232,9 @@ const renderRichText = (content: string) => {
 
   let html = parseMarkdownToHtml(content)
   html = patchOrderedListStart(html)
+
+  // 把 ```mermaid 代码块转为占位 div，供 mermaid 异步渲染
+  html = extractMermaidBlocks(html)
 
   const { protectedHtml, protectedBlocks } = protectCodeBlocks(html)
   let rendered = renderMathOutsideHtmlTags(protectedHtml)
@@ -2503,6 +2508,78 @@ watch(() => messages.length, () => {
     scrollToBottomOnNewMessage();
   });
 });
+
+// 触发 mermaid 占位符渲染的 helper（统一 nextTick + 错误捕获 + 日志）
+const triggerMermaidRender = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      renderMermaidPlaceholders(messagesContainer.value).catch((err: unknown) => {
+        console.warn('[mermaid] 渲染占位符失败', err)
+      })
+    }
+  })
+}
+
+// MutationObserver：当 v-html 重新渲染产生新的 .mermaid-diagram 占位 div 时
+// （例如响应式数据变化触发整个 message-text 重渲染），
+// 立即重新渲染覆盖之前已渲染的 SVG。
+// 这是 watch(messages) 失效场景的兜底——watch 只在 messages 引用/内容变化时触发，
+// 而 v-html 在任何响应式数据变化时都可能重渲染整个 innerHTML。
+let mermaidObserver: MutationObserver | null = null
+const setupMermaidObserver = () => {
+  if (!messagesContainer.value) {
+    console.warn('[mermaid] setupObserver: messagesContainer is null')
+    return
+  }
+  if (mermaidObserver) {
+    console.log('[mermaid] setupObserver: already exists, skip')
+    return
+  }
+  console.log('[mermaid] setupObserver: observing', messagesContainer.value)
+  mermaidObserver = new MutationObserver((mutations) => {
+    // v-html 重渲染修改 innerHTML 时，浏览器主要发 characterData mutation，
+    // childList mutation 不一定触发（旧实现是清空+插入，可能触发；新实现不一定）。
+    // 因此统一监听所有类型，发现任何变化就扫描整个容器找未渲染的占位 div。
+    const root = messagesContainer.value
+    if (!root) return
+    const pending = root.querySelectorAll('.mermaid-diagram:not([data-rendered="1"])')
+    if (pending.length > 0) {
+      console.log('[mermaid] observer: pending placeholders =', pending.length)
+      triggerMermaidRender()
+    }
+  })
+  // 监听所有变化类型，确保任何形式的 DOM 修改（包括 innerHTML 修改）
+  // 都能被 observer 捕获
+  mermaidObserver.observe(messagesContainer.value, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class']
+  })
+}
+
+// 监听消息数组变化：DOM 更新后渲染所有 mermaid 占位符为 SVG
+// 用 deep watch 覆盖"内容变化但 length 不变"的场景（如流式追加）
+watch(messages, () => triggerMermaidRender(), { deep: true })
+
+// 组件挂载后扫描一次（覆盖"打开已有对话、消息已就位"的初始化场景）
+// 同时启动 MutationObserver，兜底 v-html 重渲染覆盖 SVG 的场景
+onMounted(() => {
+  console.log('[mermaid] onMounted, messagesContainer =', !!messagesContainer.value)
+  triggerMermaidRender()
+  // nextTick 确保 template ref 完全绑定（虽然 onMounted 后已可用，但加保险）
+  nextTick(() => {
+    console.log('[mermaid] nextTick setupObserver, messagesContainer =', !!messagesContainer.value)
+    setupMermaidObserver()
+  })
+})
+
+// 组件卸载时清理 observer，避免内存泄漏
+onBeforeUnmount(() => {
+  mermaidObserver?.disconnect()
+  mermaidObserver = null
+})
 
 watch(() => props.sessionKey, (newKey, oldKey) => {
   if (oldKey) {
