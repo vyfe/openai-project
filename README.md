@@ -1,317 +1,197 @@
-# OpenAI-Project：AI魔法棍
+# OpenAI-Project · AI 魔法棍
 
-## 项目目标
+> OpenAI 兼容 API 的客户端-服务端聚合代理。
+> 内置 **聊天（多 LLM Provider）** 与 **A 股量化子系统** 两大模块。
 
-open-ai聚合服务访问器，用于部署代理，跨越魔法限制
+- 详细的项目结构、API 端点、Provider 路由、测试规范等 → [`AGENTS.md`](./AGENTS.md)
+- 多 Provider 重构、量化设计等专题文档 → [`doc/`](./doc/)
+- Claude Code 工作指引 → [`CLAUDE.md`](./CLAUDE.md)
 
-## 如何使用
+---
 
-部署服务端，通过客户端/前端-服务端-openai的方式访问。
+## 1. 功能特性
 
-## 部署准备工作
+### 1.1 聊天 / 多 LLM 对话
+- **OpenAI / Anthropic Claude / Gemini** 多 Provider 自动路由（`model_grp` 决定）
+- 多 API Host 轮询 + 失败自动拉黑 5 分钟
+- 多用户、多 Key、模型过滤与缓存
+- SSE 流式输出 + 浏览器 AbortController 取消
+- 文件上传（`txt/pdf/png/jpg/jpeg/gif/ppt/pptx/md`，单文件最大 50MB）
+- JWT 双 Token 鉴权 + 401 自动刷新
+- Gemini `[FILE_URL:...]` 文本标记自动转多模态入参
+- 长会话 `/handoff` 上下文压缩（Claude 驱动）
 
-需要自行补足部分配置&文件
+### 1.2 管理后台（`/admin`）
+- 模型元数据 / 系统提示词 / 用户 / 通知 / 试用限流 的 CRUD
+- 运行时总览（黑名单、缓存、token 统计）
+- 受开关保护的 SQL 后门（**生产务必关闭**）
 
-## 服务端原理：cyf.project.server
+### 1.3 量化子系统（`/quant`）
+- A 股行情采集（akshare / baostock / eastmoney / sina 多 provider）
+- 板块采集、策略规则引擎、报告生成
+- 独立 SQLite（与日志库隔离）、调度器、回测
+- 飞书自建应用 IM 通道：双向对话、报告推送、持仓录入
+- 数据采集 Agent + 定时调度 Worker 独立进程
 
-所需配置见conf.ini：
+---
 
-## 客户端原理：cyf.project.client（已弃用）
+## 2. 技术栈
 
-所需配置见conf.ini：
+| 层 | 技术 |
+| --- | --- |
+| 后端 Web | Python 3 · Flask · `openai` SDK · peewee (SQLite) · JWT |
+| 量化 | 自研多 provider · APScheduler 风格调度 · 飞书 SDK |
+| 前端 | Vue 3 · TypeScript · Vite · Pinia · Element Plus · TailwindCSS v4 · Vue I18n · highlight.js · KaTeX · marked |
 
-## 服务一站式启动步骤：
+---
 
-- 根目录执行：sh full-pack-prod.sh，从dist目录取包;
-- 服务器上执行：cd ${PROJECT_ROOT} && tar -xf openai-full-prod.tar.gz && sh start-prod.sh
-    - 前提条件：python3环境和uwsgi；
-- nginx需要根据${PROJECT_ROOT}独立配好前后端的端口转发：
+## 3. 快速开始（开发模式）
+
+```bash
+# 1. 准备虚拟环境（如已有 .venv 可跳过）
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. 复制后端配置并填入 Key
+cp cyf/project/server/conf/conf.ini.tpl cyf/project/server/conf/conf.ini
+$EDITOR cyf/project/server/conf/conf.ini
+
+# 3. 一键启动前后端
+./start-dev.sh
+#   前端 http://localhost:3000
+#   后端 http://localhost:39997
+```
+
+`start-dev.sh` 会自动清理 3000 / 39997 端口、检测绑定权限、启动后端（后台） + 前端（前台）。
+按 Ctrl+C 同时停止两个服务。
+
+也可单独启动：
+
+```bash
+./cyf/project/server/local-run.sh     # 仅后端
+./cyf/project/fe/local-run.sh         # 仅前端
+```
+
+启动量化子系统（独立进程）：
+
+```bash
+./start-dev-quant                     # 数据采集 Agent + 调度 Worker
+./start-dev-quant --agent             # 仅数据采集 Agent（15s 轮询）
+./start-dev-quant --scheduler         # 仅调度 Worker（≤30s 轮询）
+```
+
+---
+
+## 4. 部署
+
+### 4.1 打包（在开发机）
+
+```bash
+./pack-prod.sh        # → dist/server.tar.gz + dist/fe.tar.gz
+./full-pack-prod.sh   # → dist/openai-full-prod.tar.gz（一键部署包，含 start-prod.sh / start-prod-quant / requirements.txt）
+```
+
+### 4.2 部署（在生产服务器）
+
+```bash
+# 解压
+tar -xzf openai-full-prod.tar.gz
+cd dist
+
+# 写好配置
+cp cyf/project/server/conf/conf.ini.tpl cyf/project/server/conf/conf.ini
+$EDITOR cyf/project/server/conf/conf.ini    # api_key / api_host / quant.feishu_*
+
+# 启动（首次运行需 chmod）
+chmod +x start-prod.sh start-prod-quant
+./start-prod.sh --all                        # 前后端
+nohup ./start-prod-quant --all --restart > start-prod-quant.out 2>&1 &   # 量化子系统
+```
+
+生产依赖：`python3` + `uwsgi` + `nginx`。
+
+### 4.3 Nginx 反代示例
+
 ```nginx
 server {
-    # 此处不对前端暴露真实的后端接口，而是走一次转发
     listen ${backend_port};
     server_name localhost;
 
-    location ~*  /never_guess_my_usage {
+    # 把 `/never_guess_my_usage/*` 反代到 uWSGI（端口见 start-prod.sh）
+    location ~* /never_guess_my_usage {
         proxy_pass http://127.0.0.1:${backend_real_port};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-    # 除了 /download 以外的所有请求
+
     location / {
-        return 403;  # 返回403 Forbidden
+        return 403;
     }
 }
+
 server {
-    # 根据实际需求修改
-    listen 80; 
+    listen 80;
     server_name openai-chat;
 
-    # 前端静态文件 (修改为实际路径)
+    # 前端静态文件（SPA 路由）
     location / {
         root ${PROJECT_ROOT}/cyf/project/fe;
         index index.html;
-        try_files $uri $uri/ /index.html;  # SPA 路由支持
-    }
-
-    # API 代理到后端
-    location /api {
-        proxy_pass http://127.0.0.1:${backend_real_port};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # 其他API路由代理到后端
-    location /health {
-        proxy_pass http://127.0.0.1:${backend_real_port};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /upload {
-        proxy_pass http://127.0.0.1:${backend_real_port};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /models {
-        proxy_pass http://127.0.0.1:${backend_real_port};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        try_files $uri $uri/ /index.html;
     }
 }
 ```
 
-## 项目概述
+模板见 [`cyf/project/fe/nginx.conf.tpl`](./cyf/project/fe/nginx.conf.tpl)。
 
-这是一个基于Python的OpenAI API客户端-服务端项目，提供了图形用户界面客户端和后端服务，支持多种OpenAI模型。项目还包括一个现代化的Vue前端界面，用于更好的用户体验。
+---
 
-## 项目结构
+## 5. 配置说明
 
-```
-cyf/
-└── project/
-    ├── client/          # 旧版客户端代码（Python/Tkinter）
-    │   ├── client.py        # 主客户端界面 (使用CustomTkinter)
-    │   ├── client_support.py # 客户端支持功能
-    │   ├── client_pack.py   # 客户端打包脚本
-    │   └── conf/            # 客户端配置
-    ├── fe/              # 新版前端代码（Vue/TypeScript）
-    │   ├── src/             # 源代码目录
-    │   │   ├── components/  # 组件目录
-    │   │   ├── pages/       # 页面目录
-    │   │   ├── services/    # API服务目录
-    │   │   ├── stores/      # 状态管理目录
-    │   │   ├── router/      # 路由配置目录
-    │   │   └── views/       # 视图组件目录
-    │   ├── public/          # 静态资源目录
-    │   ├── package.json     # 项目依赖配置
-    │   ├── vite.config.ts   # 构建配置
-    │   └── tsconfig.json    # TypeScript配置
-    └── server/          # 服务端代码
-        ├── server.py        # 主服务端应用 (Flask)
-        ├── server_pack.py   # 服务端打包脚本
-        ├── sqlitelog.py     # SQLite日志记录模块
-        ├── deploy.sh        # 部署脚本
-        └── conf/            # 服务端配置
-            ├── conf.ini.tpl # 服务端配置模板
-            └── uwsgi.ini    # uWSGI配置文件
-```
+后端配置入口：`cyf/project/server/conf/conf.ini`（从 `conf.ini.tpl` 复制）。
 
-## 功能特性
+| Section | 关键 Key | 说明 |
+| --- | --- | --- |
+| `common` | `upload_dir` / `users` / `host` | 上传目录 / 用户列表（`user:password:optional_api_key` 多行 YAML）/ 反代 Host 头 |
+| `log` | `sqlite3_file` | 平台 SQLite |
+| `quant` | `sqlite3_file` / `feishu_*` | 量化独立 SQLite / 飞书自建应用 |
+| `runtime_log` | `root_dir` / `level` / `*_retention_days` / `compress_backups` | 滚动日志策略 |
+| `admin` | `enable_sql_execute` | SQL 后门开关（**生产务必 `false`**） |
+| `api` | `api_key` / `api_host` / `usd_to_cny_rate` / `api_param_mode` | OpenAI Key / Host（多值逗号分隔）/ 汇率 / 时间格式 |
+| `auth` | `access_token_ttl_seconds` / `refresh_token_ttl_seconds` | JWT TTL |
+| `model_filter` | `cache_ttl` / `exclude_keywords` / `meta_refresh_*` | 实际生效的过滤仅 `exclude_keywords`（`include_prefixes` 已废弃，未被代码读取） |
+| `claude` | `api_key` / `api_host` / `api_version` | Claude 独立配置；留空回退 `[api]` |
 
-### 服务端 (server/)
-- 基于Flask的Web API服务
-- 支持多API密钥轮询负载均衡
-- 支持多种OpenAI模型；
-- 文件上传功能 (支持 txt, pdf, png, jpg, jpeg, gif, ppt, pptx)
-- SQLite数据库日志记录系统
-  - 记录用户请求、用量、模型使用情况
-  - 记录对话历史和上下文
-- 使用uWSGI部署，支持多进程和线程
+完整 Key 清单与默认值见 [`AGENTS.md` 第 6 节](./AGENTS.md#6-配置说明cyfprojectserverconfconfini)。
 
-### 前端 (fe/)
-- 基于Vue 3和TypeScript的现代化Web界面
-- 用户身份验证
-- 模型选择器 (GPT-4o, GPT-3.5-turbo, DALL-E等)
-- 聊天对话界面，支持实时消息流
-- 对话历史管理
-- 文件上传功能（支持多种格式）
-- 响应式设计，适配不同屏幕尺寸
-- Element Plus UI组件库
+---
 
-### 客户端 (client/) - 旧版已废弃
-- 基于CustomTkinter的图形用户界面
-- 用户身份验证
-- 模型选择器 (GPT-4o, GPT-3.5-turbo, DALL-E等)
-- 聊天对话界面
-- 对话历史管理
-- 文件上传功能
-- 服务器选择和版本信息显示
+## 6. 关键运行注意
 
-## 配置说明
+- **后端必须**在 `cyf/project/server/` 目录运行（用相对路径读 `conf/conf.ini`）。
+- 生产 `admin.enable_sql_execute` 必须为 `false`。
+- 多进程 uWSGI 部署时注意 `runtime_state` 是模块级单例，共享状态已有锁保护（黑名单、流取消、模型元数据定时器）。
+- `start-prod.sh` 默认运行路径 `$HOME/openai-project`，需根据实际调整脚本顶部 `PROJECT_ROOT`。
+- `start-prod-quant` 内置生产账号 `cyf` / `b199541d`，与生产 `conf.ini` 的 `users` 保持一致。
+- 旧版 Tkinter 客户端（`cyf/project/client/`）与 `cyf/project/fe/server.js`（旧 Node 模拟后端）已弃用，仅作历史参考。
+- 详细测试规范、文件膨胀控制、AI 编程助手约定见 [`AGENTS.md`](./AGENTS.md)。
 
-### 服务端配置 (conf/conf.ini)
-- `common.upload_dir`: 上传文件存储目录
-- `common.users`: 允许访问的用户名列表
-- `log.sqlite3_file`: SQLite日志数据库文件路径
-- `api.api_key`: OpenAI API密钥
-- `api.api_host`: OpenAI API主机地址
-- `model.*`: 各种模型的映射名称
+---
 
-### 部署方式
-- 使用uWSGI运行Flask应用
-- 监听端口39997
-- 可配置多个工作进程(默认5个)和线程(默认2个)
-- Vue前端通过Vite构建，可部署为静态资源
+## 7. 安全
 
-## 技术栈
+- 用户认证默认走数据库（`use_db_auth=True`），`users` 段是单一来源。
+- JWT 双 Token：`Authorization: Bearer <access_token>`，刷新走 `POST /never_guess_my_usage/token/refresh`。
+- 文件上传白名单硬编码在 `conf/runtime.py::RuntimeState.allowed_extensions`。
+- SQL 后门必须保持关闭（生产由运维侧审计 `enable_sql_execute` 配置）。
+- `cyf/project/*/conf/conf.ini` 与 `cyf/project/*/conf/key.*` 已在 `.gitignore` 内，禁止提交。
+- 飞书回调需校验 `feishu_verification_token` 与 `feishu_encrypt_key`。
 
-### 服务端
-- Python 3
-- Flask (Web框架)
-- OpenAI Python SDK
-- Requests (HTTP请求)
-- Peewee (SQLite ORM)
-- uWSGI (应用服务器)
+---
 
-### 前端 (新)
-- Vue 3 (UI框架)
-- TypeScript (语言)
-- Vite (构建工具)
-- Element Plus (UI组件库)
-- Pinia (状态管理)
-- Axios (HTTP客户端)
+## 8. 许可证
 
-### 客户端 (旧)
-- Python 3
-- CustomTkinter (GUI框架)
-- Tkinter (基础GUI)
-- Requests (与服务端通信)
-- OpenAI Python SDK
-
-## 数据库模型
-
-### Log 表
-- `username`: 用户名
-- `modelname`: 模型名称
-- `usage`: 用量
-- `request_text`: 请求文本内容
-
-### Dialog 表
-- `username`: 用户名
-- `chattype`: 对话类型
-- `modelname`: 模型名称
-- `dialog_name`: 对话名称
-- `start_date`: 开始日期
-- `context`: 对话上下文
-
-## 部署说明
-
-### 服务端部署
-1. 将项目文件复制到服务器
-2. 配置环境变量和依赖
-3. 修改 `conf/conf.ini` 中的API密钥和其他设置
-4. 运行 `deploy.sh` 脚本启动服务
-5. 服务将在39997端口监听
-
-### 前端部署
-1. 进入 `cyf/project/fe` 目录
-2. 执行 `npm install` 安装依赖
-3. 执行 `npm run build` 构建生产版本
-4. 将生成的 `dist` 目录部署到Web服务器
-
-### 开发模式启动
-1. 启动服务端：`cd cyf/project/server && python server.py`
-2. 启动前端：`cd cyf/project/fe && npm run dev`
-
-## 快速启动脚本
-
-项目提供了便捷的本地启动脚本，可从任意目录运行：
-
-### 启动后端
-```bash
-# 方式1：直接运行脚本
-./cyf/project/server/local-run.sh
-
-# 方式2：使用bash运行
-bash cyf/project/server/local-run.sh
-```
-
-后端将在 http://localhost:39997 启动。
-
-### 启动前端
-```bash
-# 方式1：直接运行脚本
-./cyf/project/fe/local-run.sh
-
-# 方式2：使用bash运行
-bash cyf/project/fe/local-run.sh
-```
-
-前端将在 http://localhost:3000 启动。
-
-### 同时启动前后端（推荐用于开发）
-```bash
-# 方式1：直接运行脚本
-./start-dev.sh
-
-# 方式2：使用bash运行
-bash start-dev.sh
-```
-
-此脚本会自动：
-- 检查并清理占用 3000（前端）和 39997（后端）端口的进程
-- 启动后端服务（后台运行）
-- 启动前端服务（前台运行，便于查看日志）
-- 支持优雅退出（按 Ctrl+C 同时停止前后端服务）
-
-### 开发模式启动
-1. 启动服务端：`cd cyf/project/server && python server.py`
-2. 启动前端：`cd cyf/project/fe && npm run dev`
-
-## 安全考虑
-
-- 用户认证通过配置文件中的用户列表进行控制
-- 支持限制文件上传类型，防止恶意文件上传
-- 使用SQLite进行访问日志记录以便审计
-- 前端不存储敏感信息，与后端通过API通信
-
-## 注意事项
-
-- 需要有效的OpenAI API密钥才能使用
-- 客户端和服务端之间通过HTTP协议通信
-- 支持负载均衡，可配置多个API端点
-- 日志记录所有用户交互和用量统计
-- **关键运行说明**：服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件
-- 前端通过 `http://localhost:39997` 访问后端API
-
-## 关键运行说明
-- 服务端必须在 `cyf/project/server` 目录中运行，因为代码使用相对路径 `conf/conf.ini` 来加载配置文件
-- 启动前端开发服务器时，确保后端服务在 http://localhost:39997 可用
-- 多进程 uWSGI 部署时注意共享资源的并发访问问题
-
-## API 密钥安全最佳实践
-- 在生产环境中使用环境变量而不是硬编码 API 密钥
-- 定期轮换 API 密钥并监控用量
-- 在 conf/conf.ini 文件中使用安全权限保护密钥文件
-
-## 前后端分离开发注意事项
-- 前端通过 http://localhost:39997 访问后端 API，在开发环境中需确保该地址可达
-- 跨域资源共享 (CORS) 配置已在 Flask 应用中启用
-- 前端开发时可通过代理配置解决跨域问题
-
-## 移动端开发注意事项
-- 处理窗口大小变化时要区分初始化检测和动态调整，避免在软键盘弹出/收起时触发不必要的UI状态变更
-- resize事件中不要无条件更改侧边栏折叠状态，应该对比变化前后状态再决定是否更新UI
-- 检测移动设备时，记录设备类型的变化状态以防止重复操作
+仅作个人/团队内部使用，未声明开源许可。
