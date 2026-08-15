@@ -1,0 +1,28 @@
+export const enLogin = {
+    login: {
+      title: 'Smart Conversation System',
+      subtitle: 'Sign in to your account',
+      usernamePlaceholder: 'Please enter username',
+      passwordPlaceholder: 'Please enter password',
+      submitButton: 'Login',
+      viewNotifications: 'View Notifications',
+      description: 'Experience smart conversation, let AI serve you',
+      githubLink: 'Open Source Project GitHub',
+      contactInfo: 'wx:pata_data_studio',
+      failedMessage: 'Login failed, please check username and password',
+      successMessage: 'Login successful!',
+      registerTitle: 'Register New Account',
+      registerButton: 'Register',
+      goToLogin: 'Already have an account? Login now',
+      goToRegister: 'Don\'t have an account? Register now',
+      registerSuccess: 'Registration successful! Please login',
+      registerFailed: 'Registration failed',
+      usernameTooShort: 'Username must be 3-20 characters',
+      usernameInvalid: 'Username can only contain letters, numbers and underscores',
+      usernameExists: 'Username already exists',
+      apiKey: 'API Key (Optional)',
+      apiKeyPlaceholder: 'Leave blank to use test key',
+      apiKeyHint: 'If left blank, default test key with rate limiting will be used',
+      adminPanel: 'Admin Panel'
+    },
+};

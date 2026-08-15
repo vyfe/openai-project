@@ -20,228 +20,27 @@ import {
   quantStrategyAPI,
   quantTaskAPI
 } from '@/services/quantApi'
+import { formatRate, formatNumber, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl } from './quant/format'
 
-export type StrategyRecord = {
-  id: number
-  name: string
-  status: string
-  description: string
-  symbols: string[]
-  rule_config: Record<string, any>
-  updated_at?: string
-}
+// 类型定义已抽到 composables/quant/types.ts
+import type {
+  StrategyRecord,
+  StrategyRunRecord,
+  OperationRecord,
+  BacktestRunRecord,
+  ScheduleConfigRecord,
+  ScheduleRunRecord,
+  PromptTemplateRecord,
+  ReportRecord,
+  MemoryFileRecord,
+  ImChannelRecord,
+  DeliveryRecord,
+  ImInboundEventRecord,
+  PositionJournalRecord,
+  PositionSummaryRecord,
+  SymbolOption
+} from './quant/types'
 
-export type StrategyRunRecord = {
-  id: number
-  strategy_id: number
-  trade_date: string
-  status: string
-  signals_total: number
-  symbols_total: number
-  summary: Record<string, any>
-  created_at: string
-  finished_at?: string
-}
-
-export type OperationRecord = {
-  id: number
-  strategy_id?: number | null
-  run_id?: number | null
-  signal_id?: number | null
-  symbol: string
-  action: string
-  status: string
-  result_status?: string
-  trade_date: string
-  price?: number | null
-  quantity?: number | null
-  amount?: number | null
-  thesis?: string
-  execution_note?: string
-  review_note?: string
-  result_pct?: number | null
-  result_amount?: number | null
-  tags?: string[]
-  created_by?: string
-  updated_at?: string
-}
-
-export type BacktestRunRecord = {
-  id: number
-  strategy_id: number
-  strategy_name: string
-  status: string
-  start_date: string
-  end_date: string
-  hold_days: number
-  top_n: number
-  initial_capital: number
-  commission_rate: number
-  slippage_rate: number
-  signals_total: number
-  trades_total: number
-  summary?: Record<string, any>
-  metrics?: Record<string, any>
-  equity_curve?: Array<{ date: string; capital: number; net_value: number; avg_return?: number; closed_trades?: number }>
-  trades?: Array<Record<string, any>>
-  error_message?: string
-  created_at?: string
-}
-
-export type ScheduleConfigRecord = {
-  id: number
-  name: string
-  task_type: string
-  status: string
-  cron_expr: string
-  market_calendar: string
-  timezone: string
-  payload: Record<string, any>
-  retry_max: number
-  retry_delay_seconds: number
-  allow_manual_run: boolean
-  description?: string
-  updated_at?: string
-}
-
-export type ScheduleRunRecord = {
-  id: number
-  schedule_id: number
-  schedule_name: string
-  task_type: string
-  trigger_source: string
-  status: string
-  scheduled_for: string
-  trade_date?: string
-  attempts: number
-  max_retries: number
-  message?: string
-  log_file?: string
-  payload?: Record<string, any>
-  result?: Record<string, any>
-  next_retry_at?: string
-  started_at?: string
-  finished_at?: string
-  log_tail?: string
-}
-
-export type PromptTemplateRecord = {
-  id: number
-  strategy_id?: number | null
-  template_name: string
-  prompt_version: string
-  status: string
-  report_type: string
-  prompt_template: string
-  change_note?: string
-  updated_at?: string
-}
-
-export type ReportRecord = {
-  id: number
-  report_key: string
-  strategy_id: number
-  run_id?: number | null
-  schedule_run_id?: number | null
-  trade_date: string
-  report_type: string
-  status: string
-  bundle_version: string
-  prompt_version: string
-  title: string
-  final_markdown: string
-  memory_references?: string[]
-  created_at?: string
-}
-
-export type MemoryFileRecord = {
-  symbol: string
-  path: string
-  updated_at: string
-  size: number
-}
-
-export type ImChannelRecord = {
-  id: number
-  name: string
-  channel_type: string
-  status: string
-  config?: Record<string, any>
-  description?: string
-  updated_at?: string
-}
-
-export type DeliveryRecord = {
-  id: number
-  report_id?: number | null
-  run_id?: number | null
-  channel_id?: number | null
-  channel_type: string
-  channel_target: string
-  message_type: string
-  status: string
-  error_message?: string
-  sent_at?: string
-  created_at?: string
-}
-
-export type ImInboundEventRecord = {
-  id: number
-  event_id: string
-  channel_id?: number | null
-  channel_type: string
-  message_id?: string
-  chat_id?: string
-  sender_id?: string
-  sender_type?: string
-  message_type?: string
-  command?: string
-  status: string
-  parsed_payload?: Record<string, any>
-  error_message?: string
-  received_at?: string
-  processed_at?: string
-}
-
-export type PositionJournalRecord = {
-  id: number
-  strategy_id?: number | null
-  run_id?: number | null
-  operation_id?: number | null
-  symbol: string
-  side: string
-  price?: number | null
-  quantity: number
-  occurred_at: string
-  source: string
-  reason?: string
-  remark?: string
-  created_by?: string
-  updated_at?: string
-}
-
-export type PositionSummaryRecord = {
-  symbol: string
-  strategy_id?: number | null
-  net_quantity: number
-  avg_cost?: number | null
-  latest_price?: number | null
-  market_value?: number | null
-  unrealized_pnl?: number | null
-  unrealized_pnl_pct?: number | null
-  last_occurred_at?: string
-  last_side?: string
-  sources?: string[]
-}
-
-export type SymbolOption = {
-  symbol: string
-  code: string
-  exchange: string
-  name?: string
-  source?: string
-  type?: string
-}
 
 function createQuantWorkbench() {
   const providers = ref<string[]>([])
@@ -607,7 +406,6 @@ function createQuantWorkbench() {
       .join(' ')
   })
 
-  const strategyStatusTag = (status: string) => (status === 'active' ? 'success' : 'info')
 
   const taskStatusTag = (status: string) => {
     if (status === 'success') return 'success'
@@ -637,19 +435,7 @@ function createQuantWorkbench() {
     return 'info'
   }
 
-  function formatRate(value: any) {
-    if (value === null || value === undefined || value === '') return '--'
-    const num = Number(value)
-    if (!Number.isFinite(num)) return '--'
-    return `${(num * 100).toFixed(2)}%`
-  }
 
-  function formatNumber(value: any, digits = 2) {
-    if (value === null || value === undefined || value === '') return '--'
-    const num = Number(value)
-    if (!Number.isFinite(num)) return '--'
-    return num.toFixed(digits)
-  }
 
   const resolveStrategyName = (strategyId?: number | null) => {
     if (!strategyId) return '未绑定策略'
@@ -919,42 +705,6 @@ function createQuantWorkbench() {
     scheduleForm.industryChannelIds = payload.channel_ids || []
   }
 
-  const buildSchedulePayload = () => {
-    if (scheduleForm.taskType === 'data_sync') {
-      return {
-        symbols: scheduleForm.dataSymbols,
-        provider: scheduleForm.dataProvider,
-        adjust_flag: scheduleForm.dataAdjustFlag,
-        lookback_trade_days: scheduleForm.dataLookbackTradeDays,
-        lease_seconds: scheduleForm.dataLeaseSeconds,
-        note: scheduleForm.dataNote
-      }
-    }
-    if (scheduleForm.taskType === 'memory_digest') {
-      return {
-        symbols: scheduleForm.memorySymbols,
-        lookback_days: scheduleForm.memoryLookbackDays,
-        limit: scheduleForm.memoryLimit
-      }
-    }
-    if (scheduleForm.taskType === 'industry_collect') {
-      return {
-        board_ids: scheduleForm.industryBoardIds,
-        targets: scheduleForm.industryTargets
-      }
-    }
-    if (scheduleForm.taskType === 'industry_report') {
-      return {
-        board_ids: scheduleForm.industryBoardIds,
-        channel_ids: scheduleForm.industryChannelIds
-      }
-    }
-    return {
-      strategy_ids: scheduleForm.analysisStrategyIds,
-      channel_ids: scheduleForm.analysisChannelIds,
-      save_all_signals: scheduleForm.analysisSaveAllSignals
-    }
-  }
 
   const loadOverview = async () => {
     loading.overview = true
@@ -2018,6 +1768,9 @@ function createQuantWorkbench() {
     return bootstrapPromise
   }
 
+
+  // 包装 buildSchedulePayloadImpl（来自 ./quant/format）为闭包，捕获 scheduleForm
+  const buildSchedulePayload = () => buildSchedulePayloadImpl(scheduleForm)
   return {
     providers,
     symbolOptions,

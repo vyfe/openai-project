@@ -1,0 +1,27 @@
+export const zhLogin = {
+    login: {
+      title: '慧聊 - 智能对话',
+      subtitle: '登录您的账户',
+      usernamePlaceholder: '请输入用户名',
+      passwordPlaceholder: '请输入密码',
+      submitButton: '登录',
+      viewNotifications: '查看通知',
+      description: '有慧聊，才会聊',
+      githubLink: '开源项目 GitHub',
+      contactInfo: 'vx:pata_data_studio',
+      failedMessage: '登录失败，请检查用户名和密码',
+      successMessage: '登录成功！',
+      registerTitle: '注册新账户',
+      registerButton: '注册',
+      goToLogin: '已有账户？立即登录',
+      goToRegister: '还没有账户？立即注册',
+      registerSuccess: '注册成功！请登录',
+      registerFailed: '注册失败',
+      usernameTooShort: '用户名长度必须在3-20个字符之间',
+      usernameInvalid: '用户名只能包含字母、数字和下划线',
+      usernameExists: '用户名已存在',
+      apiKey: 'API 密钥（可选）',
+      apiKeyPlaceholder: '不填则使用默认密钥（有使用次数限制）',
+      apiKeyHint: '如不填写，将使用系统默认的测试密钥（有限流限制）'
+    },
+};

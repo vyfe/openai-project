@@ -252,7 +252,7 @@ import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { highlightCode } from '@/utils/highlight.js'
+import { highlightCode } from '@/utils/highlight'
 
 // 配置 marked 启用 GFM（GitHub Flavored Markdown）支持
 // 确保 **粗体** 和 *斜体* 语法能正确解析

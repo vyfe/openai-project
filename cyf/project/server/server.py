@@ -6,7 +6,6 @@ from routes.quant.im_memory_routes import bp as quant_im_memory_bp
 from routes.quant.industry_routes import bp as quant_industry_bp
 from routes.quant.strategy_routes import bp as quant_strategy_bp
 from routes.quant.trade_routes import bp as quant_trade_bp
-from routes.quant_routes import quant_bp
 from routes.quant.client_routes import bp as quant_client_bp
 from routes.quant.data_routes import bp as quant_data_bp
 from routes.quant.scheduler_routes import bp as quant_scheduler_bp
@@ -17,7 +16,6 @@ app = create_app()
 configure_logging(app)
 app.register_blueprint(public_bp)
 app.register_blueprint(admin_bp)
-app.register_blueprint(quant_bp)
 app.register_blueprint(quant_strategy_bp)
 app.register_blueprint(quant_im_memory_bp)
 app.register_blueprint(quant_trade_bp)

@@ -116,7 +116,7 @@ def app(test_settings, test_db):
     from conf.app_factory import create_app
     from routes.public_routes import public_bp
     from routes.admin_routes import admin_bp
-    from routes.quant_routes import quant_bp
+    # quant_bp 已在 server.py 中独立注册各子蓝图，此处不再聚合
     from routes.quant.strategy_routes import bp as quant_strategy_bp
     from routes.quant.im_memory_routes import bp as quant_im_memory_bp
     from routes.quant.trade_routes import bp as quant_trade_bp
@@ -128,7 +128,6 @@ def app(test_settings, test_db):
     _app = create_app()
     _app.register_blueprint(public_bp)
     _app.register_blueprint(admin_bp)
-    _app.register_blueprint(quant_bp)
     _app.register_blueprint(quant_strategy_bp)
     _app.register_blueprint(quant_im_memory_bp)
     _app.register_blueprint(quant_trade_bp)

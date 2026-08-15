@@ -40,6 +40,10 @@ export function createMockQuantApi() {
       importBatches: vi.fn(noop),
       symbols: vi.fn(noop)
     },
+    quantIndustryAPI: {
+      boards: vi.fn(noop),
+      initDefaults: vi.fn(noop)
+    },
     quantTaskAPI: {
       create: vi.fn(noop),
       list: vi.fn(noop),

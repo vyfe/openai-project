@@ -110,7 +110,8 @@ openai-project/
 │   │   │
 │   │   ├── routes/              # 路由层（10 个 Blueprint，全部 `/never_guess_my_usage` 前缀）
 │   │   │   ├── public_routes.py        # 公共接口
-│   │   │   ├── admin_routes.py         # 管理后台 CRUD
+│   │   │   ├── admin_routes.py         # 管理后台 CRUD（部分端点用 _crud_factory.py）
+│   │   │   ├── _crud_factory.py       # @crud_list/@crud_get/@crud_create/@crud_update/@crud_delete 装饰器
 │   │   │   ├── quant_routes.py         # 量化聚合入口
 │   │   │   └── quant/
 │   │   │       ├── _shared.py          # 共享鉴权/装饰器
@@ -143,7 +144,10 @@ openai-project/
 │   │   │       ├── im_event_service.py / im_helpers.py / im_rules.py
 │   │   │       ├── memory_service.py / report_service.py / report_generation_service.py
 │   │   │       ├── report_prompt_service.py / backtest_service.py / ops_service.py
-│   │   │       ├── indicator_service.py / industry_service.py
+│   │   │       ├── indicator_service.py
+│   │   │       ├── industry_common.py / industry_board_service.py
+│   │   │       ├── industry_quote_service.py / industry_news_service.py / industry_indicator_service.py
+│   │   │       └── （原 industry_service.py 已拆为上 5 个 + re-export）
 │   │   │       ├── symbol_search_service.py / task_dispatch_service.py
 │   │   │       ├── query_service.py / trade_calendar_service.py / dashboard_service.py
 │   │   │       ├── import_service.py / common.py
@@ -159,7 +163,10 @@ openai-project/
 │   │   │
 │   │   ├── quant/               # 量化独立数据库
 │   │   │   ├── db.py                    # 独立 SQLite，避免被日志清理策略误伤
-│   │   │   └── entities.py              # QUANT_MODELS
+│   │   │   ├── entities.py              # re-export（保留旧 import 路径）
+│   │   │   ├── quant_entities_market.py    # 行情/市场数据（symbol/KLine/板块/新闻等）
+│   │   │   ├── quant_entities_strategy.py  # 策略/回测/运营记录
+│   │   │   └── quant_entities_ops.py        # 调度/报告/IM/记忆
 │   │   │
 │   │   ├── quant_client/        # 量化 Agent 端 SDK（被 worker 复用）
 │   │   │   ├── cli.py / common.py / constants.py / http_client.py
@@ -179,9 +186,11 @@ openai-project/
 │   │   │   └── init_user_data.py         # 配置文件用户 → 数据库迁移
 │   │   │
 │   │   ├── tools/               # 运维脚本（check_quant_sources.py 等）
-│   │   ├── test/               # 旧的调试脚本（保留兼容，非 pytest）
 │   │   │
 │   │   ├── tests/               # pytest 测试（unit/service/api 三层）
+│   │   │
+│   │   ├── archive_logs.py / restore_logs.py *(已删除 — 数据归档改由 runtime_logging 滚动处理)*
+│   │   ├── backup/ dist/ logs/ run/ quant_bundles/ quant_memory/  # 运行时目录
 │   │   │   ├── unit/    test_common.py / test_claude_service.py
 │   │   │   │            test_message_normalizer.py / test_cron_utils.py / test_rule_engine.py
 │   │   │   ├── service/ test_binding_service.py / test_position_service.py
@@ -205,6 +214,10 @@ openai-project/
 │       ├── local-run.sh         # 前端本地启动（自动 npm install + 时间戳缓存）
 │       └── src/
 │           ├── main.ts / App.vue / i18n.ts / env.d.ts
+│           ├── locales/                       # i18n 多语言包（按域拆分）
+│           │   ├── index.ts                   # 聚合 zh/en 各域
+│           │   ├── zh/{chat,admin,login,validation}.ts
+│           │   └── en/{chat,admin,login,validation}.ts
 │           ├── router/index.ts                  # /login、/chat、/admin、/quant/*
 │           ├── services/                        # API 客户端
 │           │   ├── httpClient.ts                # axios + JWT 自动刷新 + 401 重试
@@ -212,7 +225,10 @@ openai-project/
 │           │   └── version.ts
 │           ├── stores/auth.ts                   # 唯一 Pinia store（JWT 凭据）
 │           ├── composables/
-│           │   ├── useQuantWorkbench.ts         # 量化工作台（2201 行，🔴）
+│           │   ├── useQuantWorkbench.ts         # 量化工作台 facade（~1954 行）
+│           │   ├── quant/                       # 量化子模块
+│           │   │   ├── types.ts                  # 17 个 type/interface（~225 行）
+│           │   │   └── format.ts                 # 纯函数（formatRate/formatNumber/strategyStatusTag/buildSchedulePayload）
 │           │   ├── useThemeManager.ts           # 明暗主题
 │           │   ├── useNotifications.ts          # 通知轮询
 │           │   └── useAdminAction.ts / useAdminCrudDialog.ts / useAdminPagedList.ts
@@ -285,7 +301,7 @@ HTTP ──► routes/  (Flask Blueprint)
 | --- | --- | --- |
 | `public_bp` | `routes/public_routes.py` | `login`、`register`、`token/refresh`、`split`、`split_stream`、`split_stream_cancel`、`split_pic`、`handoff`、`split_his{,_content,_delete}`、`update_dialog_title`、`system_prompt{,_by_group}`、`notifications`、`del_password`、`browser_conf/{get,save}`、`download`、`models`、`models/grouped`、`usage`、`test`、`set_info` |
 | `admin_bp` | `routes/admin_routes.py` | `model_meta/*`、`system_prompt/*`、`test_limit/*`、`user/*`、`notification/*`、`sql_execute`（受 `enable_sql_execute` 开关保护）、`runtime/overview`、`sql/meta` |
-| `quant_bp` | `routes/quant_routes.py` | 量化根级（dashboard、行情、Provider 等汇总） |
+| `quant_bp` | `routes/quant_routes.py` *(已删除 — server.py 直接注册各子蓝图)* | 量化根级（dashboard、行情、Provider 等汇总） |
 | `quant_strategy_bp` | `routes/quant/strategy_routes.py` | `strategy/*`、`symbols`、`prompt_template/*`、`reports`、`report/*` |
 | `quant_trade_bp` | `routes/quant/trade_routes.py` | `positions/*`、`operations/*`、`backtest/*` |
 | `quant_data_bp` | `routes/quant/data_routes.py` | `dashboard/overview`、`providers`、`data/*`、`symbols/upsert` |
@@ -534,9 +550,13 @@ npm run test:coverage                  # 覆盖率
 
 | 文件 | 行数 | 状态 |
 | --- | --- | --- |
-| `fe/src/components/chat/ChatContent.vue` | 2533 | 🔴 已超标，需尽快拆分 |
-| `fe/src/composables/useQuantWorkbench.ts` | 2201 | 🔴 已超标，需尽快拆分 |
-| `fe/src/components/chat/ChatSidebar.vue` | 1288 | 🟡 接近阈值，需关注 |
+| `fe/src/components/chat/ChatContent.vue` | ~2533 | 🔴 已超标，v2 候选（本次仅标注，未物理拆分） |
+| `fe/src/composables/useQuantWorkbench.ts` | 1954 | ✅ v1 已拆分 types.ts + format.ts |
+| `fe/src/components/chat/ChatSidebar.vue` | 1288 | 🟡 接近阈值，v2 候选 |
+| `fe/src/i18n.ts` | 16 | ✅ v1 已拆为 locales/{zh,en}/{chat,admin,login,validation}.ts |
+| `cyf/project/server/service/quant/industry_service.py` | 60 | ✅ v1 已拆为 5 个子 service（re-export 兼容） |
+| `cyf/project/server/quant/entities.py` | 70 | ✅ v1 已拆为 3 个 quant_entities_*.py（re-export 兼容） |
+| `cyf/project/server/routes/admin_routes.py` | 603 | ✅ v1 用 _crud_factory.py 统一部分端点 |
 
 > 行数随时间变动，以 `wc -l <file>` 为准。
 
