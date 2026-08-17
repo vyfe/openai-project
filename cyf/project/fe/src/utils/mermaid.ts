@@ -12,6 +12,7 @@ import type mermaidType from 'mermaid'
 let mermaidInstance: typeof mermaidType | null = null
 let initializePromise: Promise<void> | null = null
 const renderCache = new Map<string, string>()  // source -> svg
+let renderInProgress = false  // 渲染中标志：打断 MutationObserver 级联触发
 
 /**
  * 懒加载 mermaid 包。第一次调用时下载 + initialize，之后复用单例。
@@ -71,27 +72,36 @@ export async function renderMermaid(source: string): Promise<string | null> {
  * 返回成功渲染的数量（用于测试断言）。
  */
 export async function renderMermaidPlaceholders(root: HTMLElement | Document): Promise<number> {
-  const placeholders = root.querySelectorAll<HTMLElement>('.mermaid-diagram[data-source]')
-  let rendered = 0
-  // 串行渲染避免 DOM 竞态（mermaid.render 需要唯一 id）
-  for (const el of Array.from(placeholders)) {
-    if (el.dataset.rendered === '1') continue
-    const source = decodeURIComponent(el.dataset.source ?? '')
-    const svg = await renderMermaid(source)
-    if (svg) {
-      // 用 DOM 操作避免触发 v-html 重渲染
-      el.innerHTML = svg
-      el.dataset.rendered = '1'
-      el.classList.add('mermaid-rendered')
-      rendered++
-    } else {
-      // 渲染失败：显示原始源码在 <pre><code>
-      el.innerHTML = `<pre class="mermaid-fallback"><code>${escapeHtml(source)}</code></pre>`
-      el.dataset.rendered = '1'
-      el.classList.add('mermaid-failed')
+  // 防重入：本函数内部对每个占位执行 classList.add，会触发监听 class 的 MutationObserver，
+  // observer 又回调本函数，形成 O(n²) 级联渲染风暴（大量消息时卡死主线程）。
+  // 渲染中直接返回，剩余占位由当前正在运行的循环兜底完成。
+  if (renderInProgress) return 0
+  renderInProgress = true
+  try {
+    const placeholders = root.querySelectorAll<HTMLElement>('.mermaid-diagram[data-source]')
+    let rendered = 0
+    // 串行渲染避免 DOM 竞态（mermaid.render 需要唯一 id）
+    for (const el of Array.from(placeholders)) {
+      if (el.dataset.rendered === '1') continue
+      const source = decodeURIComponent(el.dataset.source ?? '')
+      const svg = await renderMermaid(source)
+      if (svg) {
+        // 用 DOM 操作避免触发 v-html 重渲染
+        el.innerHTML = svg
+        el.dataset.rendered = '1'
+        el.classList.add('mermaid-rendered')
+        rendered++
+      } else {
+        // 渲染失败：显示原始源码在 <pre><code>
+        el.innerHTML = `<pre class="mermaid-fallback"><code>${escapeHtml(source)}</code></pre>`
+        el.dataset.rendered = '1'
+        el.classList.add('mermaid-failed')
+      }
     }
+    return rendered
+  } finally {
+    renderInProgress = false
   }
-  return rendered
 }
 
 /** HTML escape（用于 fallback 显示） */
@@ -104,7 +114,8 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;')
 }
 
-/** 单元测试辅助：清空渲染缓存 */
+/** 单元测试辅助：清空渲染缓存与渲染标志 */
 export function _clearMermaidCacheForTest(): void {
   renderCache.clear()
+  renderInProgress = false
 }

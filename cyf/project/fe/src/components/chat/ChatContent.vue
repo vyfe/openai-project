@@ -320,49 +320,33 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
         emit('role-setting-loaded', { sessionKey: targetSessionKey, roleSetting })
       }
       setContextUsage(response.content.usage)
-      // 将消息数组替换为历史对话内容
-      messages.splice(0, messages.length) // 清空现有消息
       const context = response.content.context
-      // 假设response.content包含了完整的对话历史，按照某种格式组织
-      // 这里需要根据实际API返回的格式来处理
+      const toMessage = (msg: any) => ({
+        type: msg.role === 'user' ? 'user' : 'ai',
+        content: msg.content || msg.desc || '', // 支持desc字段作为内容
+        url: msg.url, // 添加url字段支持
+        parts: msg.parts, // 多模态部件
+        time: msg.time || getCurrentTime()
+      })
+
+      let loadedMessages: any[] = []
       if (Array.isArray(context)) {
-        // 如果返回的是消息数组
-        // 过滤掉role为"system"的消息，不显示在聊天界面上
-        const filteredContext = filterSystemMessages(context);
-        filteredContext.forEach((msg: any) => {
-          messages.push({
-            type: msg.role === 'user' ? 'user' : 'ai',
-            content: msg.content || msg.desc || '', // 支持desc字段作为内容
-            url: msg.url, // 添加url字段支持
-            parts: msg.parts, // 多模态部件
-            time: msg.time || getCurrentTime()
-          })
-        })
+        // 如果返回的是消息数组，过滤掉 role 为 system 的消息
+        loadedMessages = filterSystemMessages(context).map(toMessage)
       } else if (typeof response.data.content === 'string') {
         // 如果返回的是序列化的字符串，需要解析
         try {
           const contentObj = JSON.parse(context)
           if (Array.isArray(contentObj)) {
-            // 过滤掉role为"system"的消息
-            const filteredContentObj = filterSystemMessages(contentObj);
-            filteredContentObj.forEach((msg: any) => {
-              messages.push({
-                type: msg.role === 'user' ? 'user' : 'ai',
-                content: msg.content || msg.desc || '', // 支持desc字段作为内容
-                url: msg.url, // 添加url字段支持
-                time: msg.time || getCurrentTime()
-              })
-            })
+            loadedMessages = filterSystemMessages(contentObj).map(toMessage)
           }
         } catch (e) {
           // 如果不是JSON格式，可能是单条消息
-          messages.push({
-            type: 'ai',
-            content: response.content,
-            time: getCurrentTime()
-          })
+          loadedMessages = [{ type: 'ai', content: response.content, time: getCurrentTime() }]
         }
       }
+      // 一次性替换，避免逐条 push 触发多次响应式更新与 mermaid 重渲染
+      messages.splice(0, messages.length, ...loadedMessages)
       ElMessage.success('对话内容已同步')
     }
   } catch (error: any) {
@@ -2501,14 +2485,6 @@ watch(() => formData.currentDialogId, async (newDialogId) => {
   }
 })
 
-// 监听消息数组长度变化，当有新消息时自动滚动到底部
-watch(() => messages.length, () => {
-  saveMessagesToSession(getSessionKey())
-  nextTick(() => {
-    scrollToBottomOnNewMessage();
-  });
-});
-
 // 触发 mermaid 占位符渲染的 helper（统一 nextTick + 错误捕获 + 日志）
 const triggerMermaidRender = () => {
   nextTick(() => {
@@ -2537,25 +2513,22 @@ const setupMermaidObserver = () => {
   }
   console.log('[mermaid] setupObserver: observing', messagesContainer.value)
   mermaidObserver = new MutationObserver((mutations) => {
-    // v-html 重渲染修改 innerHTML 时，浏览器主要发 characterData mutation，
-    // childList mutation 不一定触发（旧实现是清空+插入，可能触发；新实现不一定）。
-    // 因此统一监听所有类型，发现任何变化就扫描整个容器找未渲染的占位 div。
-    const root = messagesContainer.value
-    if (!root) return
-    const pending = root.querySelectorAll('.mermaid-diagram:not([data-rendered="1"])')
-    if (pending.length > 0) {
-      console.log('[mermaid] observer: pending placeholders =', pending.length)
+    // 仅当新增节点里出现 mermaid 占位时才触发渲染。
+    // 只监听 childList：渲染完成时的 innerHTML=svg / classList.add 不再触发 observer，
+    // 从根源避免"渲染 → observer → 再渲染"的级联风暴。
+    const hasNewPlaceholder = mutations.some((m) =>
+      Array.from(m.addedNodes).some((node) => {
+        if (!(node instanceof HTMLElement)) return false
+        return node.classList?.contains('mermaid-diagram') || node.querySelector?.('.mermaid-diagram') != null
+      })
+    )
+    if (hasNewPlaceholder) {
       triggerMermaidRender()
     }
   })
-  // 监听所有变化类型，确保任何形式的 DOM 修改（包括 innerHTML 修改）
-  // 都能被 observer 捕获
   mermaidObserver.observe(messagesContainer.value, {
     childList: true,
-    subtree: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['class']
+    subtree: true
   })
 }
 

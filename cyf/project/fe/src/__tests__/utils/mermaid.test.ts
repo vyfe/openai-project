@@ -83,4 +83,15 @@ describe('renderMermaidPlaceholders', () => {
     expect(await renderMermaid('')).toBeNull()
     expect(await renderMermaid('   \n   ')).toBeNull()
   })
+
+  it('渲染进行中重复调用会被防重入拦截，避免级联风暴', async () => {
+    document.body.innerHTML = `<div class="mermaid-diagram" data-source="${encodeURIComponent('graph TD')}"></div>`
+    const { renderMermaidPlaceholders } = await import('@/utils/mermaid')
+    // 第一次调用不 await，使其停留在 renderInProgress=true
+    const first = renderMermaidPlaceholders(document.body)
+    // 第二次调用应立即被拦截返回 0，而不是再启动一个渲染循环
+    const second = renderMermaidPlaceholders(document.body)
+    expect(await second).toBe(0)
+    await first
+  })
 })
