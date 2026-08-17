@@ -25,6 +25,8 @@ client_ip_var: ContextVar[str] = ContextVar("client_ip", default="")
 user_agent_var: ContextVar[str] = ContextVar("user_agent", default="")
 run_id_var: ContextVar[str] = ContextVar("run_id", default="")
 task_type_var: ContextVar[str] = ContextVar("task_type", default="")
+request_body_var: ContextVar[str] = ContextVar("request_body", default="")
+response_body_var: ContextVar[str] = ContextVar("response_body", default="")
 
 _RUNTIME_ROTATED_LOG_PATTERN = re.compile(r".+\.log\.\d{4}-\d{2}-\d{2}$")
 _SCHEDULE_RUN_LOG_PATTERN = re.compile(r"^schedule-run-\d+-\d{8}T\d{6}\.log$")
@@ -57,10 +59,14 @@ class ContextLogFilter(logging.Filter):
         record.user_agent = user_agent_var.get("")
         record.run_id = run_id_var.get("")
         record.task_type = task_type_var.get("")
+        record.request_body = request_body_var.get("")
+        record.response_body = response_body_var.get("")
         return True
 
 
 class TextKvFormatter(logging.Formatter):
+    _OPTIONAL_FIELDS = ("request_body", "response_body")
+
     def format(self, record: logging.LogRecord) -> str:
         fields = {
             "ts": datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S"),
@@ -79,9 +85,16 @@ class TextKvFormatter(logging.Formatter):
             "user_agent": getattr(record, "user_agent", ""),
             "run_id": getattr(record, "run_id", ""),
             "task_type": getattr(record, "task_type", ""),
+            "request_body": getattr(record, "request_body", ""),
+            "response_body": getattr(record, "response_body", ""),
             "message": super().format(record),
         }
-        return " ".join(f"{key}={_safe_text(value)}" for key, value in fields.items())
+        parts = []
+        for key, value in fields.items():
+            if key in self._OPTIONAL_FIELDS and not value:
+                continue
+            parts.append(f"{key}={_safe_text(value)}")
+        return " ".join(parts)
 
 
 class CleanTimedRotatingFileHandler(TimedRotatingFileHandler):

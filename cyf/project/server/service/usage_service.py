@@ -6,6 +6,23 @@ from conf.runtime import runtime_state
 from model.repositories.user_repository import get_user_api_key
 
 
+def _fetch_total_usage(headers, start, end):
+    """
+    查询一段时间窗口内的累计用量（原始数值，单位由上游决定，外部再换算）。
+
+    :param start: start_date，需与 api_param_mode 保持一致的格式（毫秒时间戳或 YYYY-MM-DD）
+    :param end: end_date，同上
+    :return: 用量数值；响应缺失或异常时按约定降级
+    """
+    url = (
+        f"{runtime_state.settings.api_hosts[0]}"
+        f"/dashboard/billing/usage?start_date={start}&end_date={end}"
+    )
+    response = requests.get(url, headers=headers, timeout=30)
+    payload = response.json()
+    return payload.get("total_usage", 0)
+
+
 def get_usage_summary(user: str):
     api_key = get_user_api_key(user)
     api_host = runtime_state.settings.api_hosts[0]
@@ -21,40 +38,16 @@ def get_usage_summary(user: str):
         week_timestamp_ms = int(week_start.timestamp() * 1000)
         one_year_ago_timestamp_ms = int((datetime.now() - timedelta(days=365)).timestamp() * 1000)
 
-        today_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={today_timestamp_ms}&end_date={now_timestamp_ms}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
-        week_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={week_timestamp_ms}&end_date={now_timestamp_ms}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
-        total_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={one_year_ago_timestamp_ms}&end_date={now_timestamp_ms}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
+        today_usage = _fetch_total_usage(headers, today_timestamp_ms, now_timestamp_ms)
+        week_usage = _fetch_total_usage(headers, week_timestamp_ms, now_timestamp_ms)
+        total_usage = _fetch_total_usage(headers, one_year_ago_timestamp_ms, now_timestamp_ms)
     else:
         today_str = datetime.combine(now.date(), datetime.min.time()).strftime("%Y-%m-%d")
         week_str = datetime.combine((now - timedelta(days=now.weekday())).date(), datetime.min.time()).strftime("%Y-%m-%d")
-        now_str = now.strftime("%Y-%m-%d")
-        today_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={today_str}&end_date={now_str}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
-        week_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={week_str}&end_date={now_str}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
-        total_usage = requests.get(
-            f"{api_host}/dashboard/billing/usage?start_date={week_str}&end_date={now_str}",
-            headers=headers,
-            timeout=30,
-        ).json().get("total_usage", 0)
+        one_year_ago_str = (now - timedelta(days=365)).strftime("%Y-%m-%d")
+        today_usage = _fetch_total_usage(headers, today_str, today_str)
+        week_usage = _fetch_total_usage(headers, week_str, today_str)
+        total_usage = _fetch_total_usage(headers, one_year_ago_str, today_str)
 
     subscription_data = requests.get(f"{api_host}/dashboard/billing/subscription", headers=headers, timeout=30).json()
     quota = subscription_data.get("hard_limit_usd", 0)

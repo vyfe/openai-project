@@ -18,7 +18,9 @@ from conf.runtime_logging import (
     duration_ms_var,
     method_var,
     path_var,
+    request_body_var,
     request_id_var,
+    response_body_var,
     status_var,
     user_agent_var,
     user_var,
@@ -74,6 +76,8 @@ def _clear_request_context():
     duration_ms_var.set("")
     client_ip_var.set("")
     user_agent_var.set("")
+    request_body_var.set("")
+    response_body_var.set("")
 
 
 def set_log_user(username: str | None):
@@ -114,6 +118,8 @@ def _register_request_logging(app: Flask):
         user_var.set("")
         client_ip_var.set(request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip())
         user_agent_var.set(request.headers.get("User-Agent", ""))
+        raw_body = request.get_data(cache=True, as_text=True) or ""
+        request_body_var.set(raw_body[:4096])
         g.request_id = request_id
 
     @app.after_request
@@ -123,6 +129,11 @@ def _register_request_logging(app: Flask):
             duration_ms = int((time.time() - getattr(g, "request_started_at", time.time())) * 1000)
             status_var.set(str(response.status_code))
             duration_ms_var.set(str(duration_ms))
+            if _runtime_level() <= logging.DEBUG:
+                if not response.is_streamed:
+                    raw_response = response.get_data(as_text=True) or ""
+                    if raw_response:
+                        response_body_var.set(raw_response[:4096])
             logger_name = "quant.access" if request.path.startswith("/never_guess_my_usage/quant") else "llm.access"
             access_logger = logging.getLogger(logger_name)
             access_logger.info("request_completed")
