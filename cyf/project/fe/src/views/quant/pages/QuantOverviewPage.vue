@@ -2,10 +2,7 @@
   <div class="quant-grid quant-grid--overview">
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>风险提示</h2>
-          <p>先盯住最容易把闭环拖垮的地方：数据失败、未回填操作、回测回撤。</p>
-        </div>
+        <h2>风险提示</h2>
         <el-button text :icon="RefreshRight" @click="workbench.loadOverview" :loading="workbench.loading.overview">刷新</el-button>
       </div>
       <div class="quant-risk-list">
@@ -18,10 +15,7 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>今日任务</h2>
-          <p>客户端抓数和最近导入批次，先确认底层数据链路没有断。</p>
-        </div>
+        <h2>今日任务</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="task in workbench.dashboardOverview?.today_tasks || workbench.clientTasks" :key="task.task_id" class="quant-mini-item">
@@ -39,15 +33,12 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最新信号</h2>
-          <p>优先看最新通过信号，再决定是否补充到人工操作登记里。</p>
-        </div>
+        <h2>最新信号</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="signal in workbench.dashboardOverview?.latest_signals || []" :key="`${signal.run_id}-${signal.symbol}`" class="quant-mini-item">
           <div class="quant-mini-item__head">
-            <span class="quant-mini-item__title">{{ signal.symbol }}</span>
+            <span class="quant-mini-item__title">{{ symbolLabel(signal) }}</span>
             <el-tag size="small" type="success">{{ signal.signal_type || 'watch' }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ signal.trade_date }} · 得分 {{ workbench.formatNumber(signal.score, 1) }}</div>
@@ -61,15 +52,12 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最近操作</h2>
-          <p>人工执行不是旁路数据，后续复盘、自学习都要依赖这里。</p>
-        </div>
+        <h2>最近操作</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="record in workbench.dashboardOverview?.recent_operations || workbench.operationRecords.slice(0, 6)" :key="record.id" class="quant-mini-item">
           <div class="quant-mini-item__head">
-            <span class="quant-mini-item__title">{{ record.symbol }}</span>
+            <span class="quant-mini-item__title">{{ symbolLabel(record) }}</span>
             <el-tag size="small" :type="workbench.operationStatusTag(record.status)">{{ record.status }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ workbench.resolveStrategyName(record.strategy_id) }} · {{ record.trade_date }}</div>
@@ -83,10 +71,7 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最近回测</h2>
-          <p>用轻量事件回测先判断规则有没有基本解释力，再谈调参。</p>
-        </div>
+        <h2>最近回测</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="record in workbench.dashboardOverview?.recent_backtests || workbench.backtestRuns.slice(0, 6)" :key="record.id" class="quant-mini-item">
@@ -105,10 +90,7 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最近运行</h2>
-          <p>策略执行结果仍然是主轴，人工操作和回测都应该围着它沉淀。</p>
-        </div>
+        <h2>最近运行</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="run in workbench.dashboardOverview?.recent_runs || workbench.strategyRuns.slice(0, 6)" :key="run.id" class="quant-mini-item">
@@ -127,10 +109,7 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最近报告</h2>
-          <p>先看报告有没有稳定沉淀，再决定是否继续接 IM 或做更重的 AI 生成。</p>
-        </div>
+        <h2>最近报告</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="record in workbench.dashboardOverview?.recent_reports || workbench.reports.slice(0, 6)" :key="record.id" class="quant-mini-item">
@@ -149,15 +128,12 @@
 
     <section class="quant-panel">
       <div class="quant-panel__header">
-        <div>
-          <h2>最近记忆梳理</h2>
-          <p>这里看长期记忆是否有持续更新，避免后续召回只建立在陈旧样本上。</p>
-        </div>
+        <h2>最近记忆梳理</h2>
       </div>
       <div class="quant-mini-list">
         <div v-for="record in workbench.dashboardOverview?.recent_memory_files || workbench.memoryFiles.slice(0, 6)" :key="record.symbol" class="quant-mini-item">
           <div class="quant-mini-item__head">
-            <span class="quant-mini-item__title">{{ record.symbol }}</span>
+            <span class="quant-mini-item__title">{{ symbolLabel(record) }}</span>
             <el-tag size="small" type="info">memory</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ record.updated_at }}</div>
@@ -175,6 +151,7 @@
 import { useRouter } from 'vue-router'
 import { RefreshRight, WarningFilled } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import { symbolLabel } from '@/composables/quant/format'
 
 const router = useRouter()
 const workbench = useQuantWorkbench()

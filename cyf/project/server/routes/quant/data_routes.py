@@ -8,6 +8,7 @@ from quant.entities import QuantInstrument
 from quant_client.bundle_builder import build_fetch_bundle
 from service.quant.dashboard_service import get_dashboard_overview
 from service.quant.import_service import fetch_import_batches, import_bundle, parse_bundle_bytes
+from service.quant.name_refresh_service import refresh_instrument_names
 from service.quant.position_service import enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
 from service.quant.query_service import fetch_daily_bars
@@ -204,3 +205,18 @@ def quant_daily_bars(user, password):
         return success_response(data=fetch_daily_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
     except Exception as exc:
         return error_response(f"查询日线失败: {exc}")
+
+
+@bp.route("/symbols/refresh_names", methods=["POST"])
+@require_admin_auth
+def quant_symbols_refresh_names():
+    """批量回填 quant_instrument.name（走腾讯 qt.gtimg.cn metadata 端点）。"""
+    try:
+        data = get_request_data() if request.method == "POST" else {}
+        only_empty = str(data.get("only_empty", True)).strip().lower() in ("true", "1", "yes", "on")
+        batch_size = int(data.get("batch_size", 60) or 60)
+        batch_size = max(10, min(batch_size, 200))
+        result = refresh_instrument_names(only_empty=only_empty, batch_size=batch_size)
+        return success_response(data=result, msg=f"扫描 {result['scanned']} 条，更新 {result['updated']} 条")
+    except Exception as exc:
+        return error_response(f"刷新股票名称失败: {exc}")

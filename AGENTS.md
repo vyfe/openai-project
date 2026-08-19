@@ -151,7 +151,7 @@ openai-project/
 │   │   │       ├── symbol_search_service.py / task_dispatch_service.py
 │   │   │       ├── query_service.py / trade_calendar_service.py / dashboard_service.py
 │   │   │       ├── import_service.py / common.py
-│   │   │       └── provider_{base,factory,akshare,baostock}.py
+│   │   │       └── provider_{base,factory,akshare,baostock,tencent}.py
 │   │   │
 │   │   ├── model/               # 数据访问层
 │   │   │   ├── db.py                    # 平台 SQLite（peewee）
@@ -171,7 +171,7 @@ openai-project/
 │   │   ├── quant_client/        # 量化 Agent 端 SDK（被 worker 复用）
 │   │   │   ├── cli.py / common.py / constants.py / http_client.py
 │   │   │   ├── bundle_builder.py / eastmoney_patch.py
-│   │   │   └── provider_{base,factory,akshare,baostock,eastmoney,sina}.py
+│   │   │   └── provider_{base,factory,akshare,baostock,eastmoney,sina,tencent}.py
 │   │   │
 │   │   ├── worker/              # 量化独立进程（与 Web 解耦）
 │   │   │   ├── quant_data_agent.py           # 数据采集 Agent（run-once 子命令）
@@ -340,7 +340,10 @@ HTTP ──► routes/  (Flask Blueprint)
 2. **数据采集 Agent**（`worker/quant_data_agent.py`）—— `run-once` 子命令向 `/client/tasks/claim` 轮询拉取任务，向 `/client/tasks/report` 上报；`start-dev-quant` / `start-prod-quant` 启动，每 15s 一次。
 3. **定时调度 Worker**（`worker/quant_scheduler_worker.py`）—— 后台扫描调度表执行回测/报告生成；`≤30s` 轮询。
 
-**Provider 多源适配**：`quant_client/provider_{akshare,baostock,eastmoney,sina}.py` 通过 `provider_factory` 选择，bash 端另有 `tools/check_quant_sources.py` 做连通性探测。
+**Provider 多源适配**：`quant_client/provider_{tencent,sina,baostock,akshare,eastmoney}.py` 通过 `provider_factory` 选择，bash 端另有 `tools/check_quant_sources.py` 做连通性探测。
+
+- **默认 auto 链**（2026-08-18 起）：`baostock` → `tencent` → `sina`，按字段完整度降序排列。`eastmoney` / `akshare` 已从 auto 链移除，**仅保留显式调用兼容**，会触发 `DeprecationWarning`。
+- 字段完整度（13 项核心字段可填充数）：Baostock 9 > 腾讯 7 > 新浪 5。
 
 **飞书 IM**：唯一支持的 IM 通道，配置见 `[quant].feishu_*`。回调地址 `/never_guess_my_usage/quant/im/feishu/events`。
 

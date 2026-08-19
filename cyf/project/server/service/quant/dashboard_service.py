@@ -5,6 +5,7 @@ from peewee import fn
 from quant.entities import (
     QuantBacktestRun,
     QuantDailyBar,
+    QuantInstrument,
     QuantOperationRecord,
     QuantReportRecord,
     QuantStrategy,
@@ -19,6 +20,28 @@ from service.quant.task_dispatch_service import list_tasks
 
 def _today_text() -> str:
     return datetime.now().date().isoformat()
+
+
+def _bulk_lookup_names(symbols: list[str]) -> dict[str, str]:
+    """批量查 quant_instrument.name；空字符串表示该 symbol 在股票池里没有 name。"""
+    cleaned = [s for s in {s for s in symbols if s}]
+    if not cleaned:
+        return {}
+    rows = QuantInstrument.select(QuantInstrument.symbol, QuantInstrument.name).where(
+        QuantInstrument.symbol.in_(cleaned)
+    )
+    return {row.symbol: (row.name or "") for row in rows}
+
+
+def _attach_names(records: list[dict], name_map: dict[str, str]) -> list[dict]:
+    """把批量查出的 name 挂到 records 的每条上（不修改原 dict）。"""
+    if not records:
+        return records
+    for item in records:
+        sym = item.get("symbol")
+        if sym and "name" not in item:
+            item["name"] = name_map.get(sym, "")
+    return records
 
 
 def _build_risk_tips(tasks: list[dict], latest_signals: list[dict], operations: list[dict], backtests: list[dict]) -> list[str]:
@@ -78,6 +101,17 @@ def get_dashboard_overview() -> dict:
     today_operations = QuantOperationRecord.select().where(QuantOperationRecord.trade_date == date.fromisoformat(today)).count()
     success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success").count()
     memory_files = list_memory_files(limit=6)
+
+    # 批量补 name：一次 in_ 查询覆盖 signals / operations / memory 三个数据源
+    all_symbols = (
+        [s.get("symbol") for s in latest_signals if s.get("symbol")]
+        + [op.get("symbol") for op in operations if op.get("symbol")]
+        + [m.get("symbol") for m in memory_files if m.get("symbol")]
+    )
+    name_map = _bulk_lookup_names(all_symbols)
+    _attach_names(latest_signals, name_map)
+    _attach_names(operations, name_map)
+    _attach_names(memory_files, name_map)
 
     return {
         "snapshot": {

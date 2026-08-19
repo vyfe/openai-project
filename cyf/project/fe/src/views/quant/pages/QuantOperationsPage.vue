@@ -76,7 +76,7 @@
                 <el-option
                   v-for="item in workbench.symbolOptions"
                   :key="item.symbol"
-                  :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                  :label="symbolLabel(item)"
                   :value="item.symbol"
                 />
               </el-select>
@@ -185,6 +185,7 @@
 <script setup lang="ts">
 import { EditPen, RefreshRight } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import { symbolLabel } from '@/composables/quant/format'
 
 const workbench = useQuantWorkbench()
 </script>

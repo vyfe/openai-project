@@ -1,4 +1,4 @@
-import { computed, proxyRefs, reactive, ref } from 'vue'
+import { computed, proxyRefs, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Calendar,
@@ -132,18 +132,24 @@ function createQuantWorkbench() {
     symbol: '',
     startDate: '',
     endDate: '',
+    dateRange: ['', ''] as [string, string],
     limit: 120
   })
+
+  const dailyQueryRange = ref('3m')
 
   const taskForm = reactive({
     symbols: [] as string[],
     startDate: '',
     endDate: '',
+    dateRange: ['', ''] as [string, string],
     provider: 'auto',
     adjustFlag: 'qfq',
     note: '',
     leaseSeconds: 600
   })
+
+  const taskFormRange = ref('')
 
   const stockPoolForm = reactive({
     keyword: '',
@@ -153,6 +159,9 @@ function createQuantWorkbench() {
 
   const backfillForm = reactive({
     symbols: [] as string[],
+    startDate: '',
+    endDate: '',
+    dateRange: ['', ''] as [string, string],
     lookbackDays: 730,
     provider: 'auto',
     adjustFlag: 'qfq',
@@ -905,13 +914,34 @@ function createQuantWorkbench() {
   }
 
   const handleStockPoolSelect = (symbol: string) => {
-    const matched = [...symbolSearchOptions.value, ...symbolOptions.value].find(item => item.symbol === symbol)
-    stockPoolForm.selectedSymbol = symbol
-    stockPoolForm.selectedOption = matched || normalizeSymbolInputOption(symbol)
+    const normalized = normalizeSymbolInputOption(symbol)
+    const searchKey = normalized?.symbol || symbol
+    const matched = [...symbolSearchOptions.value, ...symbolOptions.value].find(
+      item => item.symbol === searchKey || item.symbol === symbol || item.code === symbol
+    )
+    stockPoolForm.selectedSymbol = matched?.symbol || searchKey
+    stockPoolForm.selectedOption = matched || normalized || { symbol, name: '' }
   }
 
   const addSelectedSymbolToPool = async () => {
-    const option = stockPoolForm.selectedOption || normalizeSymbolInputOption(stockPoolForm.selectedSymbol || stockPoolForm.keyword)
+    let option = stockPoolForm.selectedOption
+    if (!option?.name) {
+      // name 为空：先尝试从搜索结果或已有股票池回填，避免存进 DB 后是空字符串
+      const keyword = (stockPoolForm.keyword || stockPoolForm.selectedSymbol || '').trim()
+      if (keyword) {
+        try {
+          await searchSymbols(keyword)
+        } catch {
+          // 搜索失败也继续 upsert，name 留空
+        }
+        const normalized = normalizeSymbolInputOption(keyword) || normalizeSymbolInputOption(option?.symbol || '')
+        const hit = symbolSearchOptions.value.find(item =>
+          item.symbol === normalized?.symbol || item.code === normalized?.code
+        )
+        if (hit) option = hit
+        else if (normalized) option = { ...normalized, name: '' }
+      }
+    }
     if (!option?.symbol) {
       ElMessage.warning('先搜索并选择一个股票')
       return
@@ -1771,6 +1801,27 @@ function createQuantWorkbench() {
 
   // 包装 buildSchedulePayloadImpl（来自 ./quant/format）为闭包，捕获 scheduleForm
   const buildSchedulePayload = () => buildSchedulePayloadImpl(scheduleForm)
+
+  // 同步 daterange 与 startDate/endDate（双向）
+  const syncDateRange = (form: { startDate: string; endDate: string; dateRange: [string, string] }) => {
+    watch(() => form.dateRange, (v) => {
+      if (!v) return
+      const s = v[0] || ''
+      const e = v[1] || ''
+      if (form.startDate !== s) form.startDate = s
+      if (form.endDate !== e) form.endDate = e
+    }, { deep: true })
+    watch([() => form.startDate, () => form.endDate], ([s, e]) => {
+      const cur = form.dateRange || ['', '']
+      const ns = s || ''
+      const ne = e || ''
+      if ((cur[0] || '') === ns && (cur[1] || '') === ne) return
+      form.dateRange = [ns, ne]
+    })
+  }
+  syncDateRange(dailyQuery)
+  syncDateRange(taskForm)
+  syncDateRange(backfillForm)
   return {
     providers,
     symbolOptions,
@@ -1813,7 +1864,9 @@ function createQuantWorkbench() {
     selectedPositionEntryId,
     loading,
     dailyQuery,
+    dailyQueryRange,
     taskForm,
+    taskFormRange,
     stockPoolForm,
     backfillForm,
     defaultRuleConfig,

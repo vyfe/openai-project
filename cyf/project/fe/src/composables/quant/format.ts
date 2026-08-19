@@ -23,6 +23,22 @@ export const strategyStatusTag = (status: string): 'success' | 'info' =>
   status === 'active' ? 'success' : 'info'
 
 /**
+ * 把 symbol 选项（{symbol, name, ...}）渲染成"展示名称，但传代码参数"的下拉 label。
+ * - 优先用中文/英文 name
+ * - 没有 name 时回退到 symbol（保证下拉永远可读）
+ * - name 与 symbol 重复时去重（例如 name="002837 英维克" 不会变成 "英维克 · 002837 英维克"）
+ */
+export const symbolLabel = (item: { symbol?: string; code?: string; name?: string } | null | undefined): string => {
+  if (!item) return ''
+  const code = String(item.symbol || item.code || '').trim()
+  const name = String(item.name || '').trim()
+  if (!name) return code
+  if (name === code) return code
+  if (name.includes(code)) return name
+  return `${name}（${code}）`
+}
+
+/**
  * 根据 scheduleForm.taskType 构造对应的 payload。
  * 注意：依赖 scheduleForm 的 reactive 字段；调用方需传入。
  */

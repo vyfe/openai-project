@@ -4,50 +4,64 @@
       <div class="quant-panel__header">
         <div>
           <h2>查日线数据</h2>
-          <p>先看数据质量，再决定策略口径和观察标的。</p>
         </div>
-        <el-button :icon="Search" type="primary" @click="workbench.loadDailyBars" :loading="workbench.loading.dailyBars">查询</el-button>
+        <div class="quant-toolbar">
+          <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
+            <el-radio-button label="1m">近1月</el-radio-button>
+            <el-radio-button label="3m">近3月</el-radio-button>
+            <el-radio-button label="6m">近6月</el-radio-button>
+            <el-radio-button label="1y">近1年</el-radio-button>
+            <el-radio-button label="all">全部</el-radio-button>
+          </el-radio-group>
+          <el-button :icon="Search" type="primary" @click="workbench.loadDailyBars" :loading="workbench.loading.dailyBars">查询</el-button>
+        </div>
       </div>
 
       <div class="quant-form-grid">
         <el-form label-position="top">
           <el-form-item label="股票代码">
-            <el-select v-model="workbench.dailyQuery.symbol" filterable clearable placeholder="例如 600519.SH">
+            <el-select v-model="workbench.dailyQuery.symbol" filterable clearable placeholder="例如 600519.SH" @change="workbench.loadDailyBars">
               <el-option
                 v-for="item in workbench.symbolOptions"
                 :key="item.symbol"
-                :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                :label="symbolLabel(item)"
                 :value="item.symbol"
               />
             </el-select>
           </el-form-item>
         </el-form>
         <el-form label-position="top">
-          <el-form-item label="开始日期">
-            <el-date-picker v-model="workbench.dailyQuery.startDate" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
-          </el-form-item>
-        </el-form>
-        <el-form label-position="top">
-          <el-form-item label="结束日期">
-            <el-date-picker v-model="workbench.dailyQuery.endDate" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+          <el-form-item label="起止日期">
+            <el-date-picker
+              v-model="workbench.dailyQuery.dateRange"
+              type="daterange"
+              range-separator="→"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
+              unlink-panels
+              style="width:100%"
+              @change="onCustomDateChange"
+            />
           </el-form-item>
         </el-form>
         <el-form label-position="top">
           <el-form-item label="返回条数">
-            <el-input-number v-model="workbench.dailyQuery.limit" :min="20" :max="5000" :step="20" />
+            <el-input-number v-model="workbench.dailyQuery.limit" :min="20" :max="5000" :step="20" style="width:100%" />
           </el-form-item>
         </el-form>
       </div>
 
-      <el-table :data="workbench.dailyBars" stripe height="460" class="quant-table">
-        <el-table-column prop="trade_date" label="交易日" width="108" />
-        <el-table-column prop="close_price" label="收盘" min-width="88" />
-        <el-table-column prop="pct_change" label="涨跌幅%" min-width="96" />
-        <el-table-column prop="turnover_rate" label="换手率%" min-width="96" />
-        <el-table-column prop="volume" label="成交量(股)" min-width="126" />
-        <el-table-column prop="amount" label="成交额" min-width="128" />
-        <el-table-column prop="source" label="来源" width="100" />
-      </el-table>
+      <div class="quant-chart-wrap">
+        <EChartsCandlestick
+          v-if="(workbench.dailyBars as any) && (workbench.dailyBars as any).length"
+          :bars="workbench.dailyBars as any"
+          :is-dark="isDarkTheme"
+          :symbol="workbench.dailyQuery.symbol"
+          height="480px"
+        />
+        <el-empty v-else description="请选择股票并点击查询，或先在数据同步任务里拉数入库" />
+      </div>
     </section>
 
     <div class="quant-side-stack">
@@ -55,7 +69,6 @@
         <div class="quant-panel__header">
           <div>
             <h2>数据同步任务</h2>
-            <p>给独立客户端派发抓数任务，策略调度和它分开。</p>
           </div>
           <div class="quant-toolbar">
             <el-button type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">创建任务</el-button>
@@ -67,7 +80,6 @@
         <div class="quant-mini-section quant-mini-section--first">
           <div class="quant-mini-section__title">
             <span>搜索并加入股票池</span>
-            <span class="quant-muted">支持股票代码、名称和拼音；加入后所有股票池下拉立即可选。</span>
           </div>
           <div class="quant-symbol-add-row">
             <el-select
@@ -86,7 +98,7 @@
               <el-option
                 v-for="item in workbench.visibleSymbolOptions"
                 :key="item.symbol"
-                :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                :label="symbolLabel(item)"
                 :value="item.symbol"
               />
             </el-select>
@@ -114,7 +126,7 @@
                 <el-option
                   v-for="item in workbench.visibleSymbolOptions"
                   :key="item.symbol"
-                  :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                  :label="symbolLabel(item)"
                   :value="item.symbol"
                 />
               </el-select>
@@ -122,13 +134,30 @@
           </el-form>
           <div class="quant-form-grid quant-form-grid--two">
             <el-form label-position="top">
-              <el-form-item label="开始日期">
-                <el-date-picker v-model="workbench.taskForm.startDate" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
+              <el-form-item label="日期范围">
+                <el-radio-group v-model="workbench.taskFormRange" size="small" @change="applyTaskRange">
+                  <el-radio-button label="1m">近1月</el-radio-button>
+                  <el-radio-button label="3m">近3月</el-radio-button>
+                  <el-radio-button label="6m">近6月</el-radio-button>
+                  <el-radio-button label="1y">近1年</el-radio-button>
+                </el-radio-group>
               </el-form-item>
             </el-form>
+          </div>
+          <div class="quant-form-grid quant-form-grid--two">
             <el-form label-position="top">
-              <el-form-item label="结束日期">
-                <el-date-picker v-model="workbench.taskForm.endDate" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+              <el-form-item label="起止日期">
+                <el-date-picker
+                  v-model="workbench.taskForm.dateRange"
+                  type="daterange"
+                  range-separator="→"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  value-format="YYYY-MM-DD"
+                  unlink-panels
+                  style="width:100%"
+                  @change="onTaskCustomDateChange"
+                />
               </el-form-item>
             </el-form>
           </div>
@@ -160,7 +189,6 @@
         <div class="quant-mini-section">
           <div class="quant-mini-section__title">
             <span>补历史数据</span>
-            <span class="quant-muted">新持仓可直接按 2 年窗口补数，客户端按需拉取。</span>
           </div>
           <div class="quant-form-grid quant-form-grid--two">
             <el-form label-position="top">
@@ -182,7 +210,7 @@
                   <el-option
                     v-for="item in workbench.visibleSymbolOptions"
                     :key="item.symbol"
-                    :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                    :label="symbolLabel(item)"
                     :value="item.symbol"
                   />
                 </el-select>
@@ -190,7 +218,7 @@
             </el-form>
             <el-form label-position="top">
               <el-form-item label="回看天数">
-                <el-input-number v-model="workbench.backfillForm.lookbackDays" :min="30" :max="1000" :step="30" />
+                <el-input-number v-model="workbench.backfillForm.lookbackDays" :min="30" :max="1000" :step="30" style="width:100%" />
               </el-form-item>
             </el-form>
           </div>
@@ -265,6 +293,48 @@
 <script setup lang="ts">
 import { Download, Promotion, RefreshRight, Search } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import { useThemeManager } from '@/composables/useThemeManager'
+import { symbolLabel } from '@/composables/quant/format'
+import EChartsCandlestick from '@/components/quant/EChartsCandlestick.vue'
 
 const workbench = useQuantWorkbench()
+const { isDarkTheme } = useThemeManager()
+
+const RANGE_MONTHS: Record<string, number | null> = { '1m': 1, '3m': 3, '6m': 6, '1y': 12, all: null }
+
+function applyDailyRange(range: string) {
+  const months = RANGE_MONTHS[range]
+  const end = new Date()
+  let start: Date
+  if (months == null) {
+    // 全部：置空让后端返回所有数据
+    workbench.dailyQuery.startDate = ''
+    workbench.dailyQuery.endDate = ''
+    workbench.loadDailyBars()
+    return
+  }
+  start = new Date(end)
+  start.setMonth(start.getMonth() - months)
+  workbench.dailyQuery.startDate = start.toISOString().slice(0, 10)
+  workbench.dailyQuery.endDate = end.toISOString().slice(0, 10)
+  workbench.loadDailyBars()
+}
+
+function applyTaskRange(range: string) {
+  const months = RANGE_MONTHS[range]
+  if (months == null) return
+  const end = new Date()
+  const start = new Date(end)
+  start.setMonth(start.getMonth() - months)
+  workbench.taskForm.startDate = start.toISOString().slice(0, 10)
+  workbench.taskForm.endDate = end.toISOString().slice(0, 10)
+}
+
+function onCustomDateChange() {
+  ;(workbench.dailyQueryRange as any) = ''
+}
+
+function onTaskCustomDateChange() {
+  ;(workbench.taskFormRange as any) = ''
+}
 </script>

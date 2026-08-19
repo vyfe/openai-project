@@ -11,7 +11,6 @@
           <div>
             <div class="quant-eyebrow">A-SHARE OPERATIONS</div>
             <h1 class="quant-title">量化工作台</h1>
-            <p class="quant-subtitle">数据入库、策略执行、行业跟踪和报告推送集中在一条日常作业线上。</p>
           </div>
         </div>
         <div class="quant-header__right">
@@ -39,19 +38,10 @@
         </article>
       </section>
 
-      <el-alert
-        class="quant-banner"
-        type="info"
-        :closable="false"
-        show-icon
-        title="当前阶段：页面已拆成子路由模式；策略执行仍由主服务触发，客户端任务只负责抓数与回传。"
-      />
-
       <main class="quant-main-panel" v-loading="workbench.loading.bootstrap">
         <div class="quant-workspace">
           <aside class="quant-nav-panel">
             <h2 class="quant-nav-title">工作分区</h2>
-            <p class="quant-nav-subtitle">先查数据链路，再看信号、行业和调度。</p>
             <nav class="quant-nav-list">
               <RouterLink
                 v-for="item in navItems"

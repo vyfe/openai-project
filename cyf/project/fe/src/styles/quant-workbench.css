@@ -41,6 +41,51 @@
   background-size: 28px 28px;
 }
 
+/* 暗色表格：黑底白字，无 stripe 反色，hover 用更深的灰而不是亮色 */
+.quant-page.quant-dark .quant-table,
+.quant-page.quant-dark .el-table {
+  --el-table-bg-color: #0e1517;
+  --el-table-tr-bg-color: #0e1517;
+  --el-table-header-bg-color: #1c2528;
+  --el-table-header-text-color: #c8d0d2;
+  --el-table-text-color: #e8eeee;
+  --el-table-row-hover-bg-color: #1a2123;
+  --el-table-border-color: #253031;
+  --el-table-border: 1px solid #253031;
+  --el-table-row-stripe-bg-color: #131b1d;
+  color: #e8eeee;
+}
+.quant-page.quant-dark .quant-table .el-table__row--striped td,
+.quant-page.quant-dark .el-table .el-table__row--striped td {
+  background: #131b1d !important;
+}
+.quant-page.quant-dark .quant-table th.el-table__cell,
+.quant-page.quant-dark .el-table th.el-table__cell {
+  background: #1c2528 !important;
+  color: #c8d0d2 !important;
+  border-bottom: 1px solid #253031 !important;
+  font-weight: 600;
+}
+.quant-page.quant-dark .quant-table td.el-table__cell,
+.quant-page.quant-dark .el-table td.el-table__cell {
+  background: #0e1517 !important;
+  color: #e8eeee !important;
+  border-bottom: 1px solid #1a2123 !important;
+}
+.quant-page.quant-dark .quant-table .el-table__row:hover > td,
+.quant-page.quant-dark .el-table .el-table__row:hover > td {
+  background: #1a2123 !important;
+}
+.quant-page.quant-dark .quant-table .el-table__empty-block,
+.quant-page.quant-dark .el-table .el-table__empty-block {
+  background: #0e1517;
+  color: #9aa8ab;
+}
+.quant-page.quant-dark .quant-table .el-table__empty-text,
+.quant-page.quant-dark .el-table .el-table__empty-text {
+  color: #9aa8ab;
+}
+
 .quant-page * {
   box-sizing: border-box;
 }

@@ -66,7 +66,7 @@
                 <el-option
                   v-for="item in workbench.symbolOptions"
                   :key="item.symbol"
-                  :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                  :label="symbolLabel(item)"
                   :value="item.symbol"
                 />
               </el-select>
@@ -76,13 +76,17 @@
 
         <div class="quant-form-grid quant-form-grid--four">
           <el-form label-position="top">
-            <el-form-item label="开始日期">
-              <el-date-picker v-model="workbench.backtestForm.startDate" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" />
-            </el-form-item>
-          </el-form>
-          <el-form label-position="top">
-            <el-form-item label="结束日期">
-              <el-date-picker v-model="workbench.backtestForm.endDate" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" />
+            <el-form-item label="起止日期">
+              <el-date-picker
+                v-model="workbench.backtestForm.dateRange"
+                type="daterange"
+                range-separator="→"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                value-format="YYYY-MM-DD"
+                unlink-panels
+                style="width:100%"
+              />
             </el-form-item>
           </el-form>
           <el-form label-position="top">
@@ -128,7 +132,7 @@
               <el-option
                 v-for="item in workbench.symbolOptions"
                 :key="item.symbol"
-                :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+                :label="symbolLabel(item)"
                 :value="item.symbol"
               />
             </el-select>
@@ -201,6 +205,7 @@
 <script setup lang="ts">
 import { RefreshRight, TrendCharts } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import { symbolLabel } from '@/composables/quant/format'
 
 const workbench = useQuantWorkbench()
 </script>

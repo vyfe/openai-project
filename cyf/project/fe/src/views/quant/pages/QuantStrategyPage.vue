@@ -67,7 +67,7 @@
         <el-form label-position="top">
           <el-form-item label="股票池">
             <el-select v-model="workbench.strategyForm.symbols" multiple filterable collapse-tags collapse-tags-tooltip placeholder="为空时默认扫描当前交易日已有数据的全部标的">
-              <el-option v-for="item in workbench.symbolOptions" :key="item.symbol" :label="item.symbol" :value="item.symbol" />
+              <el-option v-for="item in workbench.symbolOptions" :key="item.symbol" :label="symbolLabel(item)" :value="item.symbol" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -108,6 +108,7 @@
 import { useRouter } from 'vue-router'
 import { RefreshRight, Setting, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import { symbolLabel } from '@/composables/quant/format'
 
 const router = useRouter()
 const workbench = useQuantWorkbench()

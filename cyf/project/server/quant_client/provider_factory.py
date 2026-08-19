@@ -1,17 +1,29 @@
-from quant_client.provider_eastmoney import EastmoneyAshareProvider
-from quant_client.provider_sina import SinaAshareProvider
+import logging
+import warnings
+
 from quant_client.provider_akshare import AkshareAshareProvider
+from quant_client.provider_sina import SinaAshareProvider
 from quant_client.provider_base import BaseAshareProvider
 from quant_client.provider_baostock import BaostockAshareProvider
+from quant_client.provider_eastmoney import EastmoneyAshareProvider
+from quant_client.provider_tencent import TencentAshareProvider
+
+logger = logging.getLogger("quant.provider_factory")
 
 
 # auto 模式下 provider 优先级（数字越小越优先）
+# 自 2026-08-18 起，弃用 eastmoney / akshare 两条数据源：断网率高、限流频繁。
+# 字段完整度排序（按 13 项核心字段的可填充数）：Baostock 9 > 腾讯 7 > 新浪 5
+# 新 auto 链：Baostock（字段最全 + 海外稳定）→ 腾讯（国内快 + 涨跌幅可反算）→ 新浪（备援）
 _AUTO_CHAIN = [
-    (0, EastmoneyAshareProvider),   # 字段最全（振幅、涨跌额、名称）
-    (1, AkshareAshareProvider),     # 完整 OHLCV
-    (2, BaostockAshareProvider),    # 完整 OHLCV
-    (3, SinaAshareProvider),        # OHLCV（无成交额/换手率）
+    (0, BaostockAshareProvider),    # 字段最全：OHLCV + 成交额 + 换手率 + 涨跌幅 + 前收盘价
+    (1, TencentAshareProvider),     # 字段次全：OHLCV + 涨跌幅/前收盘价反算
+    (2, SinaAshareProvider),        # 字段最少：仅 OHLCV
 ]
+
+
+# 显式调用仍允许，但已不推荐：标记为 deprecated，仅为兼容旧任务/旧配置。
+_DEPRECATED_PROVIDERS = {"eastmoney", "akshare"}
 
 
 class AutoAshareProvider(BaseAshareProvider):
@@ -68,15 +80,25 @@ class AutoAshareProvider(BaseAshareProvider):
 
 PROVIDER_MAP = {
     "auto": AutoAshareProvider,
-    "eastmoney": EastmoneyAshareProvider,
-    "akshare": AkshareAshareProvider,
-    "baostock": BaostockAshareProvider,
+    "tencent": TencentAshareProvider,
     "sina": SinaAshareProvider,
+    "baostock": BaostockAshareProvider,
+    "eastmoney": EastmoneyAshareProvider,   # 已弃用：仅保留显式调用兼容
+    "akshare": AkshareAshareProvider,        # 已弃用：仅保留显式调用兼容
 }
 
 
 def get_provider(provider_name: str):
-    provider_cls = PROVIDER_MAP.get((provider_name or "").strip().lower())
+    name = (provider_name or "").strip().lower()
+    if name in _DEPRECATED_PROVIDERS:
+        msg = (
+            f"数据源 {provider_name!r} 已弃用（断网率高、限流频繁），"
+            f"建议切换到 'tencent' / 'sina' / 'baostock' 或 'auto'。"
+            f"本次仍按显式请求执行，请尽快调整。"
+        )
+        warnings.warn(msg, DeprecationWarning, stacklevel=2)
+        logger.warning("deprecated provider in use: %s", provider_name)
+    provider_cls = PROVIDER_MAP.get(name)
     if not provider_cls:
         raise ValueError(f"不支持的数据源: {provider_name}")
     return provider_cls()

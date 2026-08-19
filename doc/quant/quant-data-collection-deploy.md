@@ -14,7 +14,7 @@
 ├─────────────────────────────────────────────────────┤
 │  Data Client (quant_client/cli.py)                  │
 │  ├─ 循环 claim 任务                                  │
-│  ├─ 调用 Eastmoney → AKShare → Baostock 采集        │
+│  ├─ 调用 Baostock → Tencent → Sina 采集（auto 链）│
 │  └─ 回传 bundle 到服务端入库                          │
 └─────────────────────────────────────────────────────┘
 ```
@@ -102,7 +102,7 @@ curl -s -X POST http://localhost:39997/never_guess_my_usage/quant/scheduler/conf
 | `task_type` | `data_sync`（数据同步）、`analysis_report`（分析报告）、`memory_digest`（记忆梳理）|
 | `cron_expr` | 标准 cron 表达式，建议工作日执行 |
 | `symbols` | A 股代码列表，支持 `600519` 或 `000001.SZ` 格式 |
-| `provider` | `auto`（推荐，三源 fallback）、`eastmoney`、`akshare`、`baostock` |
+| `provider` | `auto`（推荐）、`tencent`、`sina`、`baostock`；`eastmoney` / `akshare` 已弃用仅兼容 |
 | `lookback_trade_days` | 回溯交易日数（默认 20），用于确定抓取时间窗口 |
 | `market_calendar` | 交易日历，当前仅支持 `A_SHARE` |
 
@@ -119,14 +119,16 @@ Worker 每 30 秒检查一次是否有到期调度需要执行。
 
 ### 4.1 数据源选择
 
-| Provider | 数据源 | 字段完整性 | 国内访问 | 海外访问 |
-|---|---|---|---|---|
-| `eastmoney` | 东方财富 Push API | 最全（含振幅、涨跌额、名称） | ✅ 快 | ❌ 受限 |
-| `akshare` | 东方财富 + 新浪 | 完整 | ✅ | ❌ 间歇 |
-| `baostock` | Baostock 独立服务 | 基本（无振幅/涨跌额/名称） | ✅ | ✅ 稳定 |
-| `auto` | 三源 fallback | 按实际数据源 | ✅ | ✅（降级到 baostock） |
+| Provider | 数据源 | 字段完整性 | 国内访问 | 海外访问 | 状态 |
+|---|---|---|---|---|---|
+| `tencent` | 腾讯自选股 fqkline | OHLCV（涨跌幅可反算，无 amount/换手率/涨跌额/振幅） | ✅ 快 | ⚠️ 偶有 GFW | auto 备援（字段次全） |
+| `sina` | 新浪财经 kline | 基本 OHLCV（无成交额/换手率/振幅） | ✅ | ⚠️ | auto 兜底（字段最少） |
+| `baostock` | Baostock 独立服务 | 完整 OHLCV（无涨跌额/振幅/名称） | ✅ | ✅ 稳定 | **默认主源**（字段最全） |
+| `auto` | 三源 fallback | 按实际数据源 | ✅ | ✅（降级到 tencent/sina） | **推荐** |
+| `eastmoney` | 东方财富 Push API | 最全（含振幅/涨跌额/名称） | ✅ 快 | ❌ 受限 | ⚠️ **已弃用**，仅兼容 |
+| `akshare` | 东方财富 + 新浪 | 完整 | ✅ | ❌ 间歇 | ⚠️ **已弃用**，仅兼容 |
 
-**推荐：生产环境（国内服务器）用 `auto`，海外调试用 `baostock`。**
+**推荐：所有环境统一使用 `auto`，新部署不要再显式选 `eastmoney` / `akshare`。**
 
 ### 4.2 客户端启动方式
 
@@ -168,11 +170,11 @@ python -m quant_client.cli fetch-bars \
 
 每个 provider 内部已实现 **3 次重试 + 失败 sleep 60s**：
 
-- Eastmoney: 直连东方财富 Push API，每次超时 30s，3 次重试共 ~210s
-- AKShare: 通过 akshare 库调用，每次超时取决于网络，3 次重试共 ~180s+
+- Tencent: 直连腾讯自选股 fqkline API，每次超时 30s，3 次重试共 ~210s
+- Sina: 直连新浪财经 K 线接口，每次超时 30s，3 次重试共 ~210s
 - Baostock: 独立登录 + 查询，每次超时较短，3 次重试共 ~180s+
 
-`auto` provider 依次尝试 Eastmoney → AKShare → Baostock，任一个成功即返回。
+`auto` provider 依次尝试 Baostock（字段最全）→ Tencent（次全）→ Sina（兜底），任一个成功即返回。
 
 ## 5. 任务分配与查看
 
@@ -246,7 +248,7 @@ print('调度概览:', d['data'].get('overview'))
 
 ### 7.1 日线数据 (quant_daily_bar)
 
-| 字段 | 说明 | 东财 | AKShare | Baostock |
+| 字段 | 说明 | 腾讯 | 新浪 | Baostock |
 |---|---|---|---|---|
 | `symbol` | 标准化代码 `600519.SH` | ✅ | ✅ | ✅ |
 | `trade_date` | 交易日 | ✅ | ✅ | ✅ |
@@ -254,19 +256,19 @@ print('调度概览:', d['data'].get('overview'))
 | `high_price` | 最高价 | ✅ | ✅ | ✅ |
 | `low_price` | 最低价 | ✅ | ✅ | ✅ |
 | `close_price` | 收盘价 | ✅ | ✅ | ✅ |
-| `preclose_price` | 前收盘价 | ✅ | ✅ | ✅ |
+| `preclose_price` | 前收盘价 | ✅（反算） | ❌（反算） | ✅ |
 | `volume` | 成交量（股） | ✅ | ✅ | ✅ |
-| `amount` | 成交额（元） | ✅ | ✅ | ✅ |
-| `turnover_rate` | 换手率（%） | ✅ | ✅ | ✅ |
-| `pct_change` | 涨跌幅（%） | ✅ | ✅ | ✅ |
-| `change` | 涨跌额（元） | ✅ | ❌ | ❌ |
-| `amplitude_pct` | 振幅（%） | ✅ | ❌ | ❌ |
+| `amount` | 成交额（元） | ❌ | ❌ | ✅ |
+| `turnover_rate` | 换手率（%） | ❌ | ❌ | ✅ |
+| `pct_change` | 涨跌幅（%） | ✅（反算） | ❌（反算） | ✅ |
+| `change` | 涨跌额（元） | ❌ | ❌ | ❌ |
+| `amplitude_pct` | 振幅（%） | ❌ | ❌ | ❌ |
 
 ### 7.2 标的元数据 (quant_instrument)
 
-| 字段 | 说明 | 东财 | 其他 |
-|---|---|---|---|
-| `name` | 股票名称 | ✅（自动填充） | ❌（留空，需手动补） |
+| 字段 | 说明 | 腾讯 | 新浪 | Baostock |
+|---|---|---|---|---|
+| `name` | 股票名称 | ❌（留空，需手动补） | ❌（留空，需手动补） | ❌（留空，需手动补） |
 
 ## 8. 快速排障
 
@@ -278,9 +280,9 @@ print('调度概览:', d['data'].get('overview'))
 
 ### 问题：数据源全部失败
 
-- 检查网络能否访问东方财富 / Baostock
+- 检查网络能否访问腾讯自选股 / 新浪财经 / Baostock
 - 检查 `auto` provider 的错误信息（会列出每个 provider 的失败原因）
-- 国内服务器部署可解决东财/AKShare 网络问题
+- 海外服务器可能受 GFW 影响导致 Tencent/Sina 间歇性失败，会自动降级到 Baostock
 
 ### 问题：任务状态 stuck 在 leased
 
@@ -295,7 +297,7 @@ print('调度概览:', d['data'].get('overview'))
 
 ## 9. 生产环境建议
 
-1. **服务端部署在国内云服务器**，确保东财/AKShare 数据源可达
+1. **服务端部署在国内云服务器**，确保腾讯自选股 / 新浪财经可达；海外服务器会自动降级到 Baostock
 2. **每天至少一个数据客户端常驻运行**（循环脚本 + systemd/pm2）
 3. **调度时间建议**：data_sync 15:20, analysis_report 15:35, memory_digest 21:30
 4. **定期检查** `/quant/data/import-batches` 确认数据正常入库

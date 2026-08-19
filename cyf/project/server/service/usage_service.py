@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 
 import requests
 
 from conf.runtime import runtime_state
 from model.repositories.user_repository import get_user_api_key
+
+_log = logging.getLogger("llm.web")
 
 
 def _fetch_total_usage(headers, start, end):
@@ -18,9 +21,31 @@ def _fetch_total_usage(headers, start, end):
         f"{runtime_state.settings.api_hosts[0]}"
         f"/dashboard/billing/usage?start_date={start}&end_date={end}"
     )
-    response = requests.get(url, headers=headers, timeout=30)
-    payload = response.json()
-    return payload.get("total_usage", 0)
+    _log.info("fetch_usage request start=%r end=%r url=%s", start, end, url)
+    try:
+        response = requests.get(url, headers=headers, timeout=30)
+    except requests.RequestException as exc:
+        _log.warning("fetch_usage http_error url=%s err=%s", url, exc)
+        return 0
+    body_text = (response.text or "")[:4096]
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        _log.warning(
+            "fetch_usage json_decode_error url=%s status=%s err=%s body=%r",
+            url, response.status_code, exc, body_text,
+        )
+        return 0
+    if not isinstance(payload, dict):
+        _log.warning(
+            "fetch_usage non_dict_payload url=%s status=%s type=%s body=%r",
+            url, response.status_code, type(payload).__name__, body_text,
+        )
+        return 0
+    raw_value = payload.get("total_usage", 0)
+    value = raw_value if isinstance(raw_value, (int, float)) else 0
+    _log.info("fetch_usage ok url=%s status=%s value=%s", url, response.status_code, value)
+    return value
 
 
 def get_usage_summary(user: str):

@@ -44,7 +44,7 @@
             <el-option
               v-for="item in symbolSearchOptions"
               :key="item.symbol"
-              :label="`${item.symbol}${item.name ? ` · ${item.name}` : ''}`"
+              :label="symbolLabel(item)"
               :value="item.symbol"
             />
           </el-select>
@@ -62,7 +62,7 @@
 
       <div class="quant-industry-cards">
         <article v-for="item in dashboard?.latest_cards || []" :key="item.symbol" class="quant-metric-card">
-          <span>{{ item.name }} · {{ item.symbol }}</span>
+          <span>{{ symbolLabel(item) }}</span>
           <strong>{{ formatNumber(item.close_price) }}</strong>
           <div class="quant-card-row">
             <span :class="Number(item.pct_change) >= 0 ? 'quant-pos' : 'quant-neg'">{{ formatPct(item.pct_change) }}</span>
@@ -87,7 +87,7 @@
         </div>
         <div class="quant-pill-list">
           <span v-for="item in industrySymbols" :key="item.symbol" class="quant-pill">
-            {{ item.symbol }}{{ item.name ? ` · ${item.name}` : '' }}
+            {{ symbolLabel(item) }}
           </span>
           <span v-if="!industrySymbols.length" class="quant-muted">暂无标的</span>
         </div>
@@ -164,6 +164,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, RefreshRight } from '@element-plus/icons-vue'
 import { quantDataAPI, quantIndustryAPI } from '@/services/quantApi'
+import { symbolLabel } from '@/composables/quant/format'
 
 const boards = ref<any[]>([])
 const selectedBoardId = ref<number | null>(null)
@@ -281,7 +282,7 @@ async function addIndustrySymbol() {
       symbols: nextSymbols,
       status: board.status || 'active'
     })
-    ElMessage.success(`已添加行业标的：${option.symbol}${option.name ? ` · ${option.name}` : ''}`)
+    ElMessage.success(`已添加行业标的：${symbolLabel(option)}`)
     industrySymbolForm.selectedSymbol = ''
     industrySymbolForm.selectedOption = null
     symbolSearchOptions.value = []
