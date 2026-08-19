@@ -172,6 +172,12 @@ class TestScheduleRunClosedLoop:
         assert refreshed.status == RUN_STATUS_SUCCESS
         assert refreshed.finished_at is not None
         assert "Agent 上报成功" in refreshed.message
+        # per-run 日志应包含 agent_report_received 一行
+        with open(run.log_file, "r", encoding="utf-8") as fp:
+            log_content = fp.read()
+        assert "agent_report_received" in log_content
+        assert f"task_id={task['task_id']}" in log_content
+        assert "status=success" in log_content
 
     def test_agent_failure_updates_schedule_run(self):
         run = self._make_awaiting_run()
@@ -189,6 +195,12 @@ class TestScheduleRunClosedLoop:
         assert refreshed.status == RUN_STATUS_FAILED
         assert "Agent 上报失败" in refreshed.message
         assert "remote 5xx" in refreshed.message
+        # per-run 日志应包含失败详情
+        with open(run.log_file, "r", encoding="utf-8") as fp:
+            log_content = fp.read()
+        assert "agent_report_received" in log_content
+        assert "status=failed" in log_content
+        assert "remote 5xx" in log_content
 
     def test_skips_link_when_schedule_run_not_awaiting(self):
         """非 awaiting_data 状态的 schedule_run 不应被覆盖（比如已被人工重置）。"""

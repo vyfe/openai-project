@@ -3,11 +3,15 @@ from __future__ import annotations
 import os
 import time
 
-from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_baostock_symbol, to_float
+import logging
+
+from quant_client.common import normalize_symbol, parse_trade_date, resolve_market_info, to_baostock_symbol, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 MAX_RETRIES = 3
 RETRY_SLEEP_SECONDS = int(os.environ.get("QUANT_RETRY_SLEEP_SECONDS", "60"))
+
+logger = logging.getLogger("quant.client.baostock")
 
 
 class BaostockAshareProvider(BaseAshareProvider):
@@ -50,15 +54,26 @@ class BaostockAshareProvider(BaseAshareProvider):
         try:
             rows: list[dict] = []
             for raw_symbol in symbols:
-                code = normalize_code(raw_symbol)
-                exchange = infer_exchange(code)
-                rows.extend(self._fetch_one_symbol(bs, code, exchange, start_date, end_date, adjust_flag, adjust_code))
+                try:
+                    market = resolve_market_info(raw_symbol)
+                    rows.extend(
+                        self._fetch_one_symbol(
+                            bs, market.code, market.exchange, start_date, end_date, adjust_flag, adjust_code
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "baostock_symbol_failed symbol=%s err=%s", raw_symbol, exc,
+                    )
+                    continue
             return rows
         finally:
             bs.logout()
 
     def _fetch_one_symbol(self, bs, code: str, exchange: str, start_date: str, end_date: str, adjust_flag: str, adjust_code: str) -> list[dict]:
-        full_symbol = to_baostock_symbol(code)
+        # 注意：必须用上游已经解析过的 exchange 去拼 baostock 代码，而不是再调 to_baostock_symbol(code)——
+        # 那样会因为 code 被 strip 过 suffix 重新推断错（000001 又被推断成 SZ）。
+        full_symbol = f"{exchange.lower()}.{code}"
         field_sets = [
             "date,code,open,high,low,close,preclose,volume,amount,pctChg,turn",
             "date,code,open,high,low,close,preclose,volume,amount",

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.request
 
-from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_float
+from quant_client.common import normalize_symbol, parse_trade_date, resolve_market_info, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 MAX_RETRIES = 3
 RETRY_SLEEP_SECONDS = int(os.environ.get("QUANT_RETRY_SLEEP_SECONDS", "60"))
+
+logger = logging.getLogger("quant.client.tencent")
 
 # 腾讯自选股 K 线接口：日线 + 前/后/不复权三套数据
 # ⚠️ fqkline 接口精简版只返回 6 个字段：[日期, 开盘, 收盘, 最高, 最低, 成交量(手)]
@@ -34,13 +37,20 @@ class TencentAshareProvider(BaseAshareProvider):
     def fetch_daily_bars(self, symbols: list[str], start_date: str, end_date: str, adjust_flag: str = "qfq") -> list[dict]:
         rows: list[dict] = []
         for raw_symbol in symbols:
-            rows.extend(self._fetch_one_symbol(raw_symbol, start_date, end_date, adjust_flag))
+            try:
+                rows.extend(self._fetch_one_symbol(raw_symbol, start_date, end_date, adjust_flag))
+            except Exception as exc:
+                logger.warning(
+                    "tencent_symbol_failed symbol=%s err=%s", raw_symbol, exc,
+                )
+                continue
         return rows
 
     def _fetch_one_symbol(self, raw_symbol: str, start_date: str, end_date: str, adjust_flag: str) -> list[dict]:
-        code = normalize_code(raw_symbol)
-        exchange = infer_exchange(code)
-        market_prefix = "sh" if exchange == "SH" else "sz"
+        market = resolve_market_info(raw_symbol)
+        code = market.code
+        exchange = market.exchange
+        market_prefix = market.market_prefix
         field = _ADJUST_FIELD.get(adjust_flag, "qfqday")
 
         start_dt = parse_trade_date(start_date)

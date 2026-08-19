@@ -8,6 +8,10 @@ from service.quant.common import (
     normalize_symbol,
     normalize_code,
     infer_exchange,
+    extract_user_exchange,
+    resolve_market_info,
+    correct_known_index_exchange,
+    KNOWN_INDICES,
     to_baostock_symbol,
     parse_trade_date,
     normalize_date_text,
@@ -66,7 +70,11 @@ class TestInferExchange:
 
 
 class TestNormalizeSymbol:
-    """测试 normalize_symbol — 规范化为 CODE.EXCHANGE 格式。"""
+    """测试 normalize_symbol — 规范化为 CODE.EXCHANGE 格式。
+
+    优先信任用户给的 suffix：000300.SH/000001.SH/000688.SH 这些"code 以 0 开头但
+    实际属于上交所"的标的，不能被 infer_exchange 强行改写成 .SZ。
+    """
 
     def test_sz_code(self):
         assert normalize_symbol("000001") == "000001.SZ"
@@ -78,9 +86,144 @@ class TestNormalizeSymbol:
         assert normalize_symbol("000001.SZ") == "000001.SZ"
         assert normalize_symbol("600519.SH") == "600519.SH"
 
+    def test_shanghai_index_keeps_sh(self):
+        """000001.SH（上证综指）必须保留 .SH，不能被 infer_exchange 改写。"""
+        assert normalize_symbol("000001.SH") == "000001.SH"
+
+    def test_hs300_keeps_sh(self):
+        """000300.SH（沪深300）必须保留 .SH。"""
+        assert normalize_symbol("000300.SH") == "000300.SH"
+
+    def test_star50_keeps_sh(self):
+        """000688.SH（科创50）必须保留 .SH。"""
+        assert normalize_symbol("000688.SH") == "000688.SH"
+
+    def test_lowercase_suffix(self):
+        assert normalize_symbol("000300.sh") == "000300.SH"
+
+    def test_prefix_form(self):
+        assert normalize_symbol("SH.000300") == "000300.SH"
+
     def test_empty_raises(self):
         with pytest.raises(ValueError):
             normalize_symbol("")
+
+
+class TestExtractUserExchange:
+    """测试 extract_user_exchange — 提取用户显式给的 suffix。"""
+
+    def test_suffix_form(self):
+        assert extract_user_exchange("000300.SH") == "SH"
+
+    def test_prefix_form(self):
+        assert extract_user_exchange("SH.000300") == "SH"
+
+    def test_no_suffix_returns_none(self):
+        assert extract_user_exchange("000300") is None
+
+    def test_lowercase_returns_upper(self):
+        assert extract_user_exchange("000300.sh") == "SH"
+
+    def test_empty_returns_none(self):
+        assert extract_user_exchange("") is None
+
+    def test_none_returns_none(self):
+        assert extract_user_exchange(None) is None
+
+    def test_random_dot_returns_none(self):
+        assert extract_user_exchange("abc.def") is None
+
+
+class TestCorrectKnownIndexExchange:
+    """correct_known_index_exchange — 把已知指数的 suffix 纠正成正确交易所。"""
+
+    def test_hs300_sz_corrected_to_sh(self):
+        assert correct_known_index_exchange("000300.SZ") == "000300.SH"
+
+    def test_star50_sz_corrected_to_sh(self):
+        assert correct_known_index_exchange("000688.SZ") == "000688.SH"
+
+    def test_shanghai_50_corrected(self):
+        assert correct_known_index_exchange("000016.SZ") == "000016.SH"
+
+    def test_chinext_kept(self):
+        assert correct_known_index_exchange("399006.SZ") is None
+
+    def test_already_correct_returns_none(self):
+        assert correct_known_index_exchange("000300.SH") is None
+
+    def test_ambiguous_000001_not_corrected(self):
+        """000001 在 SZ 是平安银行、SH 是上证综指，二义性保留，不动。"""
+        assert KNOWN_INDICES.get("000001") is None
+        assert correct_known_index_exchange("000001.SZ") is None
+        assert correct_known_index_exchange("000001.SH") is None
+
+    def test_no_suffix_added_when_known_index(self):
+        assert correct_known_index_exchange("000300") == "000300.SH"
+        assert correct_known_index_exchange("000688") == "000688.SH"
+
+    def test_non_index_unchanged(self):
+        assert correct_known_index_exchange("600519.SH") is None
+        assert correct_known_index_exchange("000657.SZ") is None
+        assert correct_known_index_exchange("688825.SH") is None
+
+
+class TestKnownIndicesMap:
+    """KNOWN_INDICES 表的正确性。"""
+
+    def test_hs300_is_sh(self):
+        assert KNOWN_INDICES["000300"] == "SH"
+
+    def test_chinext_is_sz(self):
+        assert KNOWN_INDICES["399006"] == "SZ"
+
+    def test_no_ambiguous_000001(self):
+        assert "000001" not in KNOWN_INDICES
+
+
+class TestResolveMarketInfo:
+    """resolve_market_info — 统一 provider 的 code/exchange/market_prefix 解析。"""
+
+    def test_shanghai_stock_with_suffix(self):
+        info = resolve_market_info("600519.SH")
+        assert info.code == "600519"
+        assert info.exchange == "SH"
+        assert info.market_prefix == "sh"
+
+    def test_shenzhen_stock_with_suffix(self):
+        info = resolve_market_info("000001.SZ")
+        assert info.code == "000001"
+        assert info.exchange == "SZ"
+        assert info.market_prefix == "sz"
+
+    def test_shanghai_index_keeps_sh(self):
+        """000300.SH / 000001.SH 必须保留 .SH，不能被 infer_exchange 改写。"""
+        info = resolve_market_info("000300.SH")
+        assert info.code == "000300"
+        assert info.exchange == "SH"  # 不是 SZ
+        assert info.market_prefix == "sh"
+
+    def test_pure_code_infers_from_prefix(self):
+        info = resolve_market_info("600519")
+        assert info.code == "600519"
+        assert info.exchange == "SH"
+
+    def test_lowercase_suffix(self):
+        info = resolve_market_info("000300.sh")
+        assert info.exchange == "SH"
+        assert info.market_prefix == "sh"
+
+    def test_prefix_form_sh_000300(self):
+        info = resolve_market_info("SH.000300")
+        assert info.code == "000300"
+        assert info.exchange == "SH"
+        assert info.market_prefix == "sh"
+
+    def test_beijing_stock(self):
+        info = resolve_market_info("830946.BJ")
+        assert info.code == "830946"
+        assert info.exchange == "BJ"
+        assert info.market_prefix == "bj"
 
 
 class TestToBaostockSymbol:

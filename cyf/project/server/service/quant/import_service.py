@@ -124,7 +124,22 @@ def import_bundle(bundle: dict, file_name: str = "", payload_bytes: Optional[byt
 
         with quant_db.atomic():
             for chunk in _chunked(list(instrument_rows.values())):
-                QuantInstrument.insert_many(chunk).on_conflict_replace().execute()
+                # 取 chunk 第一行的元数据（同一批 chunk 内 code/exchange/source 一致）
+                first = chunk[0]
+                QuantInstrument.insert_many(chunk).on_conflict(
+                    conflict_target=[QuantInstrument.symbol],
+                    update={
+                        QuantInstrument.code: first["code"],
+                        QuantInstrument.exchange: first["exchange"],
+                        QuantInstrument.market: "A_SHARE",
+                        QuantInstrument.source: first["source"],
+                        QuantInstrument.status: "active",
+                        QuantInstrument.updated_at: now,
+                        # 故意不写 name——大部分 provider（baostock/tencent/sina/akshare）
+                        # 不返回 name 字段，bundle 里 name 为空；用 on_conflict_replace 会把
+                        # 已有人工填写的中文名覆盖成空串。名称走专门的 refresh_names 流程回填。
+                    },
+                ).execute()
             for chunk in _chunked(bar_rows):
                 QuantDailyBar.insert_many(chunk).on_conflict_replace().execute()
 

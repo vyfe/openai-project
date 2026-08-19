@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import urllib.parse
 import urllib.request
 
 from quant_client.eastmoney_patch import get_eastmoney_session
-from quant_client.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_float
+from quant_client.common import normalize_symbol, parse_trade_date, resolve_market_info, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 
@@ -16,8 +17,19 @@ EASTMONEY_UT = "fa5fd1943c7b386f172d6893dbfba10b"
 MAX_RETRIES = 3
 RETRY_SLEEP_SECONDS = int(os.environ.get("QUANT_RETRY_SLEEP_SECONDS", "60"))
 
+logger = logging.getLogger("quant.client.eastmoney")
 
-def _get_secid(code: str) -> str:
+
+def _get_secid(code: str, exchange: str = "") -> str:
+    """东财 secid 格式：`{market_id}.{code}`，market_id 由交易所决定。
+
+    沪市=1、深市=0（与 code 前缀不是 1:1 关系，所以这里信任传入的 exchange 而非推断）。
+    """
+    if exchange == "SH":
+        return f"1.{code}"
+    if exchange == "SZ":
+        return f"0.{code}"
+    # fallback：仅在调用方没传 exchange 时使用
     return f"1.{code}" if code.startswith("6") else f"0.{code}"
 
 
@@ -30,13 +42,20 @@ class EastmoneyAshareProvider(BaseAshareProvider):
     def fetch_daily_bars(self, symbols: list[str], start_date: str, end_date: str, adjust_flag: str = "qfq") -> list[dict]:
         rows: list[dict] = []
         for raw_symbol in symbols:
-            rows.extend(self._fetch_one_symbol(raw_symbol, start_date, end_date, adjust_flag))
+            try:
+                rows.extend(self._fetch_one_symbol(raw_symbol, start_date, end_date, adjust_flag))
+            except Exception as exc:
+                logger.warning(
+                    "eastmoney_symbol_failed symbol=%s err=%s", raw_symbol, exc,
+                )
+                continue
         return rows
 
     def _fetch_one_symbol(self, raw_symbol: str, start_date: str, end_date: str, adjust_flag: str) -> list[dict]:
-        code = normalize_code(raw_symbol)
-        exchange = infer_exchange(code)
-        secid = _get_secid(code)
+        market = resolve_market_info(raw_symbol)
+        code = market.code
+        exchange = market.exchange
+        secid = _get_secid(code, exchange)
 
         fqt_map = {"qfq": "1", "hfq": "2", "raw": "0", "": "1"}
         fqt = fqt_map.get(adjust_flag, "1")

@@ -41,6 +41,36 @@ def normalize_payload(payload) -> dict:
     raise ValueError("payload 格式不正确")
 
 
+def _validate_data_sync_symbols(symbols: list) -> None:
+    """data_sync 任务的 symbols 校验：已知指数 code 与 suffix 不一致时直接报错。
+
+    避免把 000300.SZ（实际是沪深300）存到 schedule config 里——之前 `_infer_market` bug 期间
+    落库的脏数据可以靠 `execute_data_sync` 的执行时校正自动修复，但新增调度应在保存时就拦截。
+    """
+    from service.quant.common import KNOWN_INDICES, extract_user_exchange, normalize_code
+
+    errors: list[str] = []
+    for sym in symbols:
+        raw = str(sym or "").strip()
+        if not raw:
+            continue
+        try:
+            code = normalize_code(raw)
+        except ValueError:
+            continue
+        expected = KNOWN_INDICES.get(code)
+        if not expected:
+            continue
+        user_exchange = extract_user_exchange(raw)
+        if user_exchange and user_exchange != expected:
+            errors.append(
+                f"{raw} 的实际交易所是 {expected}（不是 {user_exchange}）。"
+                f"code {code} 对应指数的 suffix 应为 .{expected}"
+            )
+    if errors:
+        raise ValueError("; ".join(errors))
+
+
 def to_bool(value) -> bool:
     if isinstance(value, bool):
         return value
@@ -62,6 +92,7 @@ def validate_schedule(task_type: str, cron_expr: str, payload: dict):
             raw_symbols = [item.strip() for item in raw_symbols.split(",") if item.strip()]
         if not raw_symbols:
             raise ValueError("data_sync 任务至少需要一个 symbol")
+        _validate_data_sync_symbols(raw_symbols)
     if normalized_task_type == TASK_TYPE_ANALYSIS:
         if not payload.get("strategy_ids"):
             raise ValueError("analysis_report 任务至少需要一个 strategy_id")

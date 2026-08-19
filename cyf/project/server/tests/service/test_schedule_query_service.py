@@ -33,6 +33,23 @@ class TestValidateSchedule:
     def test_data_sync_with_symbols_ok(self):
         validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000001.SZ"]})
 
+    def test_data_sync_rejects_known_index_with_wrong_suffix(self):
+        """000300.SZ / 000688.SZ / 000016.SZ 等已知指数 suffix 错配应在保存时拦截。"""
+        with pytest.raises(ValueError, match="000300"):
+            validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000300.SZ"]})
+        with pytest.raises(ValueError, match="000688"):
+            validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000688.SZ"]})
+        with pytest.raises(ValueError, match="000016"):
+            validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000016.SZ"]})
+
+    def test_data_sync_accepts_known_index_with_correct_suffix(self):
+        validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000300.SH", "399006.SZ"]})
+
+    def test_data_sync_does_not_reject_ambiguous_000001(self):
+        """000001 在 SZ 是平安银行，保留二义性，不拦截。"""
+        validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000001.SZ"]})
+        validate_schedule("data_sync", "20 15 * * 1-5", {"symbols": ["000001.SH"]})
+
     def test_analysis_needs_strategy_ids(self):
         with pytest.raises(ValueError, match="至少需要一个 strategy_id"):
             validate_schedule("analysis_report", "20 15 * * 1-5", {})

@@ -16,6 +16,12 @@ EASTMONEY_SUGGEST_URL = "https://searchapi.eastmoney.com/api/suggest/get"
 EASTMONEY_SUGGEST_TOKEN = "D43BF722C8E33BDC906FB84D85E326E8"
 SUGGEST_TYPE_A_SHARE = "14"  # A 股
 
+# 接受东财返回的 SecurityTypeName（白名单）。覆盖：
+# - 沪A / 深A / 京A：主板 A 股
+# - 科创板：上交所科创板（688xxx）
+# - 指数：沪深主要指数（000001.SH / 000300.SH / 399001.SZ / 399006.SZ / 000688.SH 等）
+ACCEPTED_SECURITY_TYPES = {"沪A", "深A", "京A", "科创板", "指数"}
+
 
 def search_symbols(
     keyword: str,
@@ -23,7 +29,7 @@ def search_symbols(
     suggest_type: str = SUGGEST_TYPE_A_SHARE,
     timeout: int = 10,
 ) -> list[dict]:
-    """模糊搜索 A 股股票。
+    """模糊搜索 A 股股票（含科创板与主要指数）。
 
     Args:
         keyword: 搜索关键词（名称/代码/拼音）
@@ -67,15 +73,13 @@ def search_symbols(
         if not code or not name:
             continue
 
-        # 推断交易所
-        market = _infer_market(code)
-        # 统一代码格式
-        symbol = _to_symbol(code, market)
-
         sec_type = str(item.get("SecurityTypeName", "")).strip()
-        # 仅保留 A 股结果
-        if sec_type not in ("沪A", "深A", "京A"):
+        if sec_type not in ACCEPTED_SECURITY_TYPES:
             continue
+
+        # 优先用东财的 MarketType 字段（指数/科创板等"code 前缀 ≠ 实际交易所"的标的必须依赖这个字段）
+        market = _infer_market(code, item.get("MarketType", ""))
+        symbol = _to_symbol(code, market)
 
         results.append(
             {
@@ -91,7 +95,24 @@ def search_symbols(
     return results
 
 
-def _infer_market(code: str) -> str:
+def _infer_market(code: str, market_type: str = "") -> str:
+    """推断交易所。优先使用东财 MarketType 字段（避免把 000300/000001/000688
+    这类"code 以 0 开头但实际属于上交所"的指数/科创板归错）。
+
+    东财 MarketType:
+      "1"   → 上交所 (SH)
+      "2"   → 深交所 (SZ)
+      "_TB" → 新三板/北交所 (BJ)
+      "5"   → 港股
+      "_KRX" → 韩股等
+    """
+    if market_type == "1":
+        return "SH"
+    if market_type == "2":
+        return "SZ"
+    if market_type == "_TB":
+        return "BJ"
+    # 没有 MarketType 时按 code 前缀兜底
     if code.startswith(("6", "5", "9")):
         return "SH"
     if code.startswith(("0", "2", "3")):

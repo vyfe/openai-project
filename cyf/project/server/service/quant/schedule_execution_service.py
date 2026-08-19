@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, timedelta
 
 from quant.entities import QuantPositionJournal, QuantReportRecord, QuantScheduleConfig, QuantScheduleRun
-from service.quant.common import normalize_symbol
+from service.quant.common import correct_known_index_exchange, normalize_symbol
 from service.quant.im_delivery_service import send_position_summary_to_channel, send_report_to_channel
 from service.quant.industry_service import collect_industry, get_industry_board, get_industry_dashboard, render_industry_daily_markdown
 from service.quant.memory_service import curate_symbol_memories
@@ -48,10 +48,21 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
     for sym in collect_active_user_symbols():
         if sym not in symbols:
             symbols.append(sym)
-    for idx in ["000001.SH", "399001.SZ", "399006.SZ", "000688.SH", "000300.SH"]:
-        if idx not in symbols:
-            symbols.append(idx)
-    normalized_symbols = [normalize_symbol(item) for item in symbols]
+    # 对已知指数（如 000300.SZ）做 suffix 校正，治历史脏数据；其他 symbol 走 normalize_symbol 保留用户 suffix
+    normalized_symbols = []
+    corrections: list[tuple[str, str]] = []
+    for item in symbols:
+        corrected = correct_known_index_exchange(item)
+        if corrected:
+            corrections.append((item, corrected))
+            normalized_symbols.append(corrected)
+        else:
+            normalized_symbols.append(normalize_symbol(item))
+    if corrections:
+        logger.warning(
+            "data_sync_exchange_corrected run_id=%s corrections=%s",
+            run.id, corrections,
+        )
     start_date, end_date = resolve_fetch_window(payload, run.trade_date)
     provider = str(payload.get("provider", "auto")).strip() or "auto"
     adjust_flag = str(payload.get("adjust_flag", "qfq")).strip() or "qfq"

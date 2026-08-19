@@ -7,23 +7,30 @@ from quant_client.provider_base import BaseAshareProvider
 from quant_client.provider_baostock import BaostockAshareProvider
 from quant_client.provider_eastmoney import EastmoneyAshareProvider
 from quant_client.provider_tencent import TencentAshareProvider
+from quant_client.provider_yahoo import YfinanceAshareProvider
 
 logger = logging.getLogger("quant.provider_factory")
 
 
-# auto 模式下 provider 优先级（数字越小越优先）
-# 自 2026-08-18 起，弃用 eastmoney / akshare 两条数据源：断网率高、限流频繁。
-# 字段完整度排序（按 13 项核心字段的可填充数）：Baostock 9 > 腾讯 7 > 新浪 5
-# 新 auto 链：Baostock（字段最全 + 海外稳定）→ 腾讯（国内快 + 涨跌幅可反算）→ 新浪（备援）
+# auto 模式下 provider 优先级（数字越小越优先）。
+# 字段完整度排序（按 13 项核心字段的可填充数）：Baostock 9 > 腾讯 7 > 新浪 5。
+# 主力三家是股票 K 线主力，但**对沪深主要指数的支持有限**（baostock/tencent/sina 对
+# sh.000300 / sz.399001 等可能返回空），所以用 Yahoo Finance 兜底——
+# Yahoo 是国际可访问数据源，**指数 + ETF 全覆盖**，且不易限流（无 API key 额度限制）。
+#
+# eastmoney / akshare 因**外网访问默认超时**已被弃用（见 _DEPRECATED_PROVIDERS 与备注），
+# 仍可显式调用兼容旧任务/旧配置。
 _AUTO_CHAIN = [
-    (0, BaostockAshareProvider),    # 字段最全：OHLCV + 成交额 + 换手率 + 涨跌幅 + 前收盘价
-    (1, TencentAshareProvider),     # 字段次全：OHLCV + 涨跌幅/前收盘价反算
-    (2, SinaAshareProvider),        # 字段最少：仅 OHLCV
+    (0, BaostockAshareProvider),    # 主力：字段最全（OHLCV + 成交额 + 换手率 + 涨跌幅 + 前收盘价）
+    (1, TencentAshareProvider),     # 主力：OHLCV + 涨跌幅/前收盘价反算
+    (2, SinaAshareProvider),        # 主力：仅 OHLCV
+    (3, YfinanceAshareProvider),    # 兜底：指数 + ETF 国际可访问
 ]
 
 
-# 显式调用仍允许，但已不推荐：标记为 deprecated，仅为兼容旧任务/旧配置。
-_DEPRECATED_PROVIDERS = {"eastmoney", "akshare"}
+# eastmoney / akshare 因外网访问默认超时（2026-08-19 验证），从 auto chain 移除。
+# 仍可显式调用兼容旧任务/旧配置，但调用时会发 DeprecationWarning 提示用户迁移。
+_DEPRECATED_PROVIDERS: set[str] = {"eastmoney", "akshare"}
 
 
 class AutoAshareProvider(BaseAshareProvider):
@@ -83,6 +90,7 @@ PROVIDER_MAP = {
     "tencent": TencentAshareProvider,
     "sina": SinaAshareProvider,
     "baostock": BaostockAshareProvider,
+    "yahoo": YfinanceAshareProvider,
     "eastmoney": EastmoneyAshareProvider,   # 已弃用：仅保留显式调用兼容
     "akshare": AkshareAshareProvider,        # 已弃用：仅保留显式调用兼容
 }

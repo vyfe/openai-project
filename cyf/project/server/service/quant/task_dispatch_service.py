@@ -9,6 +9,7 @@ from typing import Optional
 from quant.db import quant_db
 from quant.entities import QuantClientTask, QuantScheduleRun
 from quant_client.constants import DEFAULT_TASK_TYPE
+from conf.runtime_logging import build_plain_file_handler, run_id_var, task_type_var
 from service.quant.schedule_query_service import (
     RUN_STATUS_AWAITING_DATA,
     RUN_STATUS_FAILED,
@@ -153,6 +154,45 @@ def _get_task_or_raise(task_id: str) -> QuantClientTask:
     return task
 
 
+def _append_schedule_run_log(run: QuantScheduleRun, level: int, message: str) -> None:
+    """把一行日志追加到 schedule_run 对应的 per-run 日志文件里。
+
+    Agent 上报时已经过了 `schedule_run_log_context`，handler 已被移除——所以这里临时
+    构造一个 FileHandler 写到那个文件；并设置好 run_id / task_type context vars，让
+    formatter 渲染出和 execute_schedule_run 时一致的格式。
+
+    per-run 日志是"针对本次执行的详细轨迹"，不应受 `runtime_log.level` 全局级别影响——
+    所以直接构造 LogRecord 走 handler.handle()，绕过 logger 自身的 setLevel 过滤。
+    """
+    if not run or not run.log_file:
+        return
+    scheduler_logger = logging.getLogger("quant.scheduler")
+    try:
+        handler = build_plain_file_handler(run.log_file, service="quant", level=level)
+        run_token = run_id_var.set(str(run.id or ""))
+        task_token = task_type_var.set(str(run.task_type or ""))
+        try:
+            record = scheduler_logger.makeRecord(
+                name=scheduler_logger.name,
+                level=level,
+                fn="",
+                lno=0,
+                msg=message,
+                args=(),
+                exc_info=None,
+            )
+            handler.handle(record)
+        finally:
+            run_id_var.reset(run_token)
+            task_type_var.reset(task_token)
+            handler.close()
+    except Exception as exc:
+        logger.warning(
+            "schedule_run_log_append_failed schedule_run_id=%s err=%s",
+            run.id, exc,
+        )
+
+
 def _complete_linked_schedule_run(task: QuantClientTask, *, success: bool, message: str) -> Optional[dict]:
     """当任务来自调度器（schedule_run_id 非空）时，把结果回写到 schedule_run。
 
@@ -180,6 +220,12 @@ def _complete_linked_schedule_run(task: QuantClientTask, *, success: bool, messa
     run.finished_at = _now()
     run.next_retry_at = None
     run.save()
+    log_level = logging.INFO if success else logging.WARNING
+    _append_schedule_run_log(
+        run,
+        log_level,
+        f"agent_report_received task_id={task.task_id} client_id={task.client_id} status={target_status} message={message or ''}",
+    )
     logger.info(
         "schedule_run_completed task_id=%s schedule_run_id=%s status=%s",
         task.task_id, run.id, target_status,
