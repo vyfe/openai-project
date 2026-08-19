@@ -78,6 +78,28 @@ check_command() {
     fi
 }
 
+# 轮询 HTTP 健康检查端点
+# 返回 0 表示就绪；1 表示超时
+wait_for_http_health() {
+    local url="$1"
+    local timeout_seconds="$2"
+    local elapsed=0
+
+    while [ "$elapsed" -lt "$timeout_seconds" ]; do
+        # --max-time 防止 curl 在半启动的 socket 上挂死；-fs 失败时静默 + 只看 HTTP 状态码
+        local code
+        code=$(curl --silent --output /dev/null --max-time 2 --connect-timeout 1 -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+        if [ "$code" = "200" ]; then
+            return 0
+        fi
+        elapsed=$((elapsed + 1))
+        # TODO(human): 调整 sleep 节奏：固定间隔 vs 指数退避 vs 按阶段分段
+        sleep 1
+    done
+
+    return 1
+}
+
 # 检查必需命令
 check_command "tar"
 check_command "uwsgi"
@@ -165,19 +187,24 @@ if [ $UPDATE_BACKEND = true ]; then
 
     # 启动uWSGI服务
     echo "🏃‍♂️ 正在启动 uWSGI 服务..."
-        # 等待服务启动
     which uwsgi
-    sleep 3
     # 已知问题：uwsgi路径，必须使用lighthouse下的uwsgi
     /home/lighthouse/.local/bin/uwsgi --ini ./conf/uwsgi.ini &
 
-    # 检查后端是否成功启动
-    if lsof -i :$SERVER_PORT >/dev/null 2>&1; then
-        echo "✅ 后端服务已在端口 $SERVER_PORT 启动"
-    else
+    # 轮询 /health 端点直到就绪或超时
+    HEALTH_URL="http://127.0.0.1:${SERVER_PORT}/health"
+    HEALTH_TIMEOUT=30
+    echo "⏳ 等待后端健康检查通过 ${HEALTH_URL}（最长 ${HEALTH_TIMEOUT}s）..."
+    if ! wait_for_http_health "$HEALTH_URL" "$HEALTH_TIMEOUT"; then
         echo "❌ 错误: 后端服务启动失败，请检查日志"
+        if [ -f "$PLATFORM_LOG_DIR/uwsgi.log" ]; then
+            echo "---- uwsgi.log 尾部 ----"
+            tail -n 60 "$PLATFORM_LOG_DIR/uwsgi.log"
+            echo "------------------------"
+        fi
         exit 1
     fi
+    echo "✅ 后端服务已就绪 (http://127.0.0.1:$SERVER_PORT)"
 else
     echo "⏭️  跳过后端更新"
 fi

@@ -353,3 +353,48 @@ class QuantFeishuUserBinding(QuantBaseModel):
             "bound_at": self.bound_at.isoformat() if self.bound_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class QuantClientTask(QuantBaseModel):
+    """数据采集 Agent 任务队列。跨进程持久化（web / scheduler / agent 共用同一份 quant.db）。"""
+    task_id = CharField(unique=True, index=True)
+    task_type = CharField(default="", index=True)
+    status = CharField(default="pending", index=True)
+    payload_json = TextField(default="{}")
+    note = TextField(default="")
+    client_id = CharField(default="", index=True)
+    lease_seconds = IntegerField(default=600)
+    lease_expires_at = DateTimeField(null=True, index=True)
+    leased_at = DateTimeField(null=True)
+    attempts = IntegerField(default=0)
+    message = TextField(default="")
+    import_batch_json = TextField(default="{}")
+    schedule_run_id = IntegerField(null=True, index=True)
+    created_at = DateTimeField(default=datetime.now, index=True)
+    finished_at = DateTimeField(null=True)
+
+    class Meta:
+        table_name = "quant_client_task"
+        indexes = (
+            (("status", "lease_expires_at"), False),
+        )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "task_type": self.task_type,
+            "status": self.status,
+            "payload": json.loads(self.payload_json or "{}"),
+            "note": self.note,
+            "client_id": self.client_id,
+            "lease_seconds": self.lease_seconds,
+            "lease_expires_at": self.lease_expires_at.isoformat() if self.lease_expires_at else None,
+            "leased_at": self.leased_at.isoformat() if self.leased_at else None,
+            "attempts": self.attempts,
+            "message": self.message,
+            "import_batch": json.loads(self.import_batch_json or "{}"),
+            "schedule_run_id": self.schedule_run_id,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+        }

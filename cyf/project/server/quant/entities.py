@@ -39,6 +39,7 @@ from quant.quant_entities_ops import (
     QuantImInboundEvent,
     QuantPositionJournal,
     QuantFeishuUserBinding,
+    QuantClientTask,
 )
 
 QUANT_MODELS = [
@@ -67,4 +68,5 @@ QUANT_MODELS = [
     QuantImInboundEvent,
     QuantPositionJournal,
     QuantFeishuUserBinding,
+    QuantClientTask,
 ]

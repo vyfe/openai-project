@@ -21,6 +21,7 @@ TASK_TYPE_INDUSTRY_REPORT = "industry_report"
 SUPPORTED_SCHEDULE_TYPES = {TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST, TASK_TYPE_INDUSTRY_COLLECT, TASK_TYPE_INDUSTRY_REPORT}
 RUN_STATUS_PENDING = "pending"
 RUN_STATUS_RUNNING = "running"
+RUN_STATUS_AWAITING_DATA = "awaiting_data"
 RUN_STATUS_SUCCESS = "success"
 RUN_STATUS_FAILED = "failed"
 RUN_STATUS_SKIPPED = "skipped"
@@ -218,7 +219,7 @@ def manual_trigger_schedule(schedule_id: int) -> dict:
 
 def reset_schedule_run(run_id: int, *, allow_success: bool = False) -> dict:
     run = QuantScheduleRun.get_by_id(run_id)
-    allowed_statuses = {RUN_STATUS_FAILED, RUN_STATUS_RETRY, RUN_STATUS_SKIPPED}
+    allowed_statuses = {RUN_STATUS_FAILED, RUN_STATUS_RETRY, RUN_STATUS_SKIPPED, RUN_STATUS_AWAITING_DATA}
     if allow_success:
         allowed_statuses.add(RUN_STATUS_SUCCESS)
     if run.status not in allowed_statuses:
@@ -239,9 +240,11 @@ def get_scheduler_overview() -> dict:
     active_count = QuantScheduleConfig.select().where(QuantScheduleConfig.status == "active").count()
     failed_count = QuantScheduleRun.select().where(QuantScheduleRun.status == RUN_STATUS_FAILED).count()
     pending_count = QuantScheduleRun.select().where(QuantScheduleRun.status.in_([RUN_STATUS_PENDING, RUN_STATUS_RETRY])).count()
+    awaiting_data_count = QuantScheduleRun.select().where(QuantScheduleRun.status == RUN_STATUS_AWAITING_DATA).count()
     return {
         "active_configs": active_count,
         "pending_runs": pending_count,
+        "awaiting_data_runs": awaiting_data_count,
         "failed_runs": failed_count,
         "latest_run": latest_run.to_dict() if latest_run else None,
     }

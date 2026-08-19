@@ -11,7 +11,7 @@ from service.quant.industry_service import collect_industry, get_industry_board,
 from service.quant.memory_service import curate_symbol_memories
 from service.quant.report_service import create_report_for_run
 from service.quant.schedule_log_service import build_schedule_log_path, schedule_run_log_context
-from service.quant.schedule_query_service import RUN_STATUS_FAILED, RUN_STATUS_PENDING, RUN_STATUS_RETRY, RUN_STATUS_RUNNING, RUN_STATUS_SUCCESS
+from service.quant.schedule_query_service import RUN_STATUS_AWAITING_DATA, RUN_STATUS_FAILED, RUN_STATUS_PENDING, RUN_STATUS_RETRY, RUN_STATUS_RUNNING, RUN_STATUS_SUCCESS
 from service.quant.strategy_service import list_strategies, run_strategy
 from service.quant.task_dispatch_service import create_fetch_bars_task
 from service.quant.trade_calendar_service import shift_trade_day
@@ -53,14 +53,28 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
             symbols.append(idx)
     normalized_symbols = [normalize_symbol(item) for item in symbols]
     start_date, end_date = resolve_fetch_window(payload, run.trade_date)
+    provider = str(payload.get("provider", "auto")).strip() or "auto"
+    adjust_flag = str(payload.get("adjust_flag", "qfq")).strip() or "qfq"
+    note = str(payload.get("note", "")).strip() or f"schedule:{run.schedule_name}"
+    lease_seconds = int(payload.get("lease_seconds", 600) or 600)
+    logger.info(
+        "data_sync_start run_id=%s schedule_id=%s trade_date=%s symbols=%s window=%s~%s provider=%s adjust=%s",
+        run.id, run.schedule_id, run.trade_date, len(normalized_symbols),
+        start_date, end_date, provider, adjust_flag,
+    )
     task = create_fetch_bars_task(
         symbols=normalized_symbols,
         start_date=start_date,
         end_date=end_date,
-        provider=str(payload.get("provider", "auto")).strip() or "auto",
-        adjust_flag=str(payload.get("adjust_flag", "qfq")).strip() or "qfq",
-        note=str(payload.get("note", "")).strip() or f"schedule:{run.schedule_name}",
-        lease_seconds=int(payload.get("lease_seconds", 600) or 600),
+        provider=provider,
+        adjust_flag=adjust_flag,
+        note=note,
+        lease_seconds=lease_seconds,
+        schedule_run_id=run.id,
+    )
+    logger.info(
+        "data_sync_enqueued run_id=%s task_id=%s symbols=%s window=%s~%s",
+        run.id, task.get("task_id"), len(normalized_symbols), start_date, end_date,
     )
     return {"client_task": task, "window": {"start_date": start_date, "end_date": end_date}}
 
@@ -96,17 +110,30 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
     if isinstance(channel_ids, str):
         channel_ids = [item.strip() for item in channel_ids.split(",") if item.strip()]
     save_all_signals = str(payload.get("save_all_signals", True)).strip().lower() in ("true", "1", "yes", "on")
+    logger.info(
+        "analysis_report_start run_id=%s trade_date=%s strategy_ids=%s channel_ids=%s save_all_signals=%s",
+        run.id, run.trade_date, strategy_ids, channel_ids, save_all_signals,
+    )
     results, reports, deliveries = [], [], []
     for raw_strategy_id in strategy_ids:
         strategy_id = int(raw_strategy_id)
+        logger.info("analysis_report_strategy run_id=%s strategy_id=%s", run.id, strategy_id)
         strategy_run = run_strategy(strategy_id=strategy_id, trade_date=run.trade_date.isoformat() if run.trade_date else None, save_all_signals=save_all_signals)
         results.append(strategy_run)
         report = create_report_for_run(int(strategy_run["id"]), report_type="test_report", schedule_run_id=run.id)
         reports.append(report)
+        logger.info(
+            "analysis_report_created run_id=%s strategy_id=%s report_id=%s signals=%s",
+            run.id, strategy_id, report.get("id"), strategy_run.get("signals_total"),
+        )
         for raw_channel_id in channel_ids:
             deliveries.append(send_report_to_channel(int(report["id"]), channel_id=int(raw_channel_id)))
     user_deliveries = deliver_to_bound_users()
     total_signals = sum(int(item.get("signals_total", 0) or 0) for item in results)
+    logger.info(
+        "analysis_report_done run_id=%s strategy_count=%s signals_total=%s reports=%s deliveries=%s user_deliveries=%s",
+        run.id, len(results), total_signals, len(reports), len(deliveries), len(user_deliveries),
+    )
     return {
         "trade_date": run.trade_date.isoformat() if run.trade_date else None,
         "strategy_runs": results,
@@ -128,7 +155,12 @@ def execute_memory_digest(run: QuantScheduleRun) -> dict:
     symbols = payload.get("symbols")
     lookback_days = max(1, int(payload.get("lookback_days", 120) or 120))
     limit = max(1, int(payload.get("limit", 50) or 50))
+    logger.info(
+        "memory_digest_start run_id=%s symbols=%s lookback_days=%s limit=%s",
+        run.id, symbols if isinstance(symbols, list) else "ALL", lookback_days, limit,
+    )
     curated = curate_symbol_memories(symbols=symbols, lookback_days=lookback_days, limit=limit)
+    logger.info("memory_digest_done run_id=%s files=%s", run.id, len(curated))
     return {"mode": "local_memory_digest", "lookback_days": lookback_days, "files": curated, "count": len(curated)}
 
 
@@ -152,13 +184,20 @@ def execute_industry_collect(run: QuantScheduleRun) -> dict:
         board_ids.append(payload.get("board_id"))
     if payload.get("board_key"):
         board_keys.append(payload.get("board_key"))
+    logger.info(
+        "industry_collect_start run_id=%s board_ids=%s board_keys=%s targets=%s",
+        run.id, board_ids, board_keys, targets if isinstance(targets, list) else "ALL",
+    )
     if not board_ids and not board_keys:
-        return collect_industry(targets=targets)
+        result = collect_industry(targets=targets)
+        logger.info("industry_collect_done run_id=%s boards=1 mode=all", run.id)
+        return result
     results = []
     for board_id in board_ids:
         results.append(collect_industry(board_id=int(board_id), targets=targets))
     for board_key in board_keys:
         results.append(collect_industry(board_key=str(board_key), targets=targets))
+    logger.info("industry_collect_done run_id=%s boards=%s", run.id, len(results))
     return {"boards": len(results), "results": results}
 
 
@@ -171,6 +210,10 @@ def execute_industry_report(run: QuantScheduleRun) -> dict:
     if payload.get("board_key"):
         board_keys.append(payload.get("board_key"))
     channel_ids = _payload_list(payload, "channel_ids")
+    logger.info(
+        "industry_report_start run_id=%s trade_date=%s board_ids=%s board_keys=%s channel_ids=%s",
+        run.id, run.trade_date, board_ids, board_keys, channel_ids,
+    )
     reports, deliveries = [], []
     targets = [(int(board_id), "") for board_id in board_ids] + [(None, str(board_key)) for board_key in board_keys]
     for board_id, board_key in targets:
@@ -200,8 +243,16 @@ def execute_industry_report(run: QuantScheduleRun) -> dict:
         )
         report_dict = report.to_dict()
         reports.append(report_dict)
+        logger.info(
+            "industry_report_created run_id=%s report_id=%s board_key=%s markdown_len=%s",
+            run.id, report.id, board.board_key, len(markdown or ""),
+        )
         for raw_channel_id in channel_ids:
             deliveries.append(send_report_to_channel(report.id, channel_id=int(raw_channel_id)))
+    logger.info(
+        "industry_report_done run_id=%s reports=%s deliveries=%s",
+        run.id, len(reports), len(deliveries),
+    )
     return {
         "trade_date": run.trade_date.isoformat() if run.trade_date else None,
         "reports": reports,
@@ -229,6 +280,18 @@ def execute_schedule_run(run_id: int) -> dict:
             logger.info("schedule run start id=%s task_type=%s log_file=%s", run.id, run.task_type, run.log_file)
             if run.task_type == "data_sync":
                 result = execute_data_sync(run)
+                run.result_json = json.dumps(result, ensure_ascii=False)
+                run.status = RUN_STATUS_AWAITING_DATA
+                task_id = (result.get("client_task") or {}).get("task_id") or ""
+                run.message = f"已下发任务 {task_id}，等待 Agent 上报"
+                run.finished_at = None
+                run.next_retry_at = None
+                run.save()
+                logger.info(
+                    "schedule run awaiting_data id=%s task_id=%s symbols=%s",
+                    run.id, task_id, len((result.get("client_task") or {}).get("payload", {}).get("symbols") or []),
+                )
+                return run.to_dict()
             elif run.task_type == "analysis_report":
                 result = execute_analysis_report(run)
             elif run.task_type == "memory_digest":

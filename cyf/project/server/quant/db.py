@@ -2,7 +2,7 @@ import os
 
 from playhouse.sqlite_ext import SqliteExtDatabase
 from playhouse.migrate import SqliteMigrator, migrate
-from peewee import FloatField, TextField
+from peewee import FloatField, IntegerField, TextField
 
 from conf.settings import settings
 
@@ -55,11 +55,17 @@ def ensure_quant_schema():
             migrate(migrator.add_column("quant_schedule_run", "log_file", TextField(default="")))
             missing_records.append("quant_schedule_run.log_file")
 
+        client_task_columns = {col.name for col in quant_db.get_columns("quant_client_task")}
+        if "schedule_run_id" not in client_task_columns:
+            migrate(migrator.add_column("quant_client_task", "schedule_run_id", IntegerField(null=True)))
+            quant_db.execute_sql("CREATE INDEX IF NOT EXISTS quant_client_task_schedule_run_id ON quant_client_task (schedule_run_id)")
+            missing_records.append("quant_client_task.schedule_run_id")
+
         existing_tables = set(quant_db.get_tables())
-        new_tables = {"quant_feishu_user_binding", "quant_daily_indicator"} - existing_tables
+        new_tables = {"quant_feishu_user_binding", "quant_daily_indicator", "quant_client_task"} - existing_tables
         if new_tables:
-            from quant.entities import QuantDailyIndicator, QuantFeishuUserBinding
-            quant_db.create_tables([QuantFeishuUserBinding, QuantDailyIndicator], safe=True)
+            from quant.entities import QuantClientTask, QuantDailyIndicator, QuantFeishuUserBinding
+            quant_db.create_tables([QuantFeishuUserBinding, QuantDailyIndicator, QuantClientTask], safe=True)
             missing_records.append(f"new_tables: {', '.join(new_tables)}")
 
         if missing_records:

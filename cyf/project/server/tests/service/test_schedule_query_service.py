@@ -17,6 +17,8 @@ from service.quant.schedule_query_service import (
     RUN_STATUS_PENDING,
     RUN_STATUS_FAILED,
     RUN_STATUS_SUCCESS,
+    RUN_STATUS_AWAITING_DATA,
+    get_scheduler_overview,
 )
 from datetime import datetime
 
@@ -190,3 +192,49 @@ class TestResetScheduleRun:
 
         with pytest.raises(ValueError, match="不支持重置"):
             reset_schedule_run(run["id"])
+
+    def test_reset_awaiting_data_allowed(self):
+        """awaiting_data 状态应当允许重置（agent 未上报时人工恢复路径）。"""
+        config = create_schedule_config(
+            name="重置等待数据",
+            task_type="data_sync",
+            cron_expr="20 15 * * 1-5",
+            payload={"symbols": ["000001.SZ"]},
+        )
+        with patch("service.quant.schedule_query_service.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2025, 1, 15, 15, 0)
+            run = manual_trigger_schedule(config["id"])
+
+        from quant.entities import QuantScheduleRun
+        record = QuantScheduleRun.get_by_id(run["id"])
+        record.status = RUN_STATUS_AWAITING_DATA
+        record.message = "已下发任务 xxx，等待 Agent 上报"
+        record.save()
+
+        result = reset_schedule_run(run["id"])
+        assert result["status"] == RUN_STATUS_PENDING
+        assert "已重置" in result["message"]
+
+
+class TestSchedulerOverview:
+    """测试调度总览计数。"""
+
+    def test_overview_counts_awaiting_data_separately(self):
+        config = create_schedule_config(
+            name="总览测试",
+            task_type="data_sync",
+            cron_expr="20 15 * * 1-5",
+            payload={"symbols": ["000001.SZ"]},
+        )
+        with patch("service.quant.schedule_query_service.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2025, 1, 15, 15, 0)
+            run = manual_trigger_schedule(config["id"])
+
+        from quant.entities import QuantScheduleRun
+        record = QuantScheduleRun.get_by_id(run["id"])
+        record.status = RUN_STATUS_AWAITING_DATA
+        record.save()
+
+        overview = get_scheduler_overview()
+        assert overview["awaiting_data_runs"] >= 1
+        assert "pending_runs" in overview

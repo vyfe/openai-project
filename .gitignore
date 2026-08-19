@@ -3,9 +3,9 @@ cyf/project/*/conf/role_init.sql
 # 密钥
 cyf/project/*/conf/key.*
 cyf/project/server/logs
-cyf/project/server/*.db
-cyf/project/server/*.db-shm
-cyf/project/server/*.db-wal
+*.db
+*.db-shm
+*.db-wal
 **/*.log
 cyf/project/fe/node_*/*
 **/dist/
