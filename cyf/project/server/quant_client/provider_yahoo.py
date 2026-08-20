@@ -111,6 +111,19 @@ class YfinanceAshareProvider(BaseAshareProvider):
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     payload = json.loads(resp.read().decode("utf-8"))
                 break
+            except urllib.error.HTTPError as exc:
+                # 429 限流 / 4xx 客户端错误：不重试，立即失败——重试只会让限流更严重
+                if exc.code == 429 or (400 <= exc.code < 500):
+                    raise RuntimeError(
+                        f"Yahoo Finance HTTP {exc.code}: {exc.reason}（不重试）"
+                    ) from exc
+                last_exc = exc
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_SLEEP_SECONDS)
+                else:
+                    raise RuntimeError(
+                        f"Yahoo Finance 请求失败 (已重试{MAX_RETRIES}次): {last_exc}"
+                    ) from last_exc
             except Exception as exc:
                 last_exc = exc
                 if attempt < MAX_RETRIES - 1:

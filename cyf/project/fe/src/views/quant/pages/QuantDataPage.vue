@@ -1,66 +1,74 @@
 <template>
   <div class="quant-grid quant-grid--data">
     <section class="quant-panel">
-      <div class="quant-panel__header">
-        <div>
-          <h2>查日线数据</h2>
+      <div class="quant-panel__header quant-data-toolbar">
+        <div class="quant-data-toolbar__row">
+          <div>
+            <h2>K线数据</h2>
+            <p class="quant-panel__sub">按周期查看日线 / 周线聚合，配套 MA 与成交量</p>
+          </div>
+          <div class="quant-toolbar">
+            <el-radio-group v-model="workbench.chartCycle" size="small" @change="onCycleChange">
+              <el-radio-button label="daily">日线</el-radio-button>
+              <el-radio-button label="weekly">周线</el-radio-button>
+            </el-radio-group>
+            <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
+              <el-radio-button label="1m">近1月</el-radio-button>
+              <el-radio-button label="3m">近3月</el-radio-button>
+              <el-radio-button label="6m">近6月</el-radio-button>
+              <el-radio-button label="1y">近1年</el-radio-button>
+              <el-radio-button label="all">全部</el-radio-button>
+            </el-radio-group>
+          </div>
         </div>
-        <div class="quant-toolbar">
-          <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
-            <el-radio-button label="1m">近1月</el-radio-button>
-            <el-radio-button label="3m">近3月</el-radio-button>
-            <el-radio-button label="6m">近6月</el-radio-button>
-            <el-radio-button label="1y">近1年</el-radio-button>
-            <el-radio-button label="all">全部</el-radio-button>
-          </el-radio-group>
-          <el-button :icon="Search" type="primary" @click="workbench.loadDailyBars" :loading="workbench.loading.dailyBars">查询</el-button>
-        </div>
-      </div>
-
-      <div class="quant-form-grid">
-        <el-form label-position="top">
-          <el-form-item label="股票代码">
-            <el-select v-model="workbench.dailyQuery.symbol" filterable clearable placeholder="例如 600519.SH" @change="workbench.loadDailyBars">
-              <el-option
-                v-for="item in workbench.symbolOptions"
-                :key="item.symbol"
-                :label="symbolLabel(item)"
-                :value="item.symbol"
+        <div class="quant-data-toolbar__row quant-data-toolbar__row--filters">
+          <el-form label-position="top" class="quant-data-toolbar__symbol">
+            <el-form-item label="股票代码">
+              <el-select v-model="workbench.dailyQuery.symbol" filterable clearable placeholder="例如 600519.SH" @change="onSymbolChange">
+                <el-option
+                  v-for="item in workbench.symbolOptions"
+                  :key="item.symbol"
+                  :label="symbolLabel(item)"
+                  :value="item.symbol"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top" class="quant-data-toolbar__dates">
+            <el-form-item label="起止日期">
+              <el-date-picker
+                v-model="workbench.dailyQuery.dateRange"
+                type="daterange"
+                range-separator="→"
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                value-format="YYYY-MM-DD"
+                unlink-panels
+                style="width:100%"
+                @change="onCustomDateChange"
               />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <el-form label-position="top">
-          <el-form-item label="起止日期">
-            <el-date-picker
-              v-model="workbench.dailyQuery.dateRange"
-              type="daterange"
-              range-separator="→"
-              start-placeholder="开始日期"
-              end-placeholder="结束日期"
-              value-format="YYYY-MM-DD"
-              unlink-panels
-              style="width:100%"
-              @change="onCustomDateChange"
-            />
-          </el-form-item>
-        </el-form>
-        <el-form label-position="top">
-          <el-form-item label="返回条数">
-            <el-input-number v-model="workbench.dailyQuery.limit" :min="20" :max="5000" :step="20" style="width:100%" />
-          </el-form-item>
-        </el-form>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top" class="quant-data-toolbar__limit">
+            <el-form-item label="返回条数">
+              <el-input-number v-model="workbench.dailyQuery.limit" :min="20" :max="5000" :step="20" style="width:100%" />
+            </el-form-item>
+          </el-form>
+          <div class="quant-data-toolbar__action">
+            <el-button :icon="Search" type="primary" @click="workbench.loadDailyBars" :loading="workbench.loading.dailyBars">查询</el-button>
+          </div>
+        </div>
       </div>
 
       <div class="quant-chart-wrap">
         <EChartsCandlestick
-          v-if="(workbench.dailyBars as any) && (workbench.dailyBars as any).length"
-          :bars="workbench.dailyBars as any"
+          v-if="(workbench.currentBars as any) && (workbench.currentBars as any).length"
+          :bars="workbench.currentBars as any"
           :is-dark="isDarkTheme"
           :symbol="workbench.dailyQuery.symbol"
           height="480px"
         />
-        <el-empty v-else description="请选择股票并点击查询，或先在数据同步任务里拉数入库" />
+        <el-empty v-else :description="emptyDescription" />
       </div>
     </section>
 
@@ -292,6 +300,7 @@
 
 <script setup lang="ts">
 import { Download, Promotion, RefreshRight, Search } from '@element-plus/icons-vue'
+import { computed } from 'vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { useThemeManager } from '@/composables/useThemeManager'
 import { symbolLabel } from '@/composables/quant/format'
@@ -337,4 +346,20 @@ function onCustomDateChange() {
 function onTaskCustomDateChange() {
   ;(workbench.taskFormRange as any) = ''
 }
+
+function onCycleChange(cycle: 'daily' | 'weekly') {
+  workbench.switchChartCycle(cycle)
+}
+
+function onSymbolChange(symbol: string) {
+  // 切 symbol 时同时清空两个周期的缓存，触发新一轮加载
+  if (!symbol) return
+  workbench.loadDailyBars()
+}
+
+const emptyDescription = computed(() => {
+  const cycle = workbench.chartCycle as unknown as 'daily' | 'weekly'
+  const base = '请选择股票并点击查询，或先在数据同步任务里拉数入库'
+  return cycle === 'weekly' ? `${base}（日线 ≥ 5 条才会聚合成周线）` : base
+})
 </script>

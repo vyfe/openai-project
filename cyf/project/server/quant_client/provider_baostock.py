@@ -117,6 +117,9 @@ class BaostockAshareProvider(BaseAshareProvider):
     def _map_rows(self, code: str, exchange: str, columns: list[str], records: list[list[str]], adjust_flag: str) -> list[dict]:
         mapped = []
         prev_close = None
+        # 用上游已解析的 exchange 拼 symbol，避免 normalize_symbol(code) 强行按 code 前缀推断
+        #（000001.SH / 000300.SH 这种以 0 开头的指数，normalize_symbol 推断会变成 SZ）
+        symbol = f"{code}.{exchange}"
         for row in records:
             item = dict(zip(columns, row))
             close_price = to_float(item.get("close"))
@@ -126,7 +129,7 @@ class BaostockAshareProvider(BaseAshareProvider):
                 pct_change = (close_price - preclose_price) / preclose_price * 100
             mapped.append(
                 {
-                    "symbol": normalize_symbol(code),
+                    "symbol": symbol,
                     "code": code,
                     "exchange": exchange,
                     "trade_date": parse_trade_date(item.get("date")).isoformat(),

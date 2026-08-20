@@ -9,6 +9,8 @@ export const quantDataAPI = {
   dashboardOverview: () => quantApi.get('/never_guess_my_usage/quant/dashboard/overview'),
   dailyBars: (params: { symbol: string; start_date?: string; end_date?: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/daily_bars', { params }),
+  weeklyBars: (params: { symbol: string; start_date?: string; end_date?: string; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/data/weekly_bars', { params }),
   symbolSearch: (params: { keyword: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/symbols/search', { params }),
   upsertSymbol: (data: { symbol: string; code?: string; exchange?: string; name?: string; source?: string }) =>

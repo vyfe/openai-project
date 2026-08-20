@@ -67,6 +67,35 @@ def _unix_for(date_str: str) -> int:
     return int(time.mktime(datetime.strptime(date_str, "%Y-%m-%d").timetuple()))
 
 
+def _fake_record(symbol: str, code: str, exchange: str, source: str = "test", trade_date: str = "2025-01-15") -> dict:
+    """构造一个简单的 fetch_daily_bars 返回 record。"""
+    short_exchange = "SH" if exchange == "SH" else ("SZ" if exchange == "SZ" else "BJ")
+    if code == "":
+        code = symbol.split(".")[0]
+    if exchange == "":
+        exchange = short_exchange
+    return {
+        "symbol": symbol,
+        "code": code,
+        "exchange": exchange,
+        "trade_date": trade_date,
+        "adjust_flag": "qfq",
+        "open_price": 10.0,
+        "high_price": 11.0,
+        "low_price": 9.5,
+        "close_price": 10.5,
+        "preclose_price": 10.0,
+        "volume": 1000.0,
+        "amount": 10500.0,
+        "turnover_rate": 1.5,
+        "pct_change": 5.0,
+        "change": 0.5,
+        "amplitude_pct": 1.5,
+        "source": source,
+        "data_source_version": "v1",
+    }
+
+
 class TestYahooSymbolConversion:
     """_to_yahoo_symbol — 我们 .SH / .SZ / .BJ → Yahoo .SS / .SZ。"""
 
@@ -308,3 +337,162 @@ class TestYahooInAutoChain:
         # 显式调用 `yahoo` 不报 DeprecationWarning
         provider = get_provider("yahoo")
         assert provider.provider_name == "yahoo"
+
+
+class TestYahooRateLimitFailFast:
+    """429 限流：fail-fast，不加重试（避免拖累整体调度 + 加重 Yahoo 压力）。
+
+    per-symbol 容错下，429 会被 fetch_daily_bars 吞掉——所以测试用 _fetch_one_symbol
+    直接验，或验 fetch_daily_bars 不抛异常。
+    """
+
+    def test_429_does_not_retry_in_underlying(self):
+        provider = YfinanceAshareProvider()
+
+        import urllib.error
+        call_count = {"n": 0}
+
+        def fake_urlopen(req, timeout=30):
+            call_count["n"] += 1
+            raise urllib.error.HTTPError(
+                req.full_url, 429, "Too Many Requests", {}, None,
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            with pytest.raises(RuntimeError, match="不重试"):
+                provider._fetch_one_symbol(
+                    "000001.SH", period1=0, period2=1, adjust_flag="qfq",
+                )
+        # 关键：429 应该只调用 1 次，**没有 3 次重试**
+        assert call_count["n"] == 1
+
+    def test_404_does_not_retry_in_underlying(self):
+        provider = YfinanceAshareProvider()
+
+        import urllib.error
+        call_count = {"n": 0}
+
+        def fake_urlopen(req, timeout=30):
+            call_count["n"] += 1
+            raise urllib.error.HTTPError(
+                req.full_url, 404, "Not Found", {}, None,
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            with pytest.raises(RuntimeError, match="不重试"):
+                provider._fetch_one_symbol(
+                    "invalid.SH", period1=0, period2=1, adjust_flag="qfq",
+                )
+        assert call_count["n"] == 1
+
+    def test_429_swallowed_per_symbol_in_fetch_daily_bars(self):
+        """fetch_daily_bars 走 per-symbol 容错，429 抛出但被吞掉，调用者拿到空 records。"""
+        provider = YfinanceAshareProvider()
+
+        import urllib.error
+
+        def fake_urlopen(req, timeout=30):
+            raise urllib.error.HTTPError(
+                req.full_url, 429, "Too Many Requests", {}, None,
+            )
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            records = provider.fetch_daily_bars(
+                symbols=["000001.SH"],
+                start_date="2025-01-15",
+                end_date="2025-01-15",
+                adjust_flag="qfq",
+            )
+        assert records == []
+
+
+class TestAutoChainSeedBasedRelay:
+    """Auto chain 改成 seed-based 接力：下一级 provider 只接未覆盖的 symbol。
+
+    防止低优先级 provider（Yahoo）被无效调用 —— 不然 Yahoo 因为限流问题，
+    对每个 stock 都去 HTTP 请求，浪费配额且拖慢整体调度。
+    """
+
+    def _mock_yahoo_call_log(self):
+        """收集 Yahoo 被调用时传入的 symbols 列表。"""
+        log = []
+
+        def tracking_fetch(self, symbols, start_date, end_date, adjust_flag="qfq"):
+            log.append(list(symbols))
+            return []
+
+        return tracking_fetch, log
+
+    def _mock_other_providers_empty(self):
+        """tencent/sina 强制返回空（不跑真实 HTTP）。"""
+        def fake_empty(self, symbols, start_date, end_date, adjust_flag="qfq"):
+            return []
+        return fake_empty
+
+    def test_stocks_covered_by_baostock_skip_yahoo(self):
+        """baostock 拿到 600519/000002，yahoo 不会再被调用。"""
+        from quant_client.provider_baostock import BaostockAshareProvider
+        from quant_client.provider_tencent import TencentAshareProvider
+        from quant_client.provider_sina import SinaAshareProvider
+        from quant_client.provider_yahoo import YfinanceAshareProvider
+        from quant_client.provider_factory import AutoAshareProvider
+
+        def fake_baostock(self, symbols, start_date, end_date, adjust_flag="qfq"):
+            return [_fake_record(s, s.split(".")[0], s.split(".")[1], source="baostock") for s in symbols]
+
+        tracking_fetch, yahoo_log = self._mock_yahoo_call_log()
+        tencent_empty = self._mock_other_providers_empty()
+
+        with patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
+             patch.object(TencentAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(SinaAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(YfinanceAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tracking_fetch):
+            records = AutoAshareProvider().fetch_daily_bars(
+                symbols=["600519.SH", "000002.SZ"],
+                start_date="2025-01-15",
+                end_date="2025-01-15",
+                adjust_flag="qfq",
+            )
+
+        # Yahoo 根本没被调用（baostock 全覆盖）
+        assert yahoo_log == []
+        assert {r["code"] for r in records} == {"600519", "000002"}
+
+    def test_yahoo_only_called_for_missing_symbols(self):
+        """baostock 拿到股票，000300 失败 → yahoo 只接 000300。"""
+        from quant_client.provider_baostock import BaostockAshareProvider
+        from quant_client.provider_tencent import TencentAshareProvider
+        from quant_client.provider_sina import SinaAshareProvider
+        from quant_client.provider_yahoo import YfinanceAshareProvider
+        from quant_client.provider_factory import AutoAshareProvider
+
+        def fake_baostock(self, symbols, start_date, end_date, adjust_flag="qfq"):
+            rows = []
+            for s in symbols:
+                if "000300" in s:
+                    continue  # 模拟 000300 失败
+                rows.append(_fake_record(s, s.split(".")[0], s.split(".")[1], source="baostock"))
+            return rows
+
+        def fake_yahoo(self, symbols, start_date, end_date, adjust_flag="qfq"):
+            # 验证 Yahoo 收到的只有 000300
+            assert all("000300" in s for s in symbols), f"Yahoo got non-000300 symbols: {symbols}"
+            return [_fake_record(s, s.split(".")[0], s.split(".")[1], source="yahoo") for s in symbols]
+
+        tencent_empty = self._mock_other_providers_empty()
+
+        with patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
+             patch.object(TencentAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(SinaAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(YfinanceAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_yahoo):
+            records = AutoAshareProvider().fetch_daily_bars(
+                symbols=["600519.SH", "000300.SH"],
+                start_date="2025-01-15",
+                end_date="2025-01-15",
+                adjust_flag="qfq",
+            )
+
+        # 600519 来自 baostock，000300 来自 yahoo
+        sources = {r["code"]: r["source"] for r in records}
+        assert sources["600519"] == "baostock"
+        assert sources["000300"] == "yahoo"

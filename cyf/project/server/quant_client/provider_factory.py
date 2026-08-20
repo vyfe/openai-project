@@ -34,13 +34,14 @@ _DEPRECATED_PROVIDERS: set[str] = {"eastmoney", "akshare"}
 
 
 class AutoAshareProvider(BaseAshareProvider):
-    """按优先级聚合多数据源：高优先级覆盖低优先级，缺失的 symbol+日期 由下游补齐。
+    """按优先级聚合多数据源：高优先级覆盖低优先级，缺失的 symbol 由下游补齐。
 
-    合并策略：
+    合并策略（seed-based 接力，节省下游 provider 的请求配额）：
     1. 从高到低依次请求各 provider
-    2. 每个 record 以 (symbol, trade_date, adjust_flag) 为去重键
-    3. 高优先级已覆盖的键，低优先级不再重复加入
-    4. 最终返回一份聚合后的全量数据，source 字段保留实际来源
+    2. **每个 provider 只接"上游没拿到的 symbol"**（不是全集）——避免 Yahoo 限流、被无效调用
+    3. 每个 record 以 (symbol, trade_date, adjust_flag) 为去重键
+    4. 高优先级已覆盖的键，低优先级不再重复加入
+    5. 最终返回一份聚合后的全量数据，source 字段保留实际来源
     """
 
     provider_name = "auto"
@@ -49,31 +50,39 @@ class AutoAshareProvider(BaseAshareProvider):
     def fetch_daily_bars(self, symbols: list[str], start_date: str, end_date: str, adjust_flag: str = "qfq") -> list[dict]:
         merged: dict[tuple, dict] = {}  # key=(symbol, trade_date, adjust_flag) → record
         errors = []
+        # 已"被覆盖"的 symbol 集合（任意 provider 拿到数据后即标记）——避免下一级 provider 再去请求
+        covered_symbols: set[str] = set()
+        pending_symbols = list(symbols)
 
         for priority, provider_cls in _AUTO_CHAIN:
+            if not pending_symbols:
+                break
             provider = provider_cls()
             try:
                 records = provider.fetch_daily_bars(
-                    symbols=symbols, start_date=start_date, end_date=end_date, adjust_flag=adjust_flag
+                    symbols=pending_symbols, start_date=start_date, end_date=end_date, adjust_flag=adjust_flag
                 )
                 added = 0
+                seen_this_round = set()
                 for record in records:
                     # 只保留与请求复权类型匹配的记录（Sina 返回 raw，需 qfq 时会被过滤）
                     rec_adj = record.get("adjust_flag", adjust_flag)
                     if rec_adj != adjust_flag:
                         continue
-                    key = (
-                        record.get("symbol", ""),
-                        record.get("trade_date", ""),
-                        rec_adj,
-                    )
+                    symbol = record.get("symbol", "")
+                    key = (symbol, record.get("trade_date", ""), rec_adj)
                     if key not in merged:
                         merged[key] = record
                         added += 1
+                    seen_this_round.add(symbol)
+                # 这一轮任何被拿到的 symbol 在下一轮不再请求
+                for sym in seen_this_round:
+                    covered_symbols.add(sym)
+                pending_symbols = [s for s in pending_symbols if s not in covered_symbols]
                 if records:
-                    errors.append(f"{provider.provider_name}: {len(records)}条, 新增{added}条")
+                    errors.append(f"{provider.provider_name}: 拿{len(records)}条, 新增{added}条, 剩余{len(pending_symbols)}个symbol")
                 else:
-                    errors.append(f"{provider.provider_name}: 空结果")
+                    errors.append(f"{provider.provider_name}: 空结果, 剩余{len(pending_symbols)}个symbol")
             except Exception as exc:
                 errors.append(f"{provider.provider_name}: {exc}")
 

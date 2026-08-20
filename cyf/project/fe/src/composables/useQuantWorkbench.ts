@@ -51,6 +51,7 @@ function createQuantWorkbench() {
   const importBatches = ref<any[]>([])
   const clientTasks = ref<any[]>([])
   const dailyBars = ref<any[]>([])
+  const weeklyBars = ref<any[]>([])
   const strategies = ref<StrategyRecord[]>([])
   const strategyRuns = ref<StrategyRunRecord[]>([])
   const strategySignals = ref<any[]>([])
@@ -137,6 +138,8 @@ function createQuantWorkbench() {
   })
 
   const dailyQueryRange = ref('3m')
+  const chartCycle = ref<'daily' | 'weekly'>('daily')
+  const currentBars = computed(() => (chartCycle.value === 'weekly' ? weeklyBars.value : dailyBars.value))
 
   const taskForm = reactive({
     symbols: [] as string[],
@@ -994,25 +997,37 @@ function createQuantWorkbench() {
     }
   }
 
-  const loadDailyBars = async () => {
+  const loadDailyBars = async (cycle?: 'daily' | 'weekly') => {
+    const target = cycle || chartCycle.value
     if (!dailyQuery.symbol.trim()) {
       ElMessage.warning('先输入或选择一个股票代码')
       return
     }
     loading.dailyBars = true
     try {
-      const response: any = await quantDataAPI.dailyBars({
+      const apiCall = target === 'weekly' ? quantDataAPI.weeklyBars : quantDataAPI.dailyBars
+      const response: any = await apiCall({
         symbol: dailyQuery.symbol.trim(),
         start_date: dailyQuery.startDate || undefined,
         end_date: dailyQuery.endDate || undefined,
-        limit: dailyQuery.limit
+        limit: target === 'weekly' ? Math.max(Math.floor(dailyQuery.limit / 5), 24) : dailyQuery.limit
       })
-      dailyBars.value = response.data || []
-      if (!dailyBars.value.length) ElMessage.info('当前条件下没有查询到日线数据')
+      const rows = response.data || []
+      if (target === 'weekly') weeklyBars.value = rows
+      else dailyBars.value = rows
+      if (!rows.length) ElMessage.info(`当前条件下没有查询到${target === 'weekly' ? '周线' : '日线'}数据`)
     } catch (error: any) {
-      ElMessage.error(error?.message || '查询日线失败')
+      ElMessage.error(error?.message || `查询${target === 'weekly' ? '周线' : '日线'}失败`)
     } finally {
       loading.dailyBars = false
+    }
+  }
+
+  const switchChartCycle = (cycle: 'daily' | 'weekly') => {
+    if (chartCycle.value === cycle) return
+    chartCycle.value = cycle
+    if (dailyQuery.symbol.trim() && (cycle === 'weekly' ? !weeklyBars.value.length : !dailyBars.value.length)) {
+      loadDailyBars(cycle)
     }
   }
 
@@ -1830,6 +1845,9 @@ function createQuantWorkbench() {
     importBatches,
     clientTasks,
     dailyBars,
+    weeklyBars,
+    chartCycle,
+    currentBars,
     strategies,
     strategyRuns,
     strategySignals,
@@ -1954,6 +1972,7 @@ function createQuantWorkbench() {
     loadImportBatches,
     loadTasks,
     loadDailyBars,
+    switchChartCycle,
     loadStrategies,
     loadRuns,
     loadSignals,

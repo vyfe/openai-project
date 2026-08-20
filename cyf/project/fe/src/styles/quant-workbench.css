@@ -446,15 +446,59 @@
   line-height: 1.45;
 }
 
+.quant-panel__sub {
+  margin: 4px 0 0;
+  color: var(--q-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .quant-toolbar {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .quant-toolbar--wrap {
   margin-bottom: 12px;
+}
+
+.quant-data-toolbar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+
+.quant-data-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.quant-data-toolbar__row--filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1.4fr) 130px auto;
+  align-items: end;
+}
+
+.quant-data-toolbar__row .quant-data-toolbar__action {
+  display: flex;
+  align-items: end;
+  height: 100%;
+  padding-bottom: 2px;
+}
+
+.quant-data-toolbar__row .el-form-item {
+  margin-bottom: 0;
+}
+
+.quant-data-toolbar__row .el-radio-button__inner {
+  padding: 5px 9px;
+  font-size: 12px;
 }
 
 .quant-form-grid {
@@ -847,6 +891,38 @@
   font-weight: 650;
 }
 
+.quant-page .el-button--small,
+.quant-page .el-button--default {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.quant-page .el-radio-button--small .el-radio-button__inner,
+.quant-page .el-radio-button__inner {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.quant-page .el-input__wrapper.is-focus,
+.quant-page .el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--q-cyan) inset;
+}
+
+.quant-page .el-select__wrapper {
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.quant-page .el-input__inner,
+.quant-page .el-date-editor.el-input__wrapper,
+.quant-page .el-input-number {
+  font-size: 12px;
+}
+
+.quant-toolbar > * + * {
+  margin-left: 0;
+}
+
 .quant-page .el-button--primary {
   --el-button-bg-color: var(--q-cyan);
   --el-button-border-color: var(--q-cyan);
@@ -911,7 +987,8 @@
   .quant-preset-strip,
   .quant-run-summary,
   .quant-metric-grid,
-  .quant-industry-cards {
+  .quant-industry-cards,
+  .quant-data-toolbar__row--filters {
     grid-template-columns: 1fr;
   }
 

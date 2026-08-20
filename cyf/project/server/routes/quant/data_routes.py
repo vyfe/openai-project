@@ -11,7 +11,7 @@ from service.quant.import_service import fetch_import_batches, import_bundle, pa
 from service.quant.name_refresh_service import refresh_instrument_names
 from service.quant.position_service import enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
-from service.quant.query_service import fetch_daily_bars
+from service.quant.query_service import fetch_daily_bars, fetch_weekly_bars
 from service.quant.common import infer_exchange, normalize_code, normalize_symbol
 from service.quant.symbol_search_service import search_symbols_fallback
 from service.auth_service import require_admin_auth, require_auth
@@ -205,6 +205,22 @@ def quant_daily_bars(user, password):
         return success_response(data=fetch_daily_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
     except Exception as exc:
         return error_response(f"查询日线失败: {exc}")
+
+
+@bp.route("/data/weekly_bars", methods=["GET"])
+@require_auth
+def quant_weekly_bars(user, password):
+    try:
+        symbol = str(request.args.get("symbol", "")).strip()
+        if not symbol:
+            return error_response("symbol 不能为空")
+        start_date = str(request.args.get("start_date", "")).strip() or None
+        end_date = str(request.args.get("end_date", "")).strip() or None
+        limit = request.args.get("limit", default=200, type=int) or 200
+        limit = max(1, min(limit, 5000))
+        return success_response(data=fetch_weekly_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
+    except Exception as exc:
+        return error_response(f"查询周线失败: {exc}")
 
 
 @bp.route("/symbols/refresh_names", methods=["POST"])
