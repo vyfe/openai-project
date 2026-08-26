@@ -18,12 +18,15 @@ class CronExpression:
         self.weekdays = _parse_field(weekday_expr, 0, 6, allow_seven=True)
 
     def matches(self, dt: datetime) -> bool:
+        # cron weekday: 0=周日, 1=周一, ..., 6=周六
+        # Python weekday(): 0=周一, ..., 6=周日
+        cron_weekday = (dt.weekday() + 1) % 7
         return (
             dt.minute in self.minutes
             and dt.hour in self.hours
             and dt.day in self.days
             and dt.month in self.months
-            and dt.weekday() in self.weekdays
+            and cron_weekday in self.weekdays
         )
 
 

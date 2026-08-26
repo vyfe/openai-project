@@ -7,19 +7,19 @@
             <h2>K线数据</h2>
             <p class="quant-panel__sub">按周期查看日线 / 周线聚合，配套 MA 与成交量</p>
           </div>
-          <div class="quant-toolbar">
-            <el-radio-group v-model="workbench.chartCycle" size="small" @change="onCycleChange">
-              <el-radio-button label="daily">日线</el-radio-button>
-              <el-radio-button label="weekly">周线</el-radio-button>
-            </el-radio-group>
-            <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
-              <el-radio-button label="1m">近1月</el-radio-button>
-              <el-radio-button label="3m">近3月</el-radio-button>
-              <el-radio-button label="6m">近6月</el-radio-button>
-              <el-radio-button label="1y">近1年</el-radio-button>
-              <el-radio-button label="all">全部</el-radio-button>
-            </el-radio-group>
-          </div>
+        </div>
+        <div class="quant-data-toolbar__toolbar">
+          <el-radio-group v-model="workbench.chartCycle" size="small" @change="onCycleChange">
+            <el-radio-button label="daily">日线</el-radio-button>
+            <el-radio-button label="weekly">周线</el-radio-button>
+          </el-radio-group>
+          <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
+            <el-radio-button label="1m">近1月</el-radio-button>
+            <el-radio-button label="3m">近3月</el-radio-button>
+            <el-radio-button label="6m">近6月</el-radio-button>
+            <el-radio-button label="1y">近1年</el-radio-button>
+            <el-radio-button label="all">全部</el-radio-button>
+          </el-radio-group>
         </div>
         <div class="quant-data-toolbar__row quant-data-toolbar__row--filters">
           <el-form label-position="top" class="quant-data-toolbar__symbol">
@@ -74,14 +74,14 @@
 
     <div class="quant-side-stack">
       <section class="quant-panel">
-        <div class="quant-panel__header">
+        <div class="quant-panel__header quant-side-panel__header">
           <div>
             <h2>数据同步任务</h2>
           </div>
-          <div class="quant-toolbar">
-            <el-button type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">创建任务</el-button>
-            <el-button plain :icon="Download" @click="workbench.fetchNowFromTaskForm" :loading="workbench.loading.fetchNow">手动拉数验证</el-button>
-            <el-button plain :icon="Promotion" @click="workbench.createBackfillTask" :loading="workbench.loading.createTask">补历史数据</el-button>
+          <div class="quant-toolbar quant-toolbar--compact">
+            <el-button size="small" type="primary" :icon="Promotion" @click="workbench.createTask" :loading="workbench.loading.createTask">新建任务</el-button>
+            <el-button size="small" plain :icon="Download" @click="workbench.fetchNowFromTaskForm" :loading="workbench.loading.fetchNow">手动拉数</el-button>
+            <el-button size="small" plain :icon="Promotion" @click="workbench.createBackfillTask" :loading="workbench.loading.createTask">补历史</el-button>
           </div>
         </div>
 
@@ -257,6 +257,100 @@
 
         <div class="quant-mini-section">
           <div class="quant-mini-section__title">
+            <span>股票池管理</span>
+            <el-button text :icon="RefreshRight" @click="workbench.loadStockPool" :loading="workbench.loading.stockPool">刷新</el-button>
+          </div>
+
+          <div class="quant-pool-toolbar">
+            <el-input
+              v-model="workbench.stockPoolPage.keyword"
+              size="small"
+              clearable
+              placeholder="搜索 symbol / 名称 / code"
+              style="flex:1;min-width:0"
+              @keyup.enter="onPoolSearch"
+              @clear="onPoolSearch"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button size="small" type="primary" plain @click="onPoolSearch">搜索</el-button>
+          </div>
+
+          <div class="quant-pool-actions">
+            <span class="quant-pool-actions__count">
+              <strong>{{ workbench.stockPoolTotal }}</strong> 个标的
+              <template v-if="workbench.stockPoolSelected.length">
+                · 已选 <strong>{{ workbench.stockPoolSelected.length }}</strong>
+              </template>
+            </span>
+            <div class="quant-toolbar quant-toolbar--compact">
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                :disabled="!workbench.stockPoolSelected.length"
+                @click="workbench.batchDeletePoolSymbols()"
+              >批量移除</el-button>
+              <el-button
+                size="small"
+                plain
+                :disabled="workbench.stockPoolSelected.length === workbench.stockPoolItems.length"
+                @click="selectAllPoolItems"
+              >全选当前页</el-button>
+              <el-button
+                size="small"
+                text
+                :disabled="!workbench.stockPoolSelected.length"
+                @click="workbench.stockPoolSelected = []"
+              >清空选择</el-button>
+            </div>
+          </div>
+
+          <div class="quant-pool-list" v-loading="workbench.loading.stockPool">
+            <el-empty v-if="!workbench.stockPoolItems.length" description="股票池为空，先在上面搜索并加入" :image-size="60" />
+            <div v-else class="quant-pool-row" v-for="item in workbench.stockPoolItems" :key="item.symbol">
+              <el-checkbox
+                :model-value="workbench.stockPoolSelected.includes(item.symbol)"
+                @change="(checked: boolean) => onPoolItemCheck(item.symbol, checked)"
+              />
+              <div class="quant-pool-row__main">
+                <div class="quant-pool-row__head">
+                  <span class="quant-pool-row__symbol">{{ item.symbol }}</span>
+                  <span class="quant-pool-row__name">{{ item.name || '—' }}</span>
+                </div>
+                <div class="quant-pool-row__meta">
+                  <el-tag size="small" type="info" effect="plain">{{ item.exchange }}</el-tag>
+                  <span class="quant-pool-row__source">{{ item.source || 'manual' }}</span>
+                  <span v-if="item.updated_at" class="quant-pool-row__time">更新 {{ formatPoolTime(item.updated_at) }}</span>
+                </div>
+              </div>
+              <el-button
+                size="small"
+                type="danger"
+                plain
+                @click="workbench.deletePoolSymbol(item.symbol)"
+                :loading="workbench.loading.savingSymbol"
+              >移除</el-button>
+            </div>
+          </div>
+
+          <div class="quant-pool-pagination" v-if="workbench.stockPoolTotal > workbench.stockPoolPage.limit">
+            <el-pagination
+              background
+              layout="prev, pager, next, jumper"
+              :total="workbench.stockPoolTotal"
+              :page-size="workbench.stockPoolPage.limit"
+              :current-page="Math.floor(workbench.stockPoolPage.offset / workbench.stockPoolPage.limit) + 1"
+              @current-change="onPoolPageChange"
+              small
+            />
+          </div>
+        </div>
+
+        <div class="quant-mini-section">
+          <div class="quant-mini-section__title">
             <span>最近任务</span>
             <el-button text :icon="RefreshRight" @click="workbench.loadTasks" :loading="workbench.loading.tasks">刷新</el-button>
           </div>
@@ -362,4 +456,32 @@ const emptyDescription = computed(() => {
   const base = '请选择股票并点击查询，或先在数据同步任务里拉数入库'
   return cycle === 'weekly' ? `${base}（日线 ≥ 5 条才会聚合成周线）` : base
 })
+
+function onPoolSearch() {
+  workbench.stockPoolPage.offset = 0
+  workbench.loadStockPool()
+}
+
+function onPoolPageChange(page: number) {
+  workbench.stockPoolPage.offset = (page - 1) * workbench.stockPoolPage.limit
+  workbench.loadStockPool()
+}
+
+function onPoolItemCheck(symbol: string, checked: boolean) {
+  const current = new Set(workbench.stockPoolSelected)
+  if (checked) current.add(symbol)
+  else current.delete(symbol)
+  workbench.stockPoolSelected = Array.from(current)
+}
+
+function selectAllPoolItems() {
+  const all = workbench.stockPoolItems.map(item => item.symbol)
+  workbench.stockPoolSelected = Array.from(new Set([...workbench.stockPoolSelected, ...all]))
+}
+
+function formatPoolTime(value: string | null | undefined): string {
+  if (!value) return ''
+  const text = String(value)
+  return text.length > 16 ? text.slice(0, 16).replace('T', ' ') : text
+}
 </script>

@@ -15,6 +15,8 @@ from service.quant.report_service import (
     update_prompt_template,
 )
 from service.quant.strategy_service import (
+    batch_soft_delete_instruments,
+    count_available_symbols,
     create_strategy,
     delete_strategy,
     get_strategy,
@@ -23,6 +25,7 @@ from service.quant.strategy_service import (
     list_strategy_runs,
     list_strategy_signals,
     run_strategy,
+    soft_delete_instrument,
     update_strategy,
 )
 from service.quant.symbol_search_service import search_symbols_fallback
@@ -150,9 +153,49 @@ def quant_strategy_signals(user, password):
 @require_auth
 def quant_symbols(user, password):
     del user, password
-    limit = request.args.get("limit", default=500, type=int) or 500
-    limit = max(1, min(limit, 5000))
-    return success_response(data=list_available_symbols(limit=limit))
+    limit = request.args.get("limit", default=100, type=int) or 100
+    limit = max(1, min(limit, 500))
+    offset = request.args.get("offset", default=0, type=int) or 0
+    offset = max(0, offset)
+    keyword = str(request.args.get("keyword", "")).strip() or None
+    items = list_available_symbols(limit=limit, offset=offset, keyword=keyword)
+    total = count_available_symbols(keyword=keyword)
+    return success_response(data={"items": items, "total": total, "limit": limit, "offset": offset})
+
+
+@bp.route("/symbols", methods=["DELETE"])
+@require_admin_auth
+def quant_symbol_delete():
+    """软删除单个股票池条目。"""
+    try:
+        symbol = str(request.args.get("symbol", "")).strip()
+        if not symbol:
+            return error_response("symbol 不能为空")
+        deleted = soft_delete_instrument(symbol)
+        if not deleted:
+            return error_response(f"未找到 active 状态的 {symbol}（可能已经删除）")
+        return success_response(data={"symbol": symbol, "deleted": True}, msg=f"已删除 {symbol}")
+    except Exception as exc:
+        return error_response(f"删除股票失败: {exc}")
+
+
+@bp.route("/symbols/batch_delete", methods=["POST"])
+@require_admin_auth
+def quant_symbol_batch_delete():
+    """批量软删除股票池条目。body: {symbols: [...]}
+    返回 {deleted: [...], missing: [...]}；missing = 不在 active 集合里（可能已经被删/不存在）。"""
+    try:
+        data = get_request_data()
+        symbols = parse_json_list(data.get("symbols"))
+        if not symbols:
+            return error_response("symbols 不能为空")
+        result = batch_soft_delete_instruments(symbols)
+        msg = f"删除 {len(result['deleted'])} 条"
+        if result["missing"]:
+            msg += f"，{len(result['missing'])} 条已不在池中"
+        return success_response(data=result, msg=msg)
+    except Exception as exc:
+        return error_response(f"批量删除失败: {exc}")
 
 
 @bp.route("/symbols/search", methods=["GET"])

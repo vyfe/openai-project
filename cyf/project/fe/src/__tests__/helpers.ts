@@ -36,6 +36,7 @@ export function createMockQuantApi() {
       providers: vi.fn(noop),
       dashboardOverview: vi.fn(noop),
       dailyBars: vi.fn(noop),
+      weeklyBars: vi.fn(noop),
       backfill: vi.fn(noop),
       importBatches: vi.fn(noop),
       symbols: vi.fn(noop)

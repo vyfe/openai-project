@@ -4,12 +4,16 @@ import json
 import pytest
 
 from service.quant.strategy_service import (
+    batch_soft_delete_instruments,
+    count_available_symbols,
     create_strategy,
-    list_strategies,
-    get_strategy,
-    update_strategy,
     delete_strategy,
+    get_strategy,
+    list_available_symbols,
+    list_strategies,
     run_strategy,
+    soft_delete_instrument,
+    update_strategy,
 )
 
 
@@ -126,3 +130,99 @@ class TestRunStrategy:
         result = run_strategy(strategy["id"])
         assert result["status"] == "success"
         assert result["id"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 股票池管理
+# ---------------------------------------------------------------------------
+
+
+def _seed_symbol(symbol: str, name: str = "", source: str = "test"):
+    """在 quant_instrument 表里塞一条 active 记录，返回 db 行。"""
+    from datetime import datetime
+    from quant.entities import QuantInstrument
+
+    code, exchange = symbol.split(".", 1)
+    now = datetime.now()
+    QuantInstrument.insert(
+        symbol=symbol,
+        code=code,
+        exchange=exchange,
+        market="A_SHARE",
+        name=name,
+        source=source,
+        status="active",
+        created_at=now,
+        updated_at=now,
+    ).on_conflict_ignore().execute()
+    return QuantInstrument.get(QuantInstrument.symbol == symbol)
+
+
+class TestStockPoolList:
+    """list_available_symbols / count_available_symbols 的过滤与分页行为。"""
+
+    def test_lists_only_active_symbols(self):
+        _seed_symbol("600000.SH", "浦发")
+        _seed_symbol("600001.SH", "邯钢")
+        rows = list_available_symbols()
+        symbols = {row["symbol"] for row in rows}
+        assert "600000.SH" in symbols
+        assert "600001.SH" in symbols
+
+    def test_keyword_matches_symbol_code_and_name(self):
+        _seed_symbol("600000.SH", "浦发银行")
+        _seed_symbol("000001.SZ", "平安银行")
+        # symbol 模糊
+        assert any(r["symbol"] == "600000.SH" for r in list_available_symbols(keyword="600"))
+        # code 模糊
+        assert any(r["symbol"] == "000001.SZ" for r in list_available_symbols(keyword="000001"))
+        # name 模糊
+        assert any(r["symbol"] == "600000.SH" for r in list_available_symbols(keyword="浦发"))
+
+    def test_count_matches_list_total(self):
+        _seed_symbol("600010.SH", "A")
+        _seed_symbol("600020.SH", "B")
+        _seed_symbol("600030.SH", "C")
+        total = count_available_symbols()
+        rows = list_available_symbols(limit=100, offset=0)
+        assert total == len(rows) >= 3
+
+    def test_offset_paginates(self):
+        _seed_symbol("600100.SH", "X1")
+        _seed_symbol("600101.SH", "X2")
+        _seed_symbol("600102.SH", "X3")
+        page1 = list_available_symbols(limit=2, offset=0)
+        page2 = list_available_symbols(limit=2, offset=2)
+        assert len(page1) == 2
+        assert len(page2) >= 1
+        # 不可重叠
+        symbols1 = {r["symbol"] for r in page1}
+        symbols2 = {r["symbol"] for r in page2}
+        assert symbols1.isdisjoint(symbols2)
+
+
+class TestStockPoolDelete:
+    """soft_delete_instrument / batch_soft_delete_instruments 的语义。"""
+
+    def test_single_delete_returns_true(self):
+        _seed_symbol("600200.SH", "待删")
+        assert soft_delete_instrument("600200.SH") is True
+        # 重复删返回 False（已经是 deleted）
+        assert soft_delete_instrument("600200.SH") is False
+
+    def test_single_delete_missing_returns_false(self):
+        assert soft_delete_instrument("999999.SH") is False
+
+    def test_batch_delete_partitions_deleted_vs_missing(self):
+        _seed_symbol("600300.SH", "活")
+        _seed_symbol("600301.SH", "活")
+        # 600302 不存在
+        result = batch_soft_delete_instruments(["600300.SH", "600301.SH", "600302.SH", ""])
+        assert set(result["deleted"]) == {"600300.SH", "600301.SH"}
+        assert "600302.SH" in result["missing"]
+        # 空字符串不应出现在 deleted 里
+        assert "" not in result["deleted"]
+
+    def test_batch_delete_empty_returns_empty(self):
+        assert batch_soft_delete_instruments([]) == {"deleted": [], "missing": []}
+        assert batch_soft_delete_instruments(None) == {"deleted": [], "missing": []}

@@ -211,6 +211,27 @@ describe('useQuantWorkbench — 表单操作', () => {
 })
 
 describe('useQuantWorkbench — 核心业务', () => {
+  it('切换到周线时应请求周线数据并更新当前图表数据', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    const weeklyRows = [{ trade_date: '2026-08-14', close: 100 }]
+    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue({ success: true, data: weeklyRows, msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 100
+
+    wb.switchChartCycle('weekly')
+    await vi.waitFor(() => expect(quantDataAPI.weeklyBars).toHaveBeenCalledTimes(1))
+
+    expect(quantDataAPI.weeklyBars).toHaveBeenCalledWith({
+      symbol: '600519.SH',
+      start_date: undefined,
+      end_date: undefined,
+      limit: 24
+    })
+    expect(unwrap(wb.chartCycle)).toBe('weekly')
+    expect(unwrap(wb.currentBars)).toEqual(weeklyRows)
+  })
+
   it('saveStrategy 空名称应触发 warning', async () => {
     const wb = await getWorkbench()
     const { ElMessage } = await import('element-plus')

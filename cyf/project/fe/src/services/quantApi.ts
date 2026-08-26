@@ -34,8 +34,12 @@ export const quantDataAPI = {
   }) => quantApi.post('/never_guess_my_usage/quant/data/backfill', data),
   importBatches: (params?: { limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/import_batches', { params }),
-  symbols: (params?: { limit?: number }) =>
-    quantApi.get('/never_guess_my_usage/quant/symbols', { params })
+  symbols: (params?: { limit?: number; offset?: number; keyword?: string }) =>
+    quantApi.get('/never_guess_my_usage/quant/symbols', { params }),
+  deleteSymbol: (symbol: string) =>
+    quantApi.delete('/never_guess_my_usage/quant/symbols', { params: { symbol } }),
+  batchDeleteSymbols: (symbols: string[]) =>
+    quantApi.post('/never_guess_my_usage/quant/symbols/batch_delete', { symbols })
 }
 
 export const quantIndustryAPI = {

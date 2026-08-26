@@ -460,8 +460,119 @@
   flex-wrap: wrap;
 }
 
+.quant-toolbar--compact {
+  gap: 4px;
+}
+
 .quant-toolbar--wrap {
   margin-bottom: 12px;
+}
+
+.quant-side-panel__header {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.quant-side-panel__header h2 {
+  font-size: 15px;
+}
+
+.quant-pool-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.quant-pool-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.quant-pool-actions__count {
+  color: var(--q-muted);
+  font-size: 12px;
+}
+
+.quant-pool-actions__count strong {
+  color: var(--q-ink);
+  font-family: var(--q-mono);
+  font-weight: 760;
+}
+
+.quant-pool-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.quant-pool-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--q-line);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: var(--q-surface-2);
+}
+
+.quant-pool-row__main {
+  min-width: 0;
+}
+
+.quant-pool-row__head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.quant-pool-row__symbol {
+  color: var(--q-ink);
+  font-family: var(--q-mono);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.quant-pool-row__name {
+  color: var(--q-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quant-pool-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  color: var(--q-muted);
+  font-size: 11px;
+}
+
+.quant-pool-row__source {
+  padding: 1px 6px;
+  border: 1px solid var(--q-line);
+  border-radius: 999px;
+  background: var(--q-surface);
+}
+
+.quant-pool-row__time {
+  font-family: var(--q-mono);
+  font-size: 11px;
+}
+
+.quant-pool-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .quant-data-toolbar {
@@ -475,8 +586,71 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
+}
+
+.quant-data-toolbar__toolbar {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+}
+
+.quant-data-toolbar__toolbar .el-radio-group {
+  --el-radio-button-checked-bg-color: var(--q-cyan);
+  --el-radio-button-checked-border-color: var(--q-cyan);
+  --el-radio-button-checked-text-color: #fff;
+  display: inline-flex;
+  height: 28px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--q-line);
+  border-radius: 6px;
+  background: var(--q-surface-2);
+}
+
+.quant-data-toolbar__toolbar .el-radio-button {
+  --el-radio-button-checked-bg-color: var(--q-cyan);
+  --el-radio-button-checked-border-color: var(--q-cyan);
+  --el-radio-button-checked-text-color: #fff;
+  display: flex;
+  margin: 0;
+}
+
+.quant-data-toolbar__toolbar .el-radio-button__inner {
+  display: flex;
+  min-width: 54px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--q-muted);
+  font-size: 12px;
+  font-weight: 650;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.quant-data-toolbar__toolbar .el-radio-button + .el-radio-button .el-radio-button__inner {
+  border-left: 1px solid var(--q-line);
+}
+
+.quant-data-toolbar__toolbar .el-radio-button__inner:hover {
+  background: color-mix(in srgb, var(--q-cyan) 8%, var(--q-surface));
+  color: var(--q-cyan);
+}
+
+.quant-data-toolbar__toolbar .el-radio-button.is-active .el-radio-button__inner {
+  background: var(--q-cyan);
+  border-color: var(--q-cyan);
+  box-shadow: none;
+  color: #fff;
 }
 
 .quant-data-toolbar__row--filters {
@@ -496,9 +670,9 @@
   margin-bottom: 0;
 }
 
-.quant-data-toolbar__row .el-radio-button__inner {
-  padding: 5px 9px;
-  font-size: 12px;
+.quant-data-toolbar__toolbar .el-radio-group:nth-child(2) .el-radio-button__inner {
+  min-width: 58px;
+  font-weight: 600;
 }
 
 .quant-form-grid {

@@ -21,6 +21,7 @@ import {
   ElPopconfirm,
   ElPopover,
   ElRadio,
+  ElRadioButton,
   ElRadioGroup,
   ElSelect,
   ElSkeleton,
@@ -57,6 +58,7 @@ import 'element-plus/es/components/pagination/style/css'
 import 'element-plus/es/components/popconfirm/style/css'
 import 'element-plus/es/components/popover/style/css'
 import 'element-plus/es/components/radio/style/css'
+import 'element-plus/es/components/radio-button/style/css'
 import 'element-plus/es/components/radio-group/style/css'
 import 'element-plus/es/components/select/style/css'
 import 'element-plus/es/components/skeleton/style/css'
@@ -91,6 +93,7 @@ const components = [
   ElPopconfirm,
   ElPopover,
   ElRadio,
+  ElRadioButton,
   ElRadioGroup,
   ElSelect,
   ElSkeleton,

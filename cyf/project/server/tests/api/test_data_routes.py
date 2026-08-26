@@ -45,7 +45,8 @@ class TestDataRoutes:
         assert QuantInstrument.get(QuantInstrument.symbol == "000657.SZ").name == "中钨高新"
 
         symbols_resp = auth_client.get("/never_guess_my_usage/quant/symbols", params={"limit": 20})
-        symbols = symbols_resp.get_json()["data"]
+        payload = symbols_resp.get_json()["data"]
+        symbols = payload["items"] if isinstance(payload, dict) else payload
         assert any(item["symbol"] == "000657.SZ" for item in symbols)
 
     def test_fetch_now_imports_bundle(self, auth_client, monkeypatch):

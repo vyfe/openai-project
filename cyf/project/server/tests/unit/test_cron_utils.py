@@ -51,34 +51,57 @@ class TestCronExpressionParsing:
 
 
 class TestCronExpressionMatching:
-    """测试 CronExpression.matches() 逻辑。"""
+    """测试 CronExpression.matches() 逻辑。
 
-    def test_weekday_15_20_matches(self):
-        """cron 1-5 解析为 Python weekday={1,2,3,4,5}（周二到周六）。"""
-        cron = CronExpression("20 15 * * 1-5")
-        dt = datetime(2025, 1, 14, 15, 20)  # 周二，Python weekday()=1
-        assert cron.matches(dt) is True
+    注意：cron 标准的 weekday 是 0=周日, 1=周一, ..., 6=周六（与 Python weekday() 错 1）。
+    CronExpression.matches() 内部已经把 Python weekday 转成 cron weekday 做匹配，
+    所以下面测试里的 Python weekday 索引是反着的。
+    """
 
-    def test_weekend_no_match(self):
-        """周一 (weekday=0) 不在 1-5 范围内。"""
+    def test_weekday_15_matches_weekdays(self):
+        """cron 1-5 = 周一到周五（cron 标准语义）。"""
         cron = CronExpression("20 15 * * 1-5")
-        dt = datetime(2025, 1, 13, 15, 20)  # 周一，Python weekday()=0
-        assert cron.matches(dt) is False
+        # 2025-01-13 是周一
+        assert cron.matches(datetime(2025, 1, 13, 15, 20)) is True
+        # 2025-01-14 周二
+        assert cron.matches(datetime(2025, 1, 14, 15, 20)) is True
+        # 2025-01-17 周五
+        assert cron.matches(datetime(2025, 1, 17, 15, 20)) is True
+
+    def test_weekday_15_skips_weekend(self):
+        """cron 1-5 = 周一到周五 → 周六周日不匹配。"""
+        cron = CronExpression("20 15 * * 1-5")
+        # 2025-01-18 周六
+        assert cron.matches(datetime(2025, 1, 18, 15, 20)) is False
+        # 2025-01-19 周日
+        assert cron.matches(datetime(2025, 1, 19, 15, 20)) is False
+
+    def test_single_weekday_number_matches(self):
+        """cron 0 = 周日；cron 6 = 周六。"""
+        cron_sun = CronExpression("0 9 * * 0")
+        cron_sat = CronExpression("0 9 * * 6")
+        # 2025-01-19 周日
+        assert cron_sun.matches(datetime(2025, 1, 19, 9, 0)) is True
+        assert cron_sat.matches(datetime(2025, 1, 19, 9, 0)) is False
+        # 2025-01-18 周六
+        assert cron_sat.matches(datetime(2025, 1, 18, 9, 0)) is True
+        assert cron_sun.matches(datetime(2025, 1, 18, 9, 0)) is False
 
     def test_wrong_minute_no_match(self):
         cron = CronExpression("20 15 * * 1-5")
-        dt = datetime(2025, 1, 14, 15, 30)  # 周二，但分钟不对
+        dt = datetime(2025, 1, 13, 15, 30)  # 周一但分钟不对
         assert cron.matches(dt) is False
 
     def test_wrong_hour_no_match(self):
         cron = CronExpression("20 15 * * 1-5")
-        dt = datetime(2025, 1, 14, 14, 20)  # 周二，但小时不对
+        dt = datetime(2025, 1, 13, 14, 20)  # 周一但小时不对
         assert cron.matches(dt) is False
 
     def test_cron_matches_helper(self):
-        """cron_matches 便捷函数。"""
+        """cron_matches 便捷函数：1-5 = 周一到周五。"""
+        assert cron_matches("20 15 * * 1-5", datetime(2025, 1, 13, 15, 20)) is True   # 周一
         assert cron_matches("20 15 * * 1-5", datetime(2025, 1, 14, 15, 20)) is True   # 周二
-        assert cron_matches("20 15 * * 1-5", datetime(2025, 1, 13, 15, 20)) is False  # 周一
+        assert cron_matches("20 15 * * 1-5", datetime(2025, 1, 18, 15, 20)) is False  # 周六
 
     def test_every_5_minutes(self):
         """*/5 分钟步长。"""
@@ -86,6 +109,12 @@ class TestCronExpressionMatching:
         assert cron.matches(datetime(2025, 1, 13, 10, 0)) is True
         assert cron.matches(datetime(2025, 1, 13, 10, 5)) is True
         assert cron.matches(datetime(2025, 1, 13, 10, 3)) is False
+
+    def test_monday_does_trigger_regression(self):
+        """回归测试：用户的 20 18 * * 1-5 应该在周一正确触发。"""
+        cron = CronExpression("20 18 * * 1-5")
+        # 2025-01-13 是周一
+        assert cron.matches(datetime(2025, 1, 13, 18, 20)) is True
 
 
 def test_trade_calendar_out_of_range_falls_back_to_weekday():

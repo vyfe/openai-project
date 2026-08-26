@@ -114,4 +114,7 @@ def _pick_week_representative(week_asc_rows: list[dict], iso_week: int):
     返回：date 对象。
     """
     # 方案 A：本周最后一个交易日。和 A 股习惯一致——周五或节前最后一天。
-    return week_asc_rows[-1]["trade_date"]
+    td = week_asc_rows[-1]["trade_date"]
+    if hasattr(td, "isoformat"):
+        return td
+    return parse_trade_date(td)

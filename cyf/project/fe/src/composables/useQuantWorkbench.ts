@@ -49,6 +49,11 @@ function createQuantWorkbench() {
   const symbolSearchKeyword = ref('')
   const visibleSymbolOptions = computed(() => (symbolSearchKeyword.value ? symbolSearchOptions.value : symbolOptions.value))
   const importBatches = ref<any[]>([])
+  const stockPoolItems = ref<SymbolOption[]>([])
+  const stockPoolTotal = ref(0)
+  const stockPoolPage = reactive({ limit: 20, offset: 0, keyword: '' })
+  const stockPoolSelected = ref<string[]>([])
+  const stockPoolLoading = ref(false)
   const clientTasks = ref<any[]>([])
   const dailyBars = ref<any[]>([])
   const weeklyBars = ref<any[]>([])
@@ -100,6 +105,7 @@ function createQuantWorkbench() {
     createTask: false,
     symbolSearch: false,
     savingSymbol: false,
+    stockPool: false,
     fetchNow: false,
     operations: false,
     savingOperation: false,
@@ -861,8 +867,88 @@ function createQuantWorkbench() {
   }
 
   const loadSymbols = async () => {
-    const response: any = await quantDataAPI.symbols({ limit: 1200 })
-    symbolOptions.value = response.data || []
+    const response: any = await quantDataAPI.symbols({ limit: 500 })
+    const payload = response.data
+    symbolOptions.value = Array.isArray(payload) ? payload : (payload?.items || [])
+  }
+
+  const loadStockPool = async () => {
+    loading.stockPool = true
+    try {
+      const response: any = await quantDataAPI.symbols({
+        limit: stockPoolPage.limit,
+        offset: stockPoolPage.offset,
+        keyword: stockPoolPage.keyword || undefined
+      })
+      const payload = response.data || {}
+      stockPoolItems.value = payload.items || []
+      stockPoolTotal.value = Number(payload.total) || 0
+      // 清理失效的选中（被删的 symbol 不应该留在 selected 里）
+      stockPoolSelected.value = stockPoolSelected.value.filter(sym =>
+        stockPoolItems.value.some(item => item.symbol === sym)
+      )
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加载股票池失败')
+    } finally {
+      loading.stockPool = false
+    }
+  }
+
+  const deletePoolSymbol = async (symbol: string) => {
+    try {
+      await ElMessageBox.confirm(`确认从股票池移除 ${symbol}？该操作将停止该标的的同步任务调度。`, '删除股票', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    loading.savingSymbol = true
+    try {
+      const response: any = await quantDataAPI.deleteSymbol(symbol)
+      ElMessage.success(response?.msg || `已删除 ${symbol}`)
+      stockPoolSelected.value = stockPoolSelected.value.filter(s => s !== symbol)
+      await Promise.all([loadStockPool(), loadSymbols()])
+    } catch (error: any) {
+      ElMessage.error(error?.message || `删除 ${symbol} 失败`)
+    } finally {
+      loading.savingSymbol = false
+    }
+  }
+
+  const batchDeletePoolSymbols = async (symbols?: string[]) => {
+    const targets = symbols && symbols.length ? symbols : stockPoolSelected.value
+    if (!targets.length) {
+      ElMessage.warning('请先选择要删除的股票')
+      return
+    }
+    try {
+      await ElMessageBox.confirm(`确认从股票池批量移除 ${targets.length} 个标的？`, '批量删除', {
+        type: 'warning',
+        confirmButtonText: '批量删除',
+        cancelButtonText: '取消'
+      })
+    } catch {
+      return
+    }
+    loading.savingSymbol = true
+    try {
+      const response: any = await quantDataAPI.batchDeleteSymbols(targets)
+      const data = response?.data || {}
+      const deletedCount = (data.deleted || []).length
+      const missingCount = (data.missing || []).length
+      const msg = missingCount > 0
+        ? `删除 ${deletedCount} 条，${missingCount} 条已不在池中`
+        : `已删除 ${deletedCount} 个标的`
+      ElMessage.success(msg)
+      stockPoolSelected.value = []
+      await Promise.all([loadStockPool(), loadSymbols()])
+    } catch (error: any) {
+      ElMessage.error(error?.message || '批量删除失败')
+    } finally {
+      loading.savingSymbol = false
+    }
   }
 
   const mergeSymbolOptions = (items: SymbolOption[] = []) => {
@@ -1775,6 +1861,7 @@ function createQuantWorkbench() {
         loadOverview(),
         loadProviders(),
         loadSymbols(),
+        loadStockPool(),
         loadIndustryBoards(),
         loadImportBatches(),
         loadTasks(),
@@ -1842,6 +1929,10 @@ function createQuantWorkbench() {
     symbolOptions,
     symbolSearchOptions,
     visibleSymbolOptions,
+    stockPoolItems,
+    stockPoolTotal,
+    stockPoolPage,
+    stockPoolSelected,
     importBatches,
     clientTasks,
     dailyBars,
@@ -1965,6 +2056,9 @@ function createQuantWorkbench() {
     loadPositionJournal,
     loadProviders,
     loadSymbols,
+    loadStockPool,
+    deletePoolSymbol,
+    batchDeletePoolSymbols,
     searchSymbols,
     handleStockPoolSelect,
     addSelectedSymbolToPool,
@@ -2016,11 +2110,11 @@ function createQuantWorkbench() {
   }
 }
 
-let quantWorkbenchInstance: ReturnType<typeof createQuantWorkbench> | null = null
+let quantWorkbenchInstance: ReturnType<typeof proxyRefs<ReturnType<typeof createQuantWorkbench>>> | null = null
 
 export function useQuantWorkbench() {
   if (!quantWorkbenchInstance) {
-    quantWorkbenchInstance = proxyRefs(createQuantWorkbench()) as ReturnType<typeof createQuantWorkbench>
+    quantWorkbenchInstance = proxyRefs(createQuantWorkbench()) as ReturnType<typeof proxyRefs<ReturnType<typeof createQuantWorkbench>>>
   }
   return quantWorkbenchInstance
 }

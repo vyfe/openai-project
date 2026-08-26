@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from peewee import fn
 
@@ -219,8 +219,17 @@ def list_strategy_signals(
     return [item.to_dict() for item in query.iterator()]
 
 
-def list_available_symbols(limit: int = 500) -> List[dict]:
-    query = QuantInstrument.select().where(QuantInstrument.status == "active").order_by(QuantInstrument.symbol.asc()).limit(limit)
+def list_available_symbols(limit: int = 500, offset: int = 0, keyword: Optional[str] = None) -> List[dict]:
+    """股票池列表（active）。支持 keyword 模糊匹配（symbol/code/name）和 offset 分页。"""
+    query = QuantInstrument.select().where(QuantInstrument.status == "active")
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        query = query.where(
+            (QuantInstrument.symbol ** kw) |
+            (QuantInstrument.code ** kw) |
+            (QuantInstrument.name ** kw)
+        )
+    query = query.order_by(QuantInstrument.symbol.asc()).limit(limit).offset(offset)
     return [
         {
             "symbol": item.symbol,
@@ -228,6 +237,55 @@ def list_available_symbols(limit: int = 500) -> List[dict]:
             "exchange": item.exchange,
             "market": item.market,
             "name": item.name,
+            "source": item.source,
+            "status": item.status,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         }
         for item in query.iterator()
     ]
+
+
+def count_available_symbols(keyword: Optional[str] = None) -> int:
+    """股票池总数，配合 list_available_symbols 做分页。"""
+    query = QuantInstrument.select().where(QuantInstrument.status == "active")
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        query = query.where(
+            (QuantInstrument.symbol ** kw) |
+            (QuantInstrument.code ** kw) |
+            (QuantInstrument.name ** kw)
+        )
+    return query.count()
+
+
+def soft_delete_instrument(symbol: str) -> bool:
+    """软删除单个股票池条目。返回是否真正改了状态（false 表示已经是 deleted）。"""
+    if not symbol:
+        return False
+    rows = (
+        QuantInstrument.update(status="deleted", updated_at=datetime.now())
+        .where(QuantInstrument.symbol == symbol, QuantInstrument.status == "active")
+        .execute()
+    )
+    return rows > 0
+
+
+def batch_soft_delete_instruments(symbols: Iterable[str]) -> dict:
+    """批量软删除。返回 {deleted: [...], missing: [...]}。"""
+    symbol_list = [s for s in (symbols or []) if s]
+    if not symbol_list:
+        return {"deleted": [], "missing": []}
+    active_tuples = (
+        QuantInstrument.select(QuantInstrument.symbol)
+        .where(QuantInstrument.symbol.in_(symbol_list), QuantInstrument.status == "active")
+        .tuples()
+    )
+    active = {row[0] for row in active_tuples}
+    missing = [s for s in symbol_list if s not in active]
+    deleted = [s for s in symbol_list if s in active]
+    if deleted:
+        QuantInstrument.update(status="deleted", updated_at=datetime.now()).where(
+            QuantInstrument.symbol.in_(deleted), QuantInstrument.status == "active"
+        ).execute()
+    return {"deleted": deleted, "missing": missing}
