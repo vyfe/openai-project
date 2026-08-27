@@ -108,6 +108,98 @@ describe('useQuantWorkbench — 纯函数', () => {
     expect(payload3).toHaveProperty('lookback_days')
     expect(payload3).toHaveProperty('limit')
   })
+
+  it('data_sync 默认 frequencies=["1d"]，多选后透传列表', async () => {
+    const wb = await getWorkbench()
+    wb.scheduleForm.taskType = 'data_sync'
+    expect(wb.scheduleForm.dataFrequencies).toEqual(['1d'])
+    expect(wb.buildSchedulePayload().frequencies).toEqual(['1d'])
+
+    wb.scheduleForm.dataFrequencies = ['1d', '5m']
+    expect(wb.buildSchedulePayload().frequencies).toEqual(['1d', '5m'])
+
+    // 用户全清空 → 默认回退 ["1d"]
+    wb.scheduleForm.dataFrequencies = []
+    expect(wb.buildSchedulePayload().frequencies).toEqual(['1d'])
+  })
+
+  it('hydrateScheduleForm 应正确回显 payload.frequencies', async () => {
+    const wb = await getWorkbench()
+    wb.hydrateScheduleForm({
+      id: 100, name: 'test', task_type: 'data_sync', status: 'active',
+      cron_expr: '*/5 * * * *', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { frequencies: ['1d', '5m'], symbols: ['600519.SH'], provider: 'baostock' },
+    } as any)
+    expect(wb.scheduleForm.dataFrequencies).toEqual(['1d', '5m'])
+
+    // 旧 payload 单值 frequency 也要兼容
+    wb.hydrateScheduleForm({
+      id: 101, name: 'test', task_type: 'data_sync', status: 'active',
+      cron_expr: '*/5 * * * *', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { frequency: '5m', symbols: [], provider: 'auto' },
+    } as any)
+    expect(wb.scheduleForm.dataFrequencies).toEqual(['5m'])
+
+    // 没有 frequency 字段默认 ["1d"]
+    wb.hydrateScheduleForm({
+      id: 102, name: 'test', task_type: 'data_sync', status: 'active',
+      cron_expr: '*/5 * * * *', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { symbols: [], provider: 'auto' },
+    } as any)
+    expect(wb.scheduleForm.dataFrequencies).toEqual(['1d'])
+  })
+
+  it('data_sync 勾选 5m 时下发 minute_lookback_minutes；仅 1d 时不下发', async () => {
+    const wb = await getWorkbench()
+    wb.scheduleForm.taskType = 'data_sync'
+
+    // 仅日线：不带分时字段
+    wb.scheduleForm.dataFrequencies = ['1d']
+    wb.scheduleForm.dataMinuteLookbackMinutes = 90
+    const payload1 = wb.buildSchedulePayload() as any
+    expect(payload1.frequencies).toEqual(['1d'])
+    expect(payload1.minute_lookback_minutes).toBeUndefined()
+
+    // 加上分时：注入 minute_lookback_minutes
+    wb.scheduleForm.dataFrequencies = ['1d', '5m']
+    wb.scheduleForm.dataMinuteLookbackMinutes = 120
+    const payload2 = wb.buildSchedulePayload() as any
+    expect(payload2.frequencies).toEqual(['1d', '5m'])
+    expect(payload2.minute_lookback_minutes).toBe(120)
+  })
+
+  it('hydrateScheduleForm 回显 minute_lookback_minutes（新字段优先于旧 lookback_minutes）', async () => {
+    const wb = await getWorkbench()
+    // 新字段
+    wb.hydrateScheduleForm({
+      id: 200, name: 't', task_type: 'data_sync', status: 'active',
+      cron_expr: '', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { frequencies: ['5m'], symbols: [], minute_lookback_minutes: 240 },
+    } as any)
+    expect(wb.scheduleForm.dataMinuteLookbackMinutes).toBe(240)
+
+    // 旧字段兼容
+    wb.hydrateScheduleForm({
+      id: 201, name: 't', task_type: 'data_sync', status: 'active',
+      cron_expr: '', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { frequencies: ['5m'], symbols: [], lookback_minutes: 180 },
+    } as any)
+    expect(wb.scheduleForm.dataMinuteLookbackMinutes).toBe(180)
+
+    // 都缺省 → 1200 分钟（5 个交易日）兜底
+    wb.hydrateScheduleForm({
+      id: 202, name: 't', task_type: 'data_sync', status: 'active',
+      cron_expr: '', market_calendar: 'A_SHARE', timezone: 'Asia/Shanghai',
+      retry_max: 1, retry_delay_seconds: 180, allow_manual_run: true, description: '',
+      payload: { frequencies: ['1d'], symbols: [] },
+    } as any)
+    expect(wb.scheduleForm.dataMinuteLookbackMinutes).toBe(1200)
+  })
 })
 
 describe('useQuantWorkbench — 表单操作', () => {
@@ -232,6 +324,90 @@ describe('useQuantWorkbench — 核心业务', () => {
     expect(unwrap(wb.currentBars)).toEqual(weeklyRows)
   })
 
+  it('切换到分时应调用 minuteBars 并写入 minuteBars', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    const minuteRows = [
+      { trade_datetime: '2024-01-02T09:35:00', open_price: 1, close_price: 1.5, high_price: 2, low_price: 0.5, volume: 100 },
+      { trade_datetime: '2024-01-02T09:40:00', open_price: 1.5, close_price: 2, high_price: 2.1, low_price: 1.4, volume: 200 },
+    ]
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: minuteRows, msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.minuteQuery.interval = '5m'
+    wb.minuteQuery.limit = 480
+    wb.minuteQuery.adjustFlag = 'qfq'
+
+    wb.switchChartCycle('minute')
+    await vi.waitFor(() => expect(quantDataAPI.minuteBars).toHaveBeenCalledTimes(1))
+
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith({
+      symbol: '600519.SH',
+      interval: '5m',
+      start_datetime: undefined,
+      end_datetime: undefined,
+      limit: 480,
+      adjust_flag: 'qfq',
+    })
+    expect(unwrap(wb.chartCycle)).toBe('minute')
+    expect(unwrap(wb.currentBars)).toEqual(minuteRows)
+    expect(unwrap(wb.minuteBars)).toEqual(minuteRows)
+  })
+
+  it('分时查询应复用 dailyQuery 起止日期（修复 tab 切换后日期条件失效）', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    // 用户在日期选择器选了 2024-01-02 ~ 2024-01-10
+    wb.dailyQuery.startDate = '2024-01-02'
+    wb.dailyQuery.endDate = '2024-01-10'
+    wb.minuteQuery.interval = '5m'
+
+    await wb.loadDailyBars('minute')
+
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: '600519.SH',
+      interval: '5m',
+      start_datetime: '2024-01-02 00:00:00',
+      end_datetime: '2024-01-10 23:59:59',
+    }))
+  })
+
+  it('分时查询当 minuteQuery 显式设了 datetime 时优先使用（不强制覆盖）', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.startDate = '2024-01-02'
+    wb.dailyQuery.endDate = '2024-01-10'
+    wb.minuteQuery.interval = '5m'
+    // 用户在 minuteQuery 显式指定了 datetime，应优先
+    wb.minuteQuery.startDatetime = '2024-01-03 09:30:00'
+    wb.minuteQuery.endDatetime = '2024-01-03 15:00:00'
+
+    await wb.loadDailyBars('minute')
+
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith(expect.objectContaining({
+      start_datetime: '2024-01-03 09:30:00',
+      end_datetime: '2024-01-03 15:00:00',
+    }))
+  })
+
+  it('分时查询当 dailyQuery 日期为空时 start_datetime 应是 undefined', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.minuteQuery.interval = '5m'
+
+    await wb.loadDailyBars('minute')
+
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith(expect.objectContaining({
+      start_datetime: undefined,
+      end_datetime: undefined,
+    }))
+  })
+
   it('saveStrategy 空名称应触发 warning', async () => {
     const wb = await getWorkbench()
     const { ElMessage } = await import('element-plus')
@@ -260,6 +436,50 @@ describe('useQuantWorkbench — 核心业务', () => {
     await wb.createTask()
 
     expect(ElMessage.warning).toHaveBeenCalled()
+  })
+
+  it('fetchNowFromTaskForm 应透传 frequency="5m" 与 interval', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI, quantTaskAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.fetchNow).mockResolvedValue({
+      success: true, data: { records_imported: 48 }, msg: '',
+    })
+    wb.taskForm.symbols = ['600519.SH']
+    wb.taskForm.startDate = '2024-01-02'
+    wb.taskForm.endDate = '2024-01-02'
+    wb.taskForm.provider = 'baostock'
+    wb.taskForm.adjustFlag = 'qfq'
+    wb.taskForm.frequency = '5m'
+    wb.taskForm.interval = '5m'
+
+    await wb.fetchNowFromTaskForm()
+
+    expect(quantDataAPI.fetchNow).toHaveBeenCalledWith({
+      symbols: ['600519.SH'],
+      start_date: '2024-01-02',
+      end_date: '2024-01-02',
+      provider: 'baostock',
+      adjust_flag: 'qfq',
+      frequency: '5m',
+      interval: '5m',
+    })
+  })
+
+  it('createTask 默认 frequency=1d, interval=5m', async () => {
+    const wb = await getWorkbench()
+    const { quantTaskAPI } = await import('@/services/quantApi')
+    wb.taskForm.symbols = ['600519.SH']
+    wb.taskForm.startDate = '2024-01-02'
+    wb.taskForm.endDate = '2024-01-02'
+
+    await wb.createTask()
+
+    expect(quantTaskAPI.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frequency: '1d',
+        interval: '5m',
+      })
+    )
   })
 
   it('saveOperation 缺少标的和交易日应触发 warning', async () => {

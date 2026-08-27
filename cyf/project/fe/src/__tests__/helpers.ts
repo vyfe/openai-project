@@ -37,9 +37,11 @@ export function createMockQuantApi() {
       dashboardOverview: vi.fn(noop),
       dailyBars: vi.fn(noop),
       weeklyBars: vi.fn(noop),
+      minuteBars: vi.fn(noop),
       backfill: vi.fn(noop),
       importBatches: vi.fn(noop),
-      symbols: vi.fn(noop)
+      symbols: vi.fn(noop),
+      fetchNow: vi.fn(noop)
     },
     quantIndustryAPI: {
       boards: vi.fn(noop),

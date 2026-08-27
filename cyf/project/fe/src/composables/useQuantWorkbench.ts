@@ -143,9 +143,23 @@ function createQuantWorkbench() {
     limit: 120
   })
 
+  const minuteQuery = reactive({
+    symbol: '',
+    interval: '5m',
+    startDatetime: '',
+    endDatetime: '',
+    limit: 480,
+    adjustFlag: 'qfq'
+  })
+
   const dailyQueryRange = ref('3m')
-  const chartCycle = ref<'daily' | 'weekly'>('daily')
-  const currentBars = computed(() => (chartCycle.value === 'weekly' ? weeklyBars.value : dailyBars.value))
+  const chartCycle = ref<'daily' | 'weekly' | 'minute'>('daily')
+  const minuteBars = ref<any[]>([])
+  const currentBars = computed(() => {
+    if (chartCycle.value === 'weekly') return weeklyBars.value
+    if (chartCycle.value === 'minute') return minuteBars.value
+    return dailyBars.value
+  })
 
   const taskForm = reactive({
     symbols: [] as string[],
@@ -154,6 +168,8 @@ function createQuantWorkbench() {
     dateRange: ['', ''] as [string, string],
     provider: 'auto',
     adjustFlag: 'qfq',
+    frequency: '1d' as '1d' | '5m',
+    interval: '5m',
     note: '',
     leaseSeconds: 600
   })
@@ -268,7 +284,9 @@ function createQuantWorkbench() {
     dataSymbols: [] as string[],
     dataProvider: 'auto',
     dataAdjustFlag: 'qfq',
+    dataFrequencies: ['1d'] as ('1d' | '5m')[],
     dataLookbackTradeDays: 20,
+    dataMinuteLookbackMinutes: 1200,
     dataLeaseSeconds: 600,
     dataNote: '',
     analysisStrategyIds: [] as number[],
@@ -678,6 +696,7 @@ function createQuantWorkbench() {
       dataProvider: 'auto',
       dataAdjustFlag: 'qfq',
       dataLookbackTradeDays: 20,
+      dataMinuteLookbackMinutes: 1200,
       dataLeaseSeconds: 600,
       dataNote: '',
       analysisStrategyIds: selectedStrategyId.value ? [selectedStrategyId.value] : [],
@@ -690,6 +709,9 @@ function createQuantWorkbench() {
       industryTargets: ['market', 'announcements', 'news', 'research_reports', 'indicators'],
       industryChannelIds: []
     })
+    // 就地变更 dataFrequencies：保留同一个 reactive 引用，让 el-checkbox-group 的内部
+    // 状态不会因为 reset 而错位（避免"重置后再勾选不响应"这类隐性 bug）。
+    scheduleForm.dataFrequencies.splice(0, scheduleForm.dataFrequencies.length, '1d')
   }
 
   const hydrateScheduleForm = (record: ScheduleConfigRecord) => {
@@ -709,7 +731,19 @@ function createQuantWorkbench() {
     scheduleForm.dataSymbols = payload.symbols || []
     scheduleForm.dataProvider = payload.provider || 'auto'
     scheduleForm.dataAdjustFlag = payload.adjust_flag || 'qfq'
+    // 兼容旧 payload.frequency 单值 + 新 payload.frequencies 列表
+    const frequenciesRaw = (Array.isArray(payload.frequencies) && payload.frequencies.length > 0)
+      ? payload.frequencies
+      : [payload.frequency || '1d']
+    const filteredFrequencies = frequenciesRaw.filter((f: string) => f === '1d' || f === '5m')
+    // 就地变更：保留同一个 reactive Proxy 数组的引用，避免 el-checkbox-group
+    // 内部对旧数组的引用错位（整体赋值会让 click 写入的是新数组副本，
+    // 而 v-model 期望回填的对象不是同一个 Proxy）。
+    scheduleForm.dataFrequencies.splice(0, scheduleForm.dataFrequencies.length, ...filteredFrequencies)
+    console.debug('[schedule.hydrate] payload.frequencies=', payload.frequencies, 'payload.frequency=', payload.frequency, '→ dataFrequencies=', [...scheduleForm.dataFrequencies])
     scheduleForm.dataLookbackTradeDays = payload.lookback_trade_days || 20
+    // 兼容旧 payload：minute_lookback_minutes 优先；旧别名 lookback_minutes 回退
+    scheduleForm.dataMinuteLookbackMinutes = payload.minute_lookback_minutes || payload.lookback_minutes || 1200
     scheduleForm.dataLeaseSeconds = payload.lease_seconds || 600
     scheduleForm.dataNote = payload.note || ''
     scheduleForm.analysisStrategyIds = payload.strategy_ids || []
@@ -1083,7 +1117,7 @@ function createQuantWorkbench() {
     }
   }
 
-  const loadDailyBars = async (cycle?: 'daily' | 'weekly') => {
+  const loadDailyBars = async (cycle?: 'daily' | 'weekly' | 'minute') => {
     const target = cycle || chartCycle.value
     if (!dailyQuery.symbol.trim()) {
       ElMessage.warning('先输入或选择一个股票代码')
@@ -1091,27 +1125,60 @@ function createQuantWorkbench() {
     }
     loading.dailyBars = true
     try {
-      const apiCall = target === 'weekly' ? quantDataAPI.weeklyBars : quantDataAPI.dailyBars
-      const response: any = await apiCall({
-        symbol: dailyQuery.symbol.trim(),
-        start_date: dailyQuery.startDate || undefined,
-        end_date: dailyQuery.endDate || undefined,
-        limit: target === 'weekly' ? Math.max(Math.floor(dailyQuery.limit / 5), 24) : dailyQuery.limit
-      })
-      const rows = response.data || []
-      if (target === 'weekly') weeklyBars.value = rows
-      else dailyBars.value = rows
-      if (!rows.length) ElMessage.info(`当前条件下没有查询到${target === 'weekly' ? '周线' : '日线'}数据`)
+      let response: any
+      let rows: any[] = []
+      if (target === 'minute') {
+        // 分时：调用 minuteBars；symbol 优先用 minuteQuery.symbol 兼容
+        const symbol = (minuteQuery.symbol || dailyQuery.symbol).trim()
+        // 起止时间条件复用 dailyQuery 的日期选择器：把日期补成 YYYY-MM-DD 00:00:00 / 23:59:59
+        // 后端 fetch_minute_bars 用 parse_trade_datetime 解析，纯日期也能匹配。
+        const startDatetime = minuteQuery.startDatetime
+          || (dailyQuery.startDate ? `${dailyQuery.startDate} 00:00:00` : undefined)
+        const endDatetime = minuteQuery.endDatetime
+          || (dailyQuery.endDate ? `${dailyQuery.endDate} 23:59:59` : undefined)
+        response = await quantDataAPI.minuteBars({
+          symbol,
+          interval: minuteQuery.interval,
+          start_datetime: startDatetime,
+          end_datetime: endDatetime,
+          limit: minuteQuery.limit,
+          adjust_flag: minuteQuery.adjustFlag
+        })
+        rows = response.data || []
+        minuteBars.value = rows
+      } else {
+        const apiCall = target === 'weekly' ? quantDataAPI.weeklyBars : quantDataAPI.dailyBars
+        response = await apiCall({
+          symbol: dailyQuery.symbol.trim(),
+          start_date: dailyQuery.startDate || undefined,
+          end_date: dailyQuery.endDate || undefined,
+          limit: target === 'weekly' ? Math.max(Math.floor(dailyQuery.limit / 5), 24) : dailyQuery.limit
+        })
+        rows = response.data || []
+        if (target === 'weekly') weeklyBars.value = rows
+        else dailyBars.value = rows
+      }
+      if (!rows.length) {
+        const label = target === 'weekly' ? '周线' : target === 'minute' ? '分时' : '日线'
+        ElMessage.info(`当前条件下没有查询到${label}数据`)
+      }
     } catch (error: any) {
-      ElMessage.error(error?.message || `查询${target === 'weekly' ? '周线' : '日线'}失败`)
+      const label = target === 'weekly' ? '周线' : target === 'minute' ? '分时' : '日线'
+      ElMessage.error(error?.message || `查询${label}失败`)
     } finally {
       loading.dailyBars = false
     }
   }
 
-  const switchChartCycle = (cycle: 'daily' | 'weekly') => {
+  const switchChartCycle = (cycle: 'daily' | 'weekly' | 'minute') => {
     if (chartCycle.value === cycle) return
     chartCycle.value = cycle
+    if (cycle === 'minute') {
+      if ((minuteQuery.symbol || dailyQuery.symbol).trim() && !minuteBars.value.length) {
+        loadDailyBars(cycle)
+      }
+      return
+    }
     if (dailyQuery.symbol.trim() && (cycle === 'weekly' ? !weeklyBars.value.length : !dailyBars.value.length)) {
       loadDailyBars(cycle)
     }
@@ -1246,6 +1313,8 @@ function createQuantWorkbench() {
         end_date: taskForm.endDate,
         provider: taskForm.provider,
         adjust_flag: taskForm.adjustFlag,
+        frequency: taskForm.frequency,
+        interval: taskForm.interval,
         note: taskForm.note,
         lease_seconds: taskForm.leaseSeconds
       })
@@ -1270,10 +1339,13 @@ function createQuantWorkbench() {
         start_date: taskForm.startDate,
         end_date: taskForm.endDate,
         provider: taskForm.provider,
-        adjust_flag: taskForm.adjustFlag
+        adjust_flag: taskForm.adjustFlag,
+        frequency: taskForm.frequency,
+        interval: taskForm.interval
       })
       const result = response.data || {}
-      ElMessage.success(`手动拉数完成：导入 ${result.records_imported ?? result.records_total ?? 0} 条`)
+      const cycleLabel = taskForm.frequency === '5m' ? '分时' : '日线'
+      ElMessage.success(`手动拉${cycleLabel}完成：导入 ${result.records_imported ?? result.records_total ?? 0} 条`)
       if (taskForm.symbols[0]) {
         dailyQuery.symbol = taskForm.symbols[0]
         dailyQuery.startDate = taskForm.startDate
@@ -1519,25 +1591,39 @@ function createQuantWorkbench() {
     if (['industry_collect', 'industry_report'].includes(scheduleForm.taskType) && !scheduleForm.industryBoardIds.length) return ElMessage.warning('行业任务至少选择一个板块')
     loading.savingSchedule = true
     try {
-      const payload = {
-        id: scheduleForm.id || undefined,
-        name: scheduleForm.name.trim(),
-        task_type: scheduleForm.taskType,
-        status: scheduleForm.status,
-        cron_expr: scheduleForm.cronExpr.trim(),
-        market_calendar: scheduleForm.marketCalendar,
-        timezone: scheduleForm.timezone,
-        retry_max: scheduleForm.retryMax,
-        retry_delay_seconds: scheduleForm.retryDelaySeconds,
-        allow_manual_run: scheduleForm.allowManualRun,
-        description: scheduleForm.description.trim(),
-        payload: buildSchedulePayload()
-      }
+      const payload = buildSchedulePayload()
+      // [debug] 临时日志：确认 frequencies 是否随 checkbox 勾选更新
+      console.debug('[schedule.save] dataFrequencies=', [...scheduleForm.dataFrequencies], 'payload.frequencies=', [...((payload as any).frequencies || [])])
       if (scheduleForm.id) {
-        await quantScheduleAPI.updateConfig(payload)
+        await quantScheduleAPI.updateConfig({
+          id: scheduleForm.id,
+          name: scheduleForm.name.trim(),
+          task_type: scheduleForm.taskType,
+          status: scheduleForm.status,
+          cron_expr: scheduleForm.cronExpr.trim(),
+          market_calendar: scheduleForm.marketCalendar,
+          timezone: scheduleForm.timezone,
+          retry_max: scheduleForm.retryMax,
+          retry_delay_seconds: scheduleForm.retryDelaySeconds,
+          allow_manual_run: scheduleForm.allowManualRun,
+          description: scheduleForm.description.trim(),
+          payload
+        })
         ElMessage.success('调度配置已更新')
       } else {
-        await quantScheduleAPI.createConfig(payload)
+        await quantScheduleAPI.createConfig({
+          name: scheduleForm.name.trim(),
+          task_type: scheduleForm.taskType,
+          status: scheduleForm.status,
+          cron_expr: scheduleForm.cronExpr.trim(),
+          market_calendar: scheduleForm.marketCalendar,
+          timezone: scheduleForm.timezone,
+          retry_max: scheduleForm.retryMax,
+          retry_delay_seconds: scheduleForm.retryDelaySeconds,
+          allow_manual_run: scheduleForm.allowManualRun,
+          description: scheduleForm.description.trim(),
+          payload
+        })
         ElMessage.success('调度配置已创建')
       }
       await Promise.all([loadScheduleConfigs(), loadScheduleRuns(), loadSchedulerMeta()])
@@ -1924,6 +2010,19 @@ function createQuantWorkbench() {
   syncDateRange(dailyQuery)
   syncDateRange(taskForm)
   syncDateRange(backfillForm)
+
+  // 调度周期 checkbox 探针：watch 数组变更，验证 el-checkbox-group 的 v-model
+  // 是否真正回写到 scheduleForm.dataFrequencies（比 @change 更可靠，watch
+  // 能拿到 [newVal, oldVal] 两个数组）。
+  // deep: true 是必须的——splice 是 in-place mutation，数组引用不变，
+  // 不加 deep watch 不会触发。
+  watch(
+    () => scheduleForm.dataFrequencies,
+    (newVal, oldVal) => {
+      console.debug('[scheduler.cycle.watch]', 'old=', [...oldVal], 'new=', [...newVal])
+    },
+    { deep: true }
+  )
   return {
     providers,
     symbolOptions,
@@ -1937,6 +2036,8 @@ function createQuantWorkbench() {
     clientTasks,
     dailyBars,
     weeklyBars,
+    minuteBars,
+    minuteQuery,
     chartCycle,
     currentBars,
     strategies,

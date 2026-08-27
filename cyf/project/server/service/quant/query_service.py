@@ -1,7 +1,99 @@
+from datetime import time
 from typing import Iterable, Optional
 
-from quant.entities import QuantDailyBar
-from service.quant.common import normalize_symbol, parse_trade_date, to_float
+from quant.entities import QuantDailyBar, QuantMinuteBar
+from service.quant.common import normalize_symbol, parse_trade_date, parse_trade_datetime, to_float
+
+# A 股交易时段边界，用于分时聚合时切分 am/pm 段避免午休跨段。
+_AM_OPEN = time(9, 30)
+_AM_CLOSE = time(11, 30)
+_PM_OPEN = time(13, 0)
+_PM_CLOSE = time(15, 0)
+
+
+def _resolve_minute_5m_count(bucket_minutes: int) -> int:
+    """每个目标桶由多少根 5m 组成。"""
+    return max(1, bucket_minutes // 5)
+
+
+def _classify_minute_session(t: time) -> Optional[tuple[str, int]]:
+    """把 5m bar 的时间归类到 (session, bucket_idx)；非交易时段返回 None 跳过。
+
+    bucket_idx 是从该 session 开盘算起的整桶索引（按 bucket_minutes 划分）。
+    这样 30m 时 am 段得到 4 个桶（9:30/10:00/10:30/11:00），pm 段同理，
+    跨午休 11:30-13:00 不会被错误合并。
+    """
+    if _AM_OPEN <= t < _AM_CLOSE:
+        minutes_from_open = (t.hour - 9) * 60 + (t.minute - 30)
+        return ("am", minutes_from_open // _classify_minute_session._bucket_minutes)
+    if _PM_OPEN <= t < _PM_CLOSE:
+        minutes_from_open = (t.hour - 13) * 60 + t.minute
+        return ("pm", minutes_from_open // _classify_minute_session._bucket_minutes)
+    return None
+
+
+def _resample_5m_to_buckets(rows_asc: list[dict], bucket_minutes: int, target_interval: str, limit: int) -> list[dict]:
+    """把升序 5m bars 聚合成 15m/30m bars（OHLC 规则：open=首, high=max, low=min, close=末, volume/amount=求和）。
+
+    跳过午休/盘前/盘后时段；桶内 5m 数量不足（数据缺失）时整桶跳过。
+    返回按 trade_datetime 倒序的前 limit 桶。
+    """
+    if not rows_asc:
+        return []
+    bucket_count = _resolve_minute_5m_count(bucket_minutes)
+    # 用闭包变量注入 bucket_minutes，避免重写 _classify_minute_session 签名
+    _classify_minute_session._bucket_minutes = bucket_minutes  # type: ignore[attr-defined]
+
+    buckets: dict[tuple[str, str, int], list[dict]] = {}
+    for row in rows_asc:
+        td = row["trade_datetime"]
+        if hasattr(td, "date") and hasattr(td, "time"):
+            d = td.date()
+            t = td.time()
+        else:
+            parsed = parse_trade_datetime(td)
+            d = parsed.date()
+            t = parsed.time()
+        sb = _classify_minute_session(t)
+        if sb is None:
+            continue
+        session, bucket_idx = sb
+        key = (d.isoformat(), session, bucket_idx)
+        buckets.setdefault(key, []).append(row)
+
+    aggregated: list[dict] = []
+    for key in sorted(buckets.keys()):
+        bucket_rows = buckets[key]
+        if len(bucket_rows) < bucket_count:
+            continue  # 桶内 5m 不完整（缺失或边界被切），整桶跳过
+        first = bucket_rows[0]
+        last = bucket_rows[-1]
+        high_candidates = [to_float(r.get("high_price")) for r in bucket_rows]
+        low_candidates = [to_float(r.get("low_price")) for r in bucket_rows]
+        high = max((v for v in high_candidates if v is not None), default=None)
+        low = min((v for v in low_candidates if v is not None), default=None)
+        volume = sum((to_float(r.get("volume")) or 0.0) for r in bucket_rows)
+        amount = sum((to_float(r.get("amount")) or 0.0) for r in bucket_rows)
+        aggregated.append({
+            "symbol": first.get("symbol"),
+            "code": first.get("code"),
+            "exchange": first.get("exchange"),
+            "trade_datetime": first["trade_datetime"],
+            "interval": target_interval,
+            "adjust_flag": first.get("adjust_flag", "qfq"),
+            "open_price": to_float(first.get("open_price")),
+            "high_price": high,
+            "low_price": low,
+            "close_price": to_float(last.get("close_price")),
+            "volume": volume or None,
+            "amount": amount or None,
+            "source": first.get("source"),
+            "source_run_id": first.get("source_run_id"),
+            "data_source_version": first.get("data_source_version"),
+        })
+
+    aggregated.sort(key=lambda r: r["trade_datetime"], reverse=True)
+    return aggregated[:limit]
 
 
 def fetch_daily_bars(symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 500):
@@ -11,6 +103,55 @@ def fetch_daily_bars(symbol: str, start_date: Optional[str] = None, end_date: Op
     if end_date:
         query = query.where(QuantDailyBar.trade_date <= parse_trade_date(end_date))
     query = query.order_by(QuantDailyBar.trade_date.desc()).limit(limit)
+    return [item.to_dict() for item in query.iterator()]
+
+
+def fetch_minute_bars(
+    symbol: str,
+    interval: str = "5m",
+    start_dt: Optional[str] = None,
+    end_dt: Optional[str] = None,
+    limit: int = 500,
+    adjust_flag: str = "qfq",
+):
+    """分时 K 线查询。limit 上限 5000，避免一次返回过多 bar。
+
+    - interval="5m"：直接查入库的 5m 数据
+    - interval="15m"/"30m"：从入库的 5m 端上聚合（OHLC 规则），不写库；
+      按 (date, am/pm) 切片避开午休跨段，桶内 5m 不足时整桶跳过
+    """
+    bounded_limit = max(1, min(limit, 5000))
+
+    if interval in ("15m", "30m"):
+        bucket_minutes = 15 if interval == "15m" else 30
+        # 每桶需要 bucket_minutes/5 根 5m，再放大到天级 + buffer；上限 5000 兜底
+        raw_limit = min(bounded_limit * _resolve_minute_5m_count(bucket_minutes) * 4, 5000)
+        five_m_query = QuantMinuteBar.select().where(
+            (QuantMinuteBar.symbol == normalize_symbol(symbol))
+            & (QuantMinuteBar.interval == "5m")
+            & (QuantMinuteBar.adjust_flag == adjust_flag)
+        )
+        if start_dt:
+            five_m_query = five_m_query.where(QuantMinuteBar.trade_datetime >= parse_trade_datetime(start_dt))
+        if end_dt:
+            five_m_query = five_m_query.where(QuantMinuteBar.trade_datetime <= parse_trade_datetime(end_dt))
+        rows_desc = [
+            item.to_dict()
+            for item in five_m_query.order_by(QuantMinuteBar.trade_datetime.desc()).limit(raw_limit).iterator()
+        ]
+        rows_asc = list(reversed(rows_desc))
+        return _resample_5m_to_buckets(rows_asc, bucket_minutes, interval, bounded_limit)
+
+    query = QuantMinuteBar.select().where(
+        (QuantMinuteBar.symbol == normalize_symbol(symbol))
+        & (QuantMinuteBar.interval == interval)
+        & (QuantMinuteBar.adjust_flag == adjust_flag)
+    )
+    if start_dt:
+        query = query.where(QuantMinuteBar.trade_datetime >= parse_trade_datetime(start_dt))
+    if end_dt:
+        query = query.where(QuantMinuteBar.trade_datetime <= parse_trade_datetime(end_dt))
+    query = query.order_by(QuantMinuteBar.trade_datetime.desc()).limit(bounded_limit)
     return [item.to_dict() for item in query.iterator()]
 
 

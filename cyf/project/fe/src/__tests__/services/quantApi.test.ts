@@ -80,6 +80,38 @@ describe('quantDataAPI — 请求参数构造', () => {
     )
   })
 
+  it('minuteBars 应传递 symbol 与分时参数', async () => {
+    await quantDataAPI.minuteBars({
+      symbol: '600519.SH',
+      interval: '5m',
+      start_datetime: '2024-01-02 09:00:00',
+      end_datetime: '2024-01-02 15:00:00',
+      limit: 480,
+      adjust_flag: 'qfq',
+    })
+    expect(mockClient.get).toHaveBeenCalledWith(
+      '/never_guess_my_usage/quant/data/minute_bars',
+      {
+        params: {
+          symbol: '600519.SH',
+          interval: '5m',
+          start_datetime: '2024-01-02 09:00:00',
+          end_datetime: '2024-01-02 15:00:00',
+          limit: 480,
+          adjust_flag: 'qfq',
+        },
+      }
+    )
+  })
+
+  it('minuteBars interval 可省略默认 5m', async () => {
+    await quantDataAPI.minuteBars({ symbol: '600519.SH' })
+    expect(mockClient.get).toHaveBeenCalledWith(
+      '/never_guess_my_usage/quant/data/minute_bars',
+      { params: { symbol: '600519.SH' } }
+    )
+  })
+
   it('backfill 应发送 POST 请求体', async () => {
     await quantDataAPI.backfill({ symbols: ['000001.SZ'], lookback_days: 30 })
     expect(mockClient.post).toHaveBeenCalledWith(

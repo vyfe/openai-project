@@ -11,6 +11,14 @@ export const quantDataAPI = {
     quantApi.get('/never_guess_my_usage/quant/data/daily_bars', { params }),
   weeklyBars: (params: { symbol: string; start_date?: string; end_date?: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/data/weekly_bars', { params }),
+  minuteBars: (params: {
+    symbol: string
+    interval?: string
+    start_datetime?: string
+    end_datetime?: string
+    limit?: number
+    adjust_flag?: string
+  }) => quantApi.get('/never_guess_my_usage/quant/data/minute_bars', { params }),
   symbolSearch: (params: { keyword: string; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/symbols/search', { params }),
   upsertSymbol: (data: { symbol: string; code?: string; exchange?: string; name?: string; source?: string }) =>

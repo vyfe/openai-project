@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+import math
+from datetime import datetime, time, timedelta
 
 from quant.entities import QuantPositionJournal, QuantReportRecord, QuantScheduleConfig, QuantScheduleRun
 from service.quant.common import correct_known_index_exchange, normalize_symbol
@@ -19,6 +20,23 @@ from service.quant.trade_calendar_service import shift_trade_day
 logger = logging.getLogger("quant.scheduler")
 
 
+# 分时回溯窗口配置（5m 任务专用，与日线的 lookback_trade_days 隔离）。
+# 默认 5 个交易日 = 1200 分钟（盘中补一周数据）；上限 2400 分钟 ≈ 2 周作为安全垫。
+# 超 MAX 会被 cap 并打 warning 日志，而不是放任 provider 拉取失败。
+DEFAULT_MINUTE_LOOKBACK_MINUTES = 1200
+MAX_MINUTE_LOOKBACK_MINUTES = 2400
+
+# A 股交易时段：9:30-11:30 + 13:00-15:00 = 240 分钟/交易日；中间 11:30-13:00 是午间休市。
+# 把"分时回溯分钟数"按 240 分钟/天折算成交易天数（向上取整，最少 1 天）：
+#   60 分钟  → 1 天   (起点 9:30)
+#   240 分钟 → 1 天   (起点 9:30)
+#   1200 分钟 → 5 天  (起点 5 天前 9:30)
+# 这样窗口只覆盖真实交易时段，不会把午休/盘后空档算进去。
+TRADING_MINUTES_PER_DAY = 240
+TRADING_DAY_OPEN = time(9, 30)
+TRADING_DAY_CLOSE = time(15, 0)
+
+
 def available_strategy_options() -> list[dict]:
     return [{"id": item["id"], "name": item["name"], "status": item["status"]} for item in list_strategies()]
 
@@ -32,12 +50,73 @@ def collect_active_user_symbols() -> list[str]:
     return sorted(symbols)
 
 
+def _resolve_minute_lookback_minutes(payload: dict) -> int:
+    """解析分时回溯分钟数。
+
+    优先级：payload.minute_lookback_minutes > payload.lookback_minutes（兼容别名）> 默认值。
+    任何大于 MAX 的值会被 cap 并打 warning，避免单次拉取时间过长导致 provider 失败/超时。
+    """
+    raw = payload.get("minute_lookback_minutes")
+    if raw is None:
+        raw = payload.get("lookback_minutes")
+    try:
+        minutes = int(raw) if raw is not None else DEFAULT_MINUTE_LOOKBACK_MINUTES
+    except (TypeError, ValueError):
+        minutes = DEFAULT_MINUTE_LOOKBACK_MINUTES
+    minutes = max(1, minutes)
+    if minutes > MAX_MINUTE_LOOKBACK_MINUTES:
+        logger.warning(
+            "minute_lookback_capped requested=%s capped_to=%s",
+            minutes, MAX_MINUTE_LOOKBACK_MINUTES,
+        )
+        minutes = MAX_MINUTE_LOOKBACK_MINUTES
+    return minutes
+
+
 def resolve_fetch_window(payload: dict, trade_date) -> tuple[str, str]:
+    """根据 payload.frequency 分发窗口计算。
+
+    - frequency="1d"（默认）：lookback_trade_days 走交易日历回推，返回 (date, date) ISO 字符串
+    - frequency="5m"：minute_lookback_minutes（兼容旧别名 lookback_minutes）按"交易日倒推 + 交易时段内"
+      计算窗口：
+        trade_days = ceil(minute_lookback_minutes / 240)，最少 1 天
+        起点 = (trade_date - (trade_days-1) 个交易日) 的 9:30
+        终点 = trade_date 的 15:00
+      这样不会把午休/盘后空档算进窗口；上限由 MAX_MINUTE_LOOKBACK_MINUTES 保护。
+    """
     if payload.get("start_date") and payload.get("end_date"):
         return str(payload["start_date"]), str(payload["end_date"])
+
+    frequency = str(payload.get("frequency", "1d")).strip() or "1d"
+    if frequency == "5m":
+        minutes = _resolve_minute_lookback_minutes(payload)
+        # 240 分钟/天 向上取整，最少 1 天
+        trade_days = max(1, math.ceil(minutes / TRADING_MINUTES_PER_DAY))
+        end_dt = datetime.combine(trade_date, TRADING_DAY_CLOSE)
+        start_trade_day = shift_trade_day(trade_date, -(trade_days - 1), "A_SHARE")
+        start_dt = datetime.combine(start_trade_day, TRADING_DAY_OPEN)
+        return start_dt.isoformat(timespec="minutes"), end_dt.isoformat(timespec="minutes")
+
     lookback_trade_days = max(1, int(payload.get("lookback_trade_days", 20) or 20))
     start_day = shift_trade_day(trade_date, -(lookback_trade_days - 1), "A_SHARE")
     return start_day.isoformat(), trade_date.isoformat()
+
+
+def _resolve_frequencies(payload: dict) -> list[str]:
+    """从 payload 解析要下发的频率列表。
+
+    兼容两种 schema：
+    - 新：`payload.frequencies` (list[str])，如 ["1d", "5m"]
+    - 旧：`payload.frequency` (str)，单值 → 包装成 list
+    - 都缺省：默认 ["1d"]
+    """
+    raw_list = payload.get("frequencies")
+    if isinstance(raw_list, list) and raw_list:
+        out = [str(item).strip() for item in raw_list if str(item).strip()]
+        if out:
+            return out
+    single = str(payload.get("frequency", "1d")).strip() or "1d"
+    return [single]
 
 
 def execute_data_sync(run: QuantScheduleRun) -> dict:
@@ -66,28 +145,50 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
     start_date, end_date = resolve_fetch_window(payload, run.trade_date)
     provider = str(payload.get("provider", "auto")).strip() or "auto"
     adjust_flag = str(payload.get("adjust_flag", "qfq")).strip() or "qfq"
+    frequencies = _resolve_frequencies(payload)
+    interval = str(payload.get("interval", "5m")).strip() or "5m"
+    lookback_minutes = payload.get("lookback_minutes")
+    minute_lookback_minutes = payload.get("minute_lookback_minutes")
     note = str(payload.get("note", "")).strip() or f"schedule:{run.schedule_name}"
     lease_seconds = int(payload.get("lease_seconds", 600) or 600)
     logger.info(
-        "data_sync_start run_id=%s schedule_id=%s trade_date=%s symbols=%s window=%s~%s provider=%s adjust=%s",
+        "data_sync_start run_id=%s schedule_id=%s trade_date=%s symbols=%s window=%s~%s provider=%s adjust=%s frequencies=%s",
         run.id, run.schedule_id, run.trade_date, len(normalized_symbols),
-        start_date, end_date, provider, adjust_flag,
+        start_date, end_date, provider, adjust_flag, frequencies,
     )
-    task = create_fetch_bars_task(
-        symbols=normalized_symbols,
-        start_date=start_date,
-        end_date=end_date,
-        provider=provider,
-        adjust_flag=adjust_flag,
-        note=note,
-        lease_seconds=lease_seconds,
-        schedule_run_id=run.id,
-    )
-    logger.info(
-        "data_sync_enqueued run_id=%s task_id=%s symbols=%s window=%s~%s",
-        run.id, task.get("task_id"), len(normalized_symbols), start_date, end_date,
-    )
-    return {"client_task": task, "window": {"start_date": start_date, "end_date": end_date}}
+
+    client_tasks = []
+    for frequency in frequencies:
+        # 每个 frequency 重新算窗口（日线用日线窗口，分时用分钟窗口）
+        per_payload = dict(payload)
+        per_payload["frequency"] = frequency
+        per_start, per_end = resolve_fetch_window(per_payload, run.trade_date)
+        task = create_fetch_bars_task(
+            symbols=normalized_symbols,
+            start_date=per_start,
+            end_date=per_end,
+            provider=provider,
+            adjust_flag=adjust_flag,
+            note=note,
+            lease_seconds=lease_seconds,
+            schedule_run_id=run.id,
+            frequency=frequency,
+            interval=interval,
+            lookback_minutes=lookback_minutes,
+            minute_lookback_minutes=minute_lookback_minutes,
+        )
+        client_tasks.append(task)
+        logger.info(
+            "data_sync_enqueued run_id=%s frequency=%s task_id=%s symbols=%s window=%s~%s",
+            run.id, frequency, task.get("task_id"), len(normalized_symbols), per_start, per_end,
+        )
+
+    return {
+        "client_tasks": client_tasks,
+        "client_task": client_tasks[0] if client_tasks else None,  # 旧调用兼容
+        "window": {"start_date": start_date, "end_date": end_date},
+        "frequencies": frequencies,
+    }
 
 
 def deliver_to_bound_users() -> list[dict]:
@@ -293,14 +394,20 @@ def execute_schedule_run(run_id: int) -> dict:
                 result = execute_data_sync(run)
                 run.result_json = json.dumps(result, ensure_ascii=False)
                 run.status = RUN_STATUS_AWAITING_DATA
-                task_id = (result.get("client_task") or {}).get("task_id") or ""
-                run.message = f"已下发任务 {task_id}，等待 Agent 上报"
+                # 多 frequency 时有多条 client_tasks 都要等上报，message 列出所有 task_id 方便排查
+                task_ids = [
+                    t.get("task_id") for t in (result.get("client_tasks") or []) if t.get("task_id")
+                ]
+                run.message = (
+                    f"已下发任务 {', '.join(task_ids)}，等待 Agent 上报"
+                    if task_ids else "已下发任务，等待 Agent 上报"
+                )
                 run.finished_at = None
                 run.next_retry_at = None
                 run.save()
                 logger.info(
-                    "schedule run awaiting_data id=%s task_id=%s symbols=%s",
-                    run.id, task_id, len((result.get("client_task") or {}).get("payload", {}).get("symbols") or []),
+                    "schedule run awaiting_data id=%s task_ids=%s symbols=%s",
+                    run.id, task_ids, len((result.get("client_tasks") or [{}])[0].get("payload", {}).get("symbols") or []),
                 )
                 return run.to_dict()
             elif run.task_type == "analysis_report":

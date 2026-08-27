@@ -169,6 +169,26 @@
               </el-form-item>
             </el-form>
             <el-form label-position="top">
+              <el-form-item label="周期">
+                <el-checkbox-group v-model="workbench.scheduleForm.dataFrequencies">
+                  <el-checkbox value="1d">日线</el-checkbox>
+                  <el-checkbox value="5m">分时</el-checkbox>
+                </el-checkbox-group>
+              </el-form-item>
+            </el-form>
+            <el-form label-position="top">
+              <el-form-item label="分时回溯(分钟)">
+                <el-input-number
+                  v-model="workbench.scheduleForm.dataMinuteLookbackMinutes"
+                  :min="1"
+                  :max="2400"
+                  :step="30"
+                  :disabled="!workbench.scheduleForm.dataFrequencies.includes('5m')"
+                  class="quant-full-width"
+                />
+              </el-form-item>
+            </el-form>
+            <el-form label-position="top">
               <el-form-item label="客户端租约(秒)">
                 <el-input-number v-model="workbench.scheduleForm.dataLeaseSeconds" :min="60" :max="7200" :step="60" class="quant-full-width" />
               </el-form-item>
@@ -235,11 +255,11 @@
           <el-form label-position="top">
             <el-form-item label="采集范围">
               <el-checkbox-group v-model="workbench.scheduleForm.industryTargets">
-                <el-checkbox label="market">行情资金</el-checkbox>
-                <el-checkbox label="announcements">公告</el-checkbox>
-                <el-checkbox label="news">新闻</el-checkbox>
-                <el-checkbox label="research_reports">研报</el-checkbox>
-                <el-checkbox label="indicators">指标</el-checkbox>
+                <el-checkbox value="market">行情资金</el-checkbox>
+                <el-checkbox value="announcements">公告</el-checkbox>
+                <el-checkbox value="news">新闻</el-checkbox>
+                <el-checkbox value="research_reports">研报</el-checkbox>
+                <el-checkbox value="indicators">指标</el-checkbox>
               </el-checkbox-group>
             </el-form-item>
           </el-form>

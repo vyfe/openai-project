@@ -11,7 +11,7 @@ from service.quant.import_service import fetch_import_batches, import_bundle, pa
 from service.quant.name_refresh_service import refresh_instrument_names
 from service.quant.position_service import enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
-from service.quant.query_service import fetch_daily_bars, fetch_weekly_bars
+from service.quant.query_service import fetch_daily_bars, fetch_minute_bars, fetch_weekly_bars
 from service.quant.common import infer_exchange, normalize_code, normalize_symbol
 from service.quant.symbol_search_service import search_symbols_fallback
 from service.auth_service import require_admin_auth, require_auth
@@ -176,6 +176,8 @@ def quant_data_fetch_now():
             start_date=start_date,
             end_date=end_date,
             adjust_flag=str(data.get("adjust_flag", "qfq")).strip() or "qfq",
+            frequency=str(data.get("frequency", "1d")).strip() or "1d",
+            interval=str(data.get("interval", "5m")).strip() or "5m",
         )
         payload_bytes = json.dumps(bundle, ensure_ascii=False, sort_keys=True).encode("utf-8")
         result = import_bundle(bundle, payload_bytes=payload_bytes)
@@ -221,6 +223,32 @@ def quant_weekly_bars(user, password):
         return success_response(data=fetch_weekly_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
     except Exception as exc:
         return error_response(f"查询周线失败: {exc}")
+
+
+@bp.route("/data/minute_bars", methods=["GET"])
+@require_auth
+def quant_minute_bars(user, password):
+    try:
+        symbol = str(request.args.get("symbol", "")).strip()
+        if not symbol:
+            return error_response("symbol 不能为空")
+        interval = str(request.args.get("interval", "5m")).strip() or "5m"
+        start_dt = str(request.args.get("start_datetime", "")).strip() or None
+        end_dt = str(request.args.get("end_datetime", "")).strip() or None
+        limit = request.args.get("limit", default=480, type=int) or 480
+        adjust_flag = str(request.args.get("adjust_flag", "qfq")).strip() or "qfq"
+        return success_response(
+            data=fetch_minute_bars(
+                symbol=symbol,
+                interval=interval,
+                start_dt=start_dt,
+                end_dt=end_dt,
+                limit=limit,
+                adjust_flag=adjust_flag,
+            )
+        )
+    except Exception as exc:
+        return error_response(f"查询分时失败: {exc}")
 
 
 @bp.route("/symbols/refresh_names", methods=["POST"])

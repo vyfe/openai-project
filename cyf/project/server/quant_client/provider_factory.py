@@ -27,6 +27,17 @@ _AUTO_CHAIN = [
     (3, YfinanceAshareProvider),    # 兜底：指数 + ETF 国际可访问
 ]
 
+# 分时 K 线的 auto chain：按 fetch_minute_bars 实现度排序。
+# - Baostock：历史 5/15/30/60 分钟全覆盖（指数不含，主力个股首选）
+# - 东方财富：分钟线 + 复权字段齐
+# - Sina：仅当日补数
+# Tencent / Yahoo / Akshare 首期不接分钟线，故不进入分时 chain
+_AUTO_MINUTE_CHAIN = [
+    (0, BaostockAshareProvider),
+    (1, EastmoneyAshareProvider),
+    (2, SinaAshareProvider),
+]
+
 
 # eastmoney / akshare 因外网访问默认超时（2026-08-19 验证），从 auto chain 移除。
 # 仍可显式调用兼容旧任务/旧配置，但调用时会发 DeprecationWarning 提示用户迁移。
@@ -91,6 +102,69 @@ class AutoAshareProvider(BaseAshareProvider):
 
         # 按 trade_date 排序
         result = sorted(merged.values(), key=lambda r: (r.get("symbol", ""), r.get("trade_date", "")))
+        return result
+
+    def fetch_minute_bars(
+        self,
+        symbols: list[str],
+        interval: str,
+        start_dt: str,
+        end_dt: str,
+        adjust_flag: str = "qfq",
+    ) -> list[dict]:
+        # 分时 key：(symbol, trade_datetime, interval, adjust_flag) ——与日线不同维度，避免相互污染
+        merged: dict[tuple, dict] = {}
+        errors = []
+        covered_symbols: set[str] = set()
+        pending_symbols = list(symbols)
+
+        for priority, provider_cls in _AUTO_MINUTE_CHAIN:
+            if not pending_symbols:
+                break
+            provider = provider_cls()
+            if not hasattr(provider, "fetch_minute_bars"):
+                continue
+            try:
+                records = provider.fetch_minute_bars(
+                    symbols=pending_symbols,
+                    interval=interval,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                    adjust_flag=adjust_flag,
+                )
+                added = 0
+                seen_this_round = set()
+                for record in records:
+                    rec_adj = record.get("adjust_flag", adjust_flag)
+                    if rec_adj != adjust_flag:
+                        continue
+                    symbol = record.get("symbol", "")
+                    key = (symbol, record.get("trade_datetime", ""), record.get("interval", interval), rec_adj)
+                    if key not in merged:
+                        merged[key] = record
+                        added += 1
+                    seen_this_round.add(symbol)
+                for sym in seen_this_round:
+                    covered_symbols.add(sym)
+                pending_symbols = [s for s in pending_symbols if s not in covered_symbols]
+                if records:
+                    errors.append(
+                        f"{provider.provider_name}: 拿{len(records)}条, 新增{added}条, 剩余{len(pending_symbols)}个symbol"
+                    )
+                else:
+                    errors.append(f"{provider.provider_name}: 空结果, 剩余{len(pending_symbols)}个symbol")
+            except Exception as exc:
+                errors.append(f"{provider.provider_name}: {exc}")
+
+        if not merged:
+            raise RuntimeError(
+                f"auto 分钟线获取失败 (interval={interval}); " + " | ".join(errors)
+            )
+
+        result = sorted(
+            merged.values(),
+            key=lambda r: (r.get("symbol", ""), r.get("trade_datetime", "")),
+        )
         return result
 
 

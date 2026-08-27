@@ -12,6 +12,7 @@
           <el-radio-group v-model="workbench.chartCycle" size="small" @change="onCycleChange">
             <el-radio-button label="daily">日线</el-radio-button>
             <el-radio-button label="weekly">周线</el-radio-button>
+            <el-radio-button label="minute">分时</el-radio-button>
           </el-radio-group>
           <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
             <el-radio-button label="1m">近1月</el-radio-button>
@@ -20,6 +21,14 @@
             <el-radio-button label="1y">近1年</el-radio-button>
             <el-radio-button label="all">全部</el-radio-button>
           </el-radio-group>
+          <template v-if="workbench.chartCycle === 'minute'">
+            <el-radio-group v-model="workbench.minuteQuery.interval" size="small">
+              <el-radio-button label="5m">5分</el-radio-button>
+              <el-radio-button label="15m">15分</el-radio-button>
+              <el-radio-button label="30m">30分</el-radio-button>
+            </el-radio-group>
+            <span class="quant-mini-tip">新浪分时仅当日可用</span>
+          </template>
         </div>
         <div class="quant-data-toolbar__row quant-data-toolbar__row--filters">
           <el-form label-position="top" class="quant-data-toolbar__symbol">
@@ -66,6 +75,7 @@
           :bars="workbench.currentBars as any"
           :is-dark="isDarkTheme"
           :symbol="workbench.dailyQuery.symbol"
+          :frequency="workbench.chartCycle === 'minute' ? '5m' : '1d'"
           height="480px"
         />
         <el-empty v-else :description="emptyDescription" />
@@ -184,6 +194,25 @@
                   <el-option label="后复权" value="hfq" />
                   <el-option label="不复权" value="raw" />
                 </el-select>
+              </el-form-item>
+            </el-form>
+          </div>
+          <div class="quant-form-grid quant-form-grid--two">
+            <el-form label-position="top">
+              <el-form-item label="周期">
+                <el-radio-group v-model="workbench.taskForm.frequency" size="small">
+                  <el-radio-button label="1d">日线</el-radio-button>
+                  <el-radio-button label="5m">分时</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+            </el-form>
+            <el-form label-position="top">
+              <el-form-item label="粒度" v-if="workbench.taskForm.frequency === '5m'">
+                <el-radio-group v-model="workbench.taskForm.interval" size="small">
+                  <el-radio-button label="5m">5 分</el-radio-button>
+                  <el-radio-button label="15m">15 分</el-radio-button>
+                  <el-radio-button label="30m">30 分</el-radio-button>
+                </el-radio-group>
               </el-form-item>
             </el-form>
           </div>
@@ -441,7 +470,7 @@ function onTaskCustomDateChange() {
   ;(workbench.taskFormRange as any) = ''
 }
 
-function onCycleChange(cycle: 'daily' | 'weekly') {
+function onCycleChange(cycle: 'daily' | 'weekly' | 'minute') {
   workbench.switchChartCycle(cycle)
 }
 
@@ -452,9 +481,11 @@ function onSymbolChange(symbol: string) {
 }
 
 const emptyDescription = computed(() => {
-  const cycle = workbench.chartCycle as unknown as 'daily' | 'weekly'
+  const cycle = workbench.chartCycle as unknown as 'daily' | 'weekly' | 'minute'
   const base = '请选择股票并点击查询，或先在数据同步任务里拉数入库'
-  return cycle === 'weekly' ? `${base}（日线 ≥ 5 条才会聚合成周线）` : base
+  if (cycle === 'weekly') return `${base}（日线 ≥ 5 条才会聚合成周线）`
+  if (cycle === 'minute') return `${base}（分时需要先建分时拉数任务，或切换到日线查看历史）`
+  return base
 })
 
 function onPoolSearch() {

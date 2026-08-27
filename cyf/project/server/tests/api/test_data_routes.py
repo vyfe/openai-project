@@ -52,7 +52,7 @@ class TestDataRoutes:
     def test_fetch_now_imports_bundle(self, auth_client, monkeypatch):
         from quant.entities import QuantDailyBar, QuantInstrument
 
-        def fake_build_fetch_bundle(provider_name, symbols, start_date, end_date, adjust_flag):
+        def fake_build_fetch_bundle(provider_name, symbols, start_date, end_date, adjust_flag, frequency="1d", interval="5m"):
             return {
                 "dataset": "a_share_daily_bars_v1",
                 "bundle_version": 1,
@@ -66,6 +66,8 @@ class TestDataRoutes:
                     "adjust_flag": adjust_flag,
                     "start_date": start_date,
                     "end_date": end_date,
+                    "frequency": frequency,
+                    "interval": interval,
                 },
                 "records": [
                     {

@@ -28,7 +28,8 @@ echarts.use([
 ])
 
 interface Bar {
-  trade_date: string
+  trade_date?: string
+  trade_datetime?: string
   open_price: number | null
   close_price: number | null
   high_price: number | null
@@ -43,8 +44,9 @@ const props = withDefaults(
     symbol?: string
     isDark?: boolean
     height?: string
+    frequency?: '1d' | '5m'
   }>(),
-  { symbol: '', isDark: false, height: '460px' }
+  { symbol: '', isDark: false, height: '460px', frequency: '1d' }
 )
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -53,10 +55,14 @@ let resizeObserver: ResizeObserver | null = null
 
 const sortedBars = computed(() => {
   // ECharts 要求按时间正序；后端按 trade_date 倒序返回，这里反转
-  return [...(props.bars || [])].sort((a, b) => (a.trade_date < b.trade_date ? -1 : 1))
+  return [...(props.bars || [])].sort((a, b) => {
+    const aKey = a.trade_datetime || a.trade_date || ''
+    const bKey = b.trade_datetime || b.trade_date || ''
+    return aKey < bKey ? -1 : 1
+  })
 })
 
-const dates = computed(() => sortedBars.value.map(b => b.trade_date))
+const dates = computed(() => sortedBars.value.map(b => b.trade_datetime || b.trade_date || ''))
 
 // ECharts candlestick: [open, close, low, high]
 const candleData = computed(() =>
@@ -152,7 +158,17 @@ const baseOption = computed(() => {
         data: dates.value,
         boundaryGap: true,
         axisLine: { lineStyle: { color: split } },
-        axisLabel: { color: axis },
+        axisLabel: {
+          color: axis,
+          formatter: (value: string) => {
+            // 5m 用 HH:mm；1d 用 yyyy-MM-dd（截掉 T 之后部分）
+            if (props.frequency === '5m') {
+              const tail = value.split('T')[1] || value
+              return tail.slice(0, 5)
+            }
+            return value.split('T')[0]
+          }
+        },
         splitLine: { show: false },
         axisPointer: { z: 100 }
       },
@@ -186,11 +202,11 @@ const baseOption = computed(() => {
       }
     ],
     dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1], start: 0, end: 100 },
+      { type: 'inside', xAxisIndex: [0, 1], start: props.frequency === '5m' ? 70 : 0, end: 100 },
       {
         type: 'slider',
         xAxisIndex: [0, 1],
-        start: 0,
+        start: props.frequency === '5m' ? 70 : 0,
         end: 100,
         bottom: 6,
         height: 22,

@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import Optional
 
 from quant.db import quant_db
-from quant.entities import QuantDailyBar, QuantImportBatch, QuantInstrument
-from quant_client.constants import SUPPORTED_DATASET
-from service.quant.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, to_float
+from quant.entities import QuantDailyBar, QuantImportBatch, QuantInstrument, QuantMinuteBar
+from quant_client.constants import SUPPORTED_DATASET, SUPPORTED_DATASETS
+from service.quant.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, parse_trade_datetime, to_float
 
 
 def ensure_quant_runtime_dirs(bundle_dir: str):
@@ -24,25 +24,12 @@ def parse_bundle_bytes(file_bytes: bytes) -> dict:
     return json.loads(file_bytes.decode("utf-8"))
 
 
-def normalize_bundle(bundle: dict) -> dict:
-    dataset = str(bundle.get("dataset") or "").strip()
-    if dataset != SUPPORTED_DATASET:
-        raise ValueError(f"不支持的数据集类型: {dataset}")
-
-    records = bundle.get("records")
-    if not isinstance(records, list) or not records:
-        raise ValueError("records 不能为空")
-
-    batch_id = str(bundle.get("batch_id") or uuid.uuid4().hex)
-    source = str(bundle.get("source") or "").strip().lower()
-    if not source:
-        raise ValueError("source 不能为空")
-
-    normalized_records = []
+def _normalize_daily_records(records, source, source_run_id, data_source_version):
+    normalized = []
     for item in records:
         code = normalize_code(item.get("code") or item.get("symbol"))
         exchange = str(item.get("exchange") or infer_exchange(code)).upper()
-        normalized_records.append(
+        normalized.append(
             {
                 "symbol": normalize_symbol(item.get("symbol") or code),
                 "code": code,
@@ -61,16 +48,76 @@ def normalize_bundle(bundle: dict) -> dict:
                 "change": to_float(item.get("change")),
                 "amplitude_pct": to_float(item.get("amplitude_pct")),
                 "source": source,
-                "source_run_id": str(bundle.get("source_run_id") or batch_id),
-                "data_source_version": str(item.get("data_source_version") or bundle.get("data_source_version") or ""),
+                "source_run_id": source_run_id,
+                "data_source_version": data_source_version,
             }
+        )
+    return normalized
+
+
+def _normalize_minute_records(records, source, source_run_id, data_source_version):
+    normalized = []
+    for item in records:
+        code = normalize_code(item.get("code") or item.get("symbol"))
+        exchange = str(item.get("exchange") or infer_exchange(code)).upper()
+        trade_dt = parse_trade_datetime(item.get("trade_datetime"))
+        trade_date = parse_trade_date(item.get("trade_date") or trade_dt.date())
+        normalized.append(
+            {
+                "symbol": normalize_symbol(item.get("symbol") or code),
+                "code": code,
+                "exchange": exchange,
+                "trade_datetime": trade_dt,
+                "trade_date": trade_date,
+                "interval": str(item.get("interval") or "5m"),
+                "adjust_flag": str(item.get("adjust_flag") or "qfq"),
+                "open_price": to_float(item.get("open_price")),
+                "high_price": to_float(item.get("high_price")),
+                "low_price": to_float(item.get("low_price")),
+                "close_price": to_float(item.get("close_price")),
+                "volume": to_float(item.get("volume")),
+                "amount": to_float(item.get("amount")),
+                "source": source,
+                "source_run_id": source_run_id,
+                "data_source_version": data_source_version,
+            }
+        )
+    return normalized
+
+
+def normalize_bundle(bundle: dict) -> dict:
+    dataset = str(bundle.get("dataset") or "").strip()
+    if dataset not in SUPPORTED_DATASETS:
+        raise ValueError(f"不支持的数据集类型: {dataset}")
+
+    records = bundle.get("records")
+    if not isinstance(records, list) or not records:
+        raise ValueError("records 不能为空")
+
+    batch_id = str(bundle.get("batch_id") or uuid.uuid4().hex)
+    source = str(bundle.get("source") or "").strip().lower()
+    if not source:
+        raise ValueError("source 不能为空")
+
+    source_run_id = str(bundle.get("source_run_id") or batch_id)
+    data_source_version = str(
+        bundle.get("data_source_version") or ""
+    )
+
+    if dataset == SUPPORTED_DATASET:
+        normalized_records = _normalize_daily_records(
+            records, source, source_run_id, data_source_version
+        )
+    else:
+        normalized_records = _normalize_minute_records(
+            records, source, source_run_id, data_source_version
         )
 
     return {
         "dataset": dataset,
         "batch_id": batch_id,
         "source": source,
-        "source_run_id": str(bundle.get("source_run_id") or batch_id),
+        "source_run_id": source_run_id,
         "records": normalized_records,
     }
 
@@ -78,6 +125,26 @@ def normalize_bundle(bundle: dict) -> dict:
 def _chunked(items: list[dict], size: int = 500):
     for index in range(0, len(items), size):
         yield items[index:index + size]
+
+
+def _persist_instruments(instrument_rows: dict, now: datetime) -> None:
+    with quant_db.atomic():
+        for chunk in _chunked(list(instrument_rows.values())):
+            first = chunk[0]
+            QuantInstrument.insert_many(chunk).on_conflict(
+                conflict_target=[QuantInstrument.symbol],
+                update={
+                    QuantInstrument.code: first["code"],
+                    QuantInstrument.exchange: first["exchange"],
+                    QuantInstrument.market: "A_SHARE",
+                    QuantInstrument.source: first["source"],
+                    QuantInstrument.status: "active",
+                    QuantInstrument.updated_at: now,
+                    # 故意不写 name——大部分 provider（baostock/tencent/sina/akshare）
+                    # 不返回 name 字段，bundle 里 name 为空；用 on_conflict_replace 会把
+                    # 已有人工填写的中文名覆盖成空串。名称走专门的 refresh_names 流程回填。
+                },
+            ).execute()
 
 
 def import_bundle(bundle: dict, file_name: str = "", payload_bytes: Optional[bytes] = None) -> dict:
@@ -123,25 +190,13 @@ def import_bundle(bundle: dict, file_name: str = "", payload_bytes: Optional[byt
             bar_rows.append(row)
 
         with quant_db.atomic():
-            for chunk in _chunked(list(instrument_rows.values())):
-                # 取 chunk 第一行的元数据（同一批 chunk 内 code/exchange/source 一致）
-                first = chunk[0]
-                QuantInstrument.insert_many(chunk).on_conflict(
-                    conflict_target=[QuantInstrument.symbol],
-                    update={
-                        QuantInstrument.code: first["code"],
-                        QuantInstrument.exchange: first["exchange"],
-                        QuantInstrument.market: "A_SHARE",
-                        QuantInstrument.source: first["source"],
-                        QuantInstrument.status: "active",
-                        QuantInstrument.updated_at: now,
-                        # 故意不写 name——大部分 provider（baostock/tencent/sina/akshare）
-                        # 不返回 name 字段，bundle 里 name 为空；用 on_conflict_replace 会把
-                        # 已有人工填写的中文名覆盖成空串。名称走专门的 refresh_names 流程回填。
-                    },
-                ).execute()
-            for chunk in _chunked(bar_rows):
-                QuantDailyBar.insert_many(chunk).on_conflict_replace().execute()
+            _persist_instruments(instrument_rows, now)
+            if normalized["dataset"] == SUPPORTED_DATASET:
+                for chunk in _chunked(bar_rows):
+                    QuantDailyBar.insert_many(chunk).on_conflict_replace().execute()
+            else:
+                for chunk in _chunked(bar_rows):
+                    QuantMinuteBar.insert_many(chunk).on_conflict_replace().execute()
 
         batch.status = "success"
         batch.records_imported = len(bar_rows)

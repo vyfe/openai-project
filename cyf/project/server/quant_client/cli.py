@@ -7,7 +7,7 @@ import logging
 from typing import List
 
 from quant_client.bundle_builder import build_fetch_bundle, write_bundle
-from quant_client.constants import DEFAULT_TASK_TYPE
+from quant_client.constants import SUPPORTED_TASK_TYPES, TASK_TYPE_BY_FREQUENCY
 from quant_client.http_client import QuantTaskClient
 from quant_client.provider_factory import list_supported_providers
 
@@ -94,20 +94,31 @@ def cmd_run_once(args):
     task_id = task["task_id"]
     payload = task.get("payload") or {}
     task_type = task.get("task_type")
-    if task_type != DEFAULT_TASK_TYPE:
+    if task_type not in SUPPORTED_TASK_TYPES:
         logger.warning("unsupported task type client_id=%s task_id=%s task_type=%s", args.client_id, task_id, task_type)
         result = client.report_task_failure(args.client_id, task_id, f"不支持的任务类型: {task_type}")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return
 
+    # 从 payload 推导 frequency/interval：旧任务只发日线时缺省为 1d；分时任务必须显式带 frequency=5m。
+    frequency = str(payload.get("frequency") or "").strip()
+    if not frequency:
+        frequency = next((freq for freq, ttype in TASK_TYPE_BY_FREQUENCY.items() if ttype == task_type), "1d")
+    interval = str(payload.get("interval") or "5m").strip() or "5m"
+
     try:
-        logger.info("execute task client_id=%s task_id=%s task_type=%s", args.client_id, task_id, task_type)
+        logger.info(
+            "execute task client_id=%s task_id=%s task_type=%s frequency=%s interval=%s",
+            args.client_id, task_id, task_type, frequency, interval,
+        )
         bundle = build_fetch_bundle(
             provider_name=str(payload.get("provider") or "auto"),
             symbols=payload.get("symbols") or [],
             start_date=str(payload.get("start_date") or ""),
             end_date=str(payload.get("end_date") or ""),
             adjust_flag=str(payload.get("adjust_flag") or "qfq"),
+            frequency=frequency,
+            interval=interval,
         )
         result = client.report_task_success(args.client_id, task_id, bundle, message="采集并上报成功")
         logger.info("task success client_id=%s task_id=%s records=%s", args.client_id, task_id, len(bundle.get("records") or []))

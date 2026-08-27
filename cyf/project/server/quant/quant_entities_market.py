@@ -83,6 +83,60 @@ class QuantDailyBar(QuantBaseModel):
         }
 
 
+class QuantMinuteBar(QuantBaseModel):
+    """5/15/30/60 分钟 K 线。独立于 QuantDailyBar：
+
+    - 唯一键含 DateTimeField（每日 ~48 根）与 interval（5m/15m/...），与日线维度不同
+    - 复用 instrument 元数据写入流程（frequency 与 instrument 无关）
+    - trade_date 冗余字段便于按日切片
+    """
+    symbol = CharField(index=True)
+    code = CharField(index=True)
+    exchange = CharField(index=True)
+    trade_datetime = DateTimeField(index=True)
+    trade_date = DateField(index=True)
+    interval = CharField(default="5m", index=True)
+    adjust_flag = CharField(default="qfq", index=True)
+    open_price = FloatField(null=True)
+    high_price = FloatField(null=True)
+    low_price = FloatField(null=True)
+    close_price = FloatField(null=True)
+    volume = FloatField(null=True)
+    amount = FloatField(null=True)
+    source = CharField(default="")
+    source_run_id = CharField(default="", index=True)
+    data_source_version = CharField(default="")
+    created_at = DateTimeField(default=datetime.now)
+    updated_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        table_name = "quant_minute_bar"
+        indexes = ((( "symbol", "trade_datetime", "interval", "adjust_flag"), True),)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "symbol": self.symbol,
+            "code": self.code,
+            "exchange": self.exchange,
+            "trade_datetime": self.trade_datetime.isoformat() if isinstance(self.trade_datetime, datetime) else None,
+            "trade_date": self.trade_date.isoformat() if isinstance(self.trade_date, date) else None,
+            "interval": self.interval,
+            "adjust_flag": self.adjust_flag,
+            "open_price": self.open_price,
+            "high_price": self.high_price,
+            "low_price": self.low_price,
+            "close_price": self.close_price,
+            "volume": self.volume,
+            "amount": self.amount,
+            "source": self.source,
+            "source_run_id": self.source_run_id,
+            "data_source_version": self.data_source_version,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class QuantImportBatch(QuantBaseModel):
     batch_id = CharField(unique=True)
     dataset = CharField(index=True)

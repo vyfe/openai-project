@@ -44,14 +44,24 @@ export const symbolLabel = (item: { symbol?: string; code?: string; name?: strin
  */
 export const buildSchedulePayload = (scheduleForm: any): any => {
   if (scheduleForm.taskType === 'data_sync') {
-    return {
+    const frequencies: string[] = Array.isArray(scheduleForm.dataFrequencies) && scheduleForm.dataFrequencies.length > 0
+      ? scheduleForm.dataFrequencies
+      : ['1d']
+    const payload: Record<string, unknown> = {
       symbols: scheduleForm.dataSymbols,
       provider: scheduleForm.dataProvider,
       adjust_flag: scheduleForm.dataAdjustFlag,
+      frequencies,
       lookback_trade_days: scheduleForm.dataLookbackTradeDays,
       lease_seconds: scheduleForm.dataLeaseSeconds,
       note: scheduleForm.dataNote
     }
+    // 仅在勾选 5m 时下发分时回溯分钟数；后端 schedule_execution_service._resolve_minute_lookback_minutes
+    // 会以 minute_lookback_minutes 优先，旧别名 lookback_minutes 兼容。
+    if (frequencies.includes('5m') && scheduleForm.dataMinuteLookbackMinutes) {
+      payload.minute_lookback_minutes = scheduleForm.dataMinuteLookbackMinutes
+    }
+    return payload
   }
   if (scheduleForm.taskType === 'memory_digest') {
     return {

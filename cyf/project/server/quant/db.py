@@ -62,10 +62,10 @@ def ensure_quant_schema():
             missing_records.append("quant_client_task.schedule_run_id")
 
         existing_tables = set(quant_db.get_tables())
-        new_tables = {"quant_feishu_user_binding", "quant_daily_indicator", "quant_client_task"} - existing_tables
+        new_tables = {"quant_feishu_user_binding", "quant_daily_indicator", "quant_client_task", "quant_minute_bar"} - existing_tables
         if new_tables:
-            from quant.entities import QuantClientTask, QuantDailyIndicator, QuantFeishuUserBinding
-            quant_db.create_tables([QuantFeishuUserBinding, QuantDailyIndicator, QuantClientTask], safe=True)
+            from quant.entities import QuantClientTask, QuantDailyIndicator, QuantFeishuUserBinding, QuantMinuteBar
+            quant_db.create_tables([QuantFeishuUserBinding, QuantDailyIndicator, QuantClientTask, QuantMinuteBar], safe=True)
             missing_records.append(f"new_tables: {', '.join(new_tables)}")
 
         if missing_records:

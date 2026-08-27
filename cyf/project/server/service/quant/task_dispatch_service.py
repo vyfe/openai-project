@@ -8,7 +8,7 @@ from typing import Optional
 
 from quant.db import quant_db
 from quant.entities import QuantClientTask, QuantScheduleRun
-from quant_client.constants import DEFAULT_TASK_TYPE
+from quant_client.constants import DEFAULT_TASK_TYPE, TASK_TYPE_BY_FREQUENCY
 from conf.runtime_logging import build_plain_file_handler, run_id_var, task_type_var
 from service.quant.schedule_query_service import (
     RUN_STATUS_AWAITING_DATA,
@@ -86,18 +86,37 @@ def create_fetch_bars_task(
     note: str = "",
     lease_seconds: int = _DEFAULT_LEASE_SECONDS,
     schedule_run_id: Optional[int] = None,
+    frequency: str = "1d",
+    interval: str = "5m",
+    task_type: Optional[str] = None,
+    lookback_minutes: Optional[int] = None,
+    minute_lookback_minutes: Optional[int] = None,
 ) -> dict:
+    """下发一条 fetch bars 任务。frequency 默认 1d（日线）；5m 走分时任务。
+
+    - task_type: 显式指定时优先；缺省按 frequency 选 (TASK_TYPE_BY_FREQUENCY)
+    - payload 含 frequency / interval / minute_lookback_minutes（兼容旧别名 lookback_minutes）供 Agent 上报与 import_bundle 路由
+    """
     task_id = uuid.uuid4().hex
+    resolved_task_type = task_type or TASK_TYPE_BY_FREQUENCY.get(frequency, DEFAULT_TASK_TYPE)
     payload = {
         "provider": provider,
         "symbols": list(symbols or []),
         "start_date": start_date,
         "end_date": end_date,
         "adjust_flag": adjust_flag,
+        "frequency": frequency,
+        "interval": interval,
     }
+    # 优先写新字段 minute_lookback_minutes；兼容旧别名 lookback_minutes（哪个有值就写哪个）
+    if minute_lookback_minutes is not None:
+        payload["minute_lookback_minutes"] = int(minute_lookback_minutes)
+        payload["lookback_minutes"] = int(minute_lookback_minutes)
+    elif lookback_minutes is not None:
+        payload["lookback_minutes"] = int(lookback_minutes)
     record = QuantClientTask.create(
         task_id=task_id,
-        task_type=DEFAULT_TASK_TYPE,
+        task_type=resolved_task_type,
         status="pending",
         payload_json=json.dumps(payload, ensure_ascii=False),
         note=note,
@@ -107,9 +126,9 @@ def create_fetch_bars_task(
         created_at=_now(),
     )
     logger.info(
-        "task_created task_id=%s provider=%s symbols=%s start=%s end=%s lease=%ss schedule_run_id=%s note=%s",
+        "task_created task_id=%s provider=%s symbols=%s start=%s end=%s lease=%ss schedule_run_id=%s frequency=%s note=%s",
         record.task_id, provider, len(symbols), start_date, end_date,
-        record.lease_seconds, schedule_run_id, note,
+        record.lease_seconds, schedule_run_id, frequency, note,
     )
     return _serialize_task(record)
 

@@ -99,6 +99,26 @@ def parse_trade_date(value) -> date:
     raise ValueError(f"无法解析 trade_date: {value}")
 
 
+def parse_trade_datetime(value) -> datetime:
+    """解析分时 K 线时间戳：支持 datetime / "YYYY-MM-DD HH:MM[:SS]" / "YYYY-MM-DDTHH:MM[:SS]"。"""
+    if isinstance(value, datetime):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("trade_datetime 不能为空")
+    normalized = text.replace("T", " ").replace("/", "-")
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(normalized, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"无法解析 trade_datetime: {value}")
+
+
 def compact_date_text(value) -> str:
     return parse_trade_date(value).strftime("%Y%m%d")
 
