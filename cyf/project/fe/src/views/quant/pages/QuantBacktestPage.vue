@@ -187,7 +187,9 @@
             <span>样本交易</span>
           </div>
           <el-table :data="workbench.backtestTradePreview" stripe height="280" class="quant-table">
-            <el-table-column prop="symbol" label="标的" min-width="110" />
+            <el-table-column label="标的" min-width="180">
+              <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
+            </el-table-column>
             <el-table-column prop="signal_date" label="信号日" width="108" />
             <el-table-column prop="entry_date" label="入场日" width="108" />
             <el-table-column prop="exit_date" label="离场日" width="108" />

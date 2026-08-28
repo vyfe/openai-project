@@ -1,4 +1,4 @@
-import { computed, proxyRefs, reactive, ref, watch } from 'vue'
+import { computed, nextTick, proxyRefs, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Calendar,
@@ -20,7 +20,7 @@ import {
   quantStrategyAPI,
   quantTaskAPI
 } from '@/services/quantApi'
-import { formatRate, formatNumber, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl } from './quant/format'
+import { formatRate, formatNumber, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl, displaySymbolWithName } from './quant/format'
 
 // 类型定义已抽到 composables/quant/types.ts
 import type {
@@ -43,6 +43,12 @@ import type {
 
 
 function createQuantWorkbench() {
+  // K 线图最长的均线周期（MA5/10/20），多查 MA_PADDING 条让前几根 K 线的 MA 也能产出值。
+  // 真正的显示条数由 dailyQuery.limit / chartCycle 控制，padding 部分会被 EChartsCandlestick
+  // 通过 displayLimit prop 截掉不画。
+  const MA_PERIOD_MAX = 20
+  const MA_PADDING = MA_PERIOD_MAX - 1
+
   const providers = ref<string[]>([])
   const symbolOptions = ref<SymbolOption[]>([])
   const symbolSearchOptions = ref<SymbolOption[]>([])
@@ -477,6 +483,14 @@ function createQuantWorkbench() {
     if (!strategyId) return '未绑定策略'
     return strategies.value.find(item => item.id === strategyId)?.name || `策略 #${strategyId}`
   }
+
+  // 把 symbol 代码渲染成"名称（代码）"展示串。优先用 symbolOptions 缓存的 name，
+  // 没有 name 时回退到 symbol 本身（保证列永远可读）。适用于后端只返回 symbol
+  // 不返回 name 的列表（signals/operations/memory/position/backtest trades）。
+  const displaySymbol = (symbol: string): string => displaySymbolWithName(
+    symbol,
+    (s) => symbolOptions.value.find(item => item.symbol === s)?.name,
+  )
 
   const applyStrategyPreset = (config: Record<string, any>) => {
     strategyForm.ruleConfigText = JSON.stringify(config, null, 2)
@@ -1141,18 +1155,23 @@ function createQuantWorkbench() {
           interval: minuteQuery.interval,
           start_datetime: startDatetime,
           end_datetime: endDatetime,
-          limit: minuteQuery.limit,
+          // 多查 MA_PADDING 根，让前几根 K 线的 MA 也能算出值
+          limit: minuteQuery.limit + MA_PADDING,
           adjust_flag: minuteQuery.adjustFlag
         })
         rows = response.data || []
         minuteBars.value = rows
       } else {
         const apiCall = target === 'weekly' ? quantDataAPI.weeklyBars : quantDataAPI.dailyBars
+        // 日线/周线都多查 MA_PADDING 条作为 MA 计算的 padding
+        const baseLimit = target === 'weekly'
+          ? Math.max(Math.floor(dailyQuery.limit / 5), 24)
+          : dailyQuery.limit
         response = await apiCall({
           symbol: dailyQuery.symbol.trim(),
           start_date: dailyQuery.startDate || undefined,
           end_date: dailyQuery.endDate || undefined,
-          limit: target === 'weekly' ? Math.max(Math.floor(dailyQuery.limit / 5), 24) : dailyQuery.limit
+          limit: baseLimit + MA_PADDING
         })
         rows = response.data || []
         if (target === 'weekly') weeklyBars.value = rows
@@ -1173,15 +1192,7 @@ function createQuantWorkbench() {
   const switchChartCycle = (cycle: 'daily' | 'weekly' | 'minute') => {
     if (chartCycle.value === cycle) return
     chartCycle.value = cycle
-    if (cycle === 'minute') {
-      if ((minuteQuery.symbol || dailyQuery.symbol).trim() && !minuteBars.value.length) {
-        loadDailyBars(cycle)
-      }
-      return
-    }
-    if (dailyQuery.symbol.trim() && (cycle === 'weekly' ? !weeklyBars.value.length : !dailyBars.value.length)) {
-      loadDailyBars(cycle)
-    }
+    // 加载由 watch(chartCycle) 自动触发，无需在这里手动调用 loadDailyBars
   }
 
   const loadStrategies = async () => {
@@ -1982,6 +1993,8 @@ function createQuantWorkbench() {
     resetPositionForm()
     bootstrapPromise = bootstrap().finally(() => {
       bootstrapPromise = null
+      // bootstrap 完成后才允许响应式查询触发，避免初始化时多余请求
+      autoQueryReady = true
     })
     return bootstrapPromise
   }
@@ -2010,6 +2023,29 @@ function createQuantWorkbench() {
   syncDateRange(dailyQuery)
   syncDateRange(taskForm)
   syncDateRange(backfillForm)
+
+  // 响应式查询：监测 chartCycle / symbol / dateRange / interval 变化，自动触发对应周期查询。
+  // 用 nextTick 去重：同一 microtask 内多次触发只执行一次（避免 symbol 同步设置时
+  // 与 chartCycle 切换重叠产生重复请求）。autoQueryReady 默认 true 让测试可直接触发；
+  // 生产中 bootstrap 不调 loadDailyBars，所以即便用户在 bootstrap 完成前选 symbol 也不会并发冲突。
+  let autoQueryReady = true
+  let autoQueryScheduled = false
+  const triggerAutoQuery = () => {
+    if (!autoQueryReady) return
+    if (autoQueryScheduled) return
+    autoQueryScheduled = true
+    nextTick(() => {
+      autoQueryScheduled = false
+      const symbol = (dailyQuery.symbol || minuteQuery.symbol || '').trim()
+      if (!symbol) return
+      loadDailyBars()
+    })
+  }
+
+  watch(() => chartCycle.value, triggerAutoQuery)
+  watch(() => dailyQuery.symbol, triggerAutoQuery)
+  watch(() => dailyQuery.dateRange, triggerAutoQuery, { deep: true })
+  watch(() => minuteQuery.interval, triggerAutoQuery)
 
   // 调度周期 checkbox 探针：watch 数组变更，验证 el-checkbox-group 的 v-model
   // 是否真正回写到 scheduleForm.dataFrequencies（比 @change 更可靠，watch
@@ -2123,6 +2159,7 @@ function createQuantWorkbench() {
     backtestStatusTag,
     formatRate,
     formatNumber,
+    displaySymbol,
     resolveStrategyName,
     applyStrategyPreset,
     syncStrategyContext,

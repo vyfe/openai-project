@@ -39,6 +39,25 @@ export const symbolLabel = (item: { symbol?: string; code?: string; name?: strin
 }
 
 /**
+ * 给定一个 symbol 字符串 + name 查表函数，返回"名称（代码）"展示串。
+ * 适用于后端 API 只返回 symbol 但前端 symbolOptions 缓存里有 name 的场景
+ * （如 signals/operations/position/memory/backtest trades 等只携带 code 的列表）。
+ * 没有 name 时回退到 symbol 本身（保证表格列永远可读，不会空白）。
+ */
+export const displaySymbolWithName = (
+  symbol: string,
+  nameLookup: (symbol: string) => string | undefined,
+): string => {
+  const code = String(symbol || '').trim()
+  if (!code) return ''
+  const name = String(nameLookup(code) || '').trim()
+  if (!name) return code
+  if (name === code) return code
+  if (name.includes(code)) return name
+  return `${name}（${code}）`
+}
+
+/**
  * 根据 scheduleForm.taskType 构造对应的 payload。
  * 注意：依赖 scheduleForm 的 reactive 字段；调用方需传入。
  */

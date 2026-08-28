@@ -21,7 +21,9 @@
         :row-class-name="({ row }) => row.id === workbench.selectedOperationId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="trade_date" label="交易日" width="110" />
-        <el-table-column prop="symbol" label="标的" min-width="120" />
+        <el-table-column label="标的" min-width="200">
+          <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
+        </el-table-column>
         <el-table-column prop="action" label="动作" width="92" />
         <el-table-column label="状态" width="96">
           <template #default="{ row }">

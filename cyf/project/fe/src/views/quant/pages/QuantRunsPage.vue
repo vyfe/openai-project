@@ -61,7 +61,9 @@
       </div>
 
       <el-table :data="workbench.strategySignals" stripe height="580" class="quant-table" v-loading="workbench.loading.signals">
-        <el-table-column prop="symbol" label="标的" min-width="120" />
+        <el-table-column label="标的" min-width="200">
+          <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
+        </el-table-column>
         <el-table-column prop="signal_type" label="信号类型" width="110" />
         <el-table-column prop="score" label="得分" width="90" />
         <el-table-column label="是否通过" width="96">

@@ -88,6 +88,26 @@ describe('useQuantWorkbench — 纯函数', () => {
     expect(wb.strategyStatusTag('archived')).toBe('info')
   })
 
+  it('displaySymbol 应根据 symbolOptions 缓存返回"名称（代码）"展示串', async () => {
+    const wb = await getWorkbench()
+    // 默认 workbench.symbolOptions 为空 → 只能回退到 symbol 本身
+    expect(wb.displaySymbol('600519.SH')).toBe('600519.SH')
+    expect(wb.displaySymbol('')).toBe('')
+
+    // 注入 name 后应展示"名称（代码）"
+    wb.symbolOptions.push({ symbol: '600519.SH', code: '600519', exchange: 'SH', name: '贵州茅台' })
+    wb.symbolOptions.push({ symbol: '000001.SZ', code: '000001', exchange: 'SZ', name: '平安银行' })
+    expect(wb.displaySymbol('600519.SH')).toBe('贵州茅台（600519.SH）')
+    expect(wb.displaySymbol('000001.SZ')).toBe('平安银行（000001.SZ）')
+
+    // 没缓存的 symbol 回退到本身
+    expect(wb.displaySymbol('999999.SH')).toBe('999999.SH')
+
+    // name 是简称时正常拼接（"002837.SZ 英维克" 包含完整 symbol 时去重）
+    wb.symbolOptions.push({ symbol: '002837.SZ', code: '002837', exchange: 'SZ', name: '002837.SZ 英维克' })
+    expect(wb.displaySymbol('002837.SZ')).toBe('002837.SZ 英维克')
+  })
+
   it('buildSchedulePayload 应根据 taskType 返回对应 payload', async () => {
     const wb = await getWorkbench()
     // 默认 data_sync
@@ -318,7 +338,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       symbol: '600519.SH',
       start_date: undefined,
       end_date: undefined,
-      limit: 24
+      limit: 43
     })
     expect(unwrap(wb.chartCycle)).toBe('weekly')
     expect(unwrap(wb.currentBars)).toEqual(weeklyRows)
@@ -345,7 +365,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       interval: '5m',
       start_datetime: undefined,
       end_datetime: undefined,
-      limit: 480,
+      limit: 499,
       adjust_flag: 'qfq',
     })
     expect(unwrap(wb.chartCycle)).toBe('minute')
@@ -406,6 +426,81 @@ describe('useQuantWorkbench — 核心业务', () => {
       start_datetime: undefined,
       end_datetime: undefined,
     }))
+  })
+
+  it('响应式查询：symbol 变化应自动触发对应周期查询', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    // chartCycle 默认 'daily'，设 symbol 应触发 dailyBars
+    wb.dailyQuery.symbol = '600519.SH'
+    await vi.waitFor(() => expect(quantDataAPI.dailyBars).toHaveBeenCalledTimes(1))
+    expect(quantDataAPI.dailyBars).toHaveBeenCalledWith(expect.objectContaining({ symbol: '600519.SH' }))
+  })
+
+  it('响应式查询：dateRange 变化应自动触发查询（deep watch）', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    await vi.waitFor(() => expect(quantDataAPI.dailyBars).toHaveBeenCalledTimes(1))
+    vi.mocked(quantDataAPI.dailyBars).mockClear()
+
+    // 用户改起止日期（picker 是连续选择；这里直接改值）
+    wb.dailyQuery.dateRange = ['2024-01-02', '2024-01-10']
+    await vi.waitFor(() => expect(quantDataAPI.dailyBars).toHaveBeenCalledTimes(1))
+    expect(quantDataAPI.dailyBars).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: '600519.SH',
+      start_date: '2024-01-02',
+      end_date: '2024-01-10',
+    }))
+  })
+
+  it('响应式查询：minute interval 变化在 minute tab 下应触发分钟查询', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.switchChartCycle('minute')  // 先切到 minute tab
+    wb.minuteQuery.interval = '15m'  // 再改 interval
+    await vi.waitFor(() => expect(quantDataAPI.minuteBars).toHaveBeenCalledTimes(1))
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: '600519.SH',
+      interval: '15m',
+    }))
+  })
+
+  it('响应式查询：同一帧内 symbol+interval+chartCycle 多次变化应合并为 1 次请求', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    // 同步连续触发：symbol、interval、chartCycle
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.minuteQuery.interval = '15m'
+    wb.switchChartCycle('minute')
+    // 等待 microtask flush
+    await vi.waitFor(() => expect(quantDataAPI.minuteBars).toHaveBeenCalledTimes(1))
+    // 等待更多 microtask 后再次断言，确保没有遗漏
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledTimes(1)
+    expect(quantDataAPI.minuteBars).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: '600519.SH',
+      interval: '15m',
+    }))
+  })
+
+  it('响应式查询：symbol 为空时不触发请求（避免空查询）', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    // 不设 symbol，只切 tab —— 不应触发任何请求
+    wb.switchChartCycle('minute')
+    wb.switchChartCycle('weekly')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(quantDataAPI.dailyBars).not.toHaveBeenCalled()
+    expect(quantDataAPI.minuteBars).not.toHaveBeenCalled()
+    expect(quantDataAPI.weeklyBars).not.toHaveBeenCalled()
   })
 
   it('saveStrategy 空名称应触发 warning', async () => {

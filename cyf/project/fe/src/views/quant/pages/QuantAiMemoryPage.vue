@@ -180,7 +180,9 @@
             @row-click="openMemory"
             :row-class-name="({ row }) => row.symbol === workbench.selectedMemorySymbol ? 'quant-row--active' : ''"
           >
-            <el-table-column prop="symbol" label="标的" min-width="120" />
+            <el-table-column label="标的" min-width="200">
+              <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
+            </el-table-column>
             <el-table-column prop="updated_at" label="更新时间" min-width="180" />
             <el-table-column label="操作" width="92">
               <template #default="{ row }">

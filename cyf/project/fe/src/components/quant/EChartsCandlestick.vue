@@ -45,8 +45,14 @@ const props = withDefaults(
     isDark?: boolean
     height?: string
     frequency?: '1d' | '5m'
+    /**
+     * 仅画最后 N 根 K 线/成交量。MA 仍按 bars 全量计算（让前几根 K 线的 MA
+     * 也能算出来），再按 N 切片到对应 X 轴区间。
+     * 留空表示全部显示。
+     */
+    displayLimit?: number
   }>(),
-  { symbol: '', isDark: false, height: '460px', frequency: '1d' }
+  { symbol: '', isDark: false, height: '460px', frequency: '1d', displayLimit: Infinity }
 )
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -62,15 +68,23 @@ const sortedBars = computed(() => {
   })
 })
 
-const dates = computed(() => sortedBars.value.map(b => b.trade_datetime || b.trade_date || ''))
+// 只渲染最后 displayLimit 根 K 线/成交量；更早的 bars 只用来贡献 MA。
+const displayBars = computed(() => {
+  const list = sortedBars.value
+  const limit = props.displayLimit
+  if (!limit || limit >= list.length) return list
+  return list.slice(-limit)
+})
+
+const dates = computed(() => displayBars.value.map(b => b.trade_datetime || b.trade_date || ''))
 
 // ECharts candlestick: [open, close, low, high]
 const candleData = computed(() =>
-  sortedBars.value.map(b => [b.open_price, b.close_price, b.low_price, b.high_price])
+  displayBars.value.map(b => [b.open_price, b.close_price, b.low_price, b.high_price])
 )
 
 const volumeData = computed(() =>
-  sortedBars.value.map((b) => {
+  displayBars.value.map((b) => {
     const open = b.open_price ?? 0
     const close = b.close_price ?? 0
     const isUp = close >= open
@@ -83,6 +97,8 @@ const volumeData = computed(() =>
 
 function maValues(period: number): (number | null)[] {
   const result: (number | null)[] = []
+  // 用全部 sortedBars（含 padding）算 MA，让前几根 K 线的 MA 也能产出值；
+  // 结果按 displayBars 的尾部区间切片，保证与 X 轴等长。
   const closes = sortedBars.value.map(b => b.close_price ?? null)
   for (let i = 0; i < closes.length; i++) {
     if (i < period - 1) {
@@ -102,9 +118,16 @@ function maValues(period: number): (number | null)[] {
   return result
 }
 
-const ma5 = computed(() => maValues(5))
-const ma10 = computed(() => maValues(10))
-const ma20 = computed(() => maValues(20))
+function trimToDisplay(allValues: (number | null)[]): (number | null)[] {
+  const total = allValues.length
+  const visible = displayBars.value.length
+  if (visible >= total) return allValues
+  return allValues.slice(total - visible)
+}
+
+const ma5 = computed(() => trimToDisplay(maValues(5)))
+const ma10 = computed(() => trimToDisplay(maValues(10)))
+const ma20 = computed(() => trimToDisplay(maValues(20)))
 
 const baseOption = computed(() => {
   const axis = props.isDark ? '#cbd5e1' : '#1f2937'

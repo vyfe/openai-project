@@ -76,6 +76,7 @@
           :is-dark="isDarkTheme"
           :symbol="workbench.dailyQuery.symbol"
           :frequency="workbench.chartCycle === 'minute' ? '5m' : '1d'"
+          :display-limit="displayLimit"
           height="480px"
         />
         <el-empty v-else :description="emptyDescription" />
@@ -434,6 +435,19 @@ const { isDarkTheme } = useThemeManager()
 
 const RANGE_MONTHS: Record<string, number | null> = { '1m': 1, '3m': 3, '6m': 6, '1y': 12, all: null }
 
+// EChartsCandlestick 只画最后 N 根 K 线/成交量（更早的 bars 只用来贡献 MA）。
+// daily 周期直接用 limit；weekly 用 limit/5 折算成周数（与 loadDailyBars 一致）；
+// minute 周期直接用 minuteQuery.limit。
+const displayLimit = computed(() => {
+  if (workbench.chartCycle === 'weekly') {
+    return Math.max(Math.floor(workbench.dailyQuery.limit / 5), 24)
+  }
+  if (workbench.chartCycle === 'minute') {
+    return workbench.minuteQuery.limit
+  }
+  return workbench.dailyQuery.limit
+})
+
 function applyDailyRange(range: string) {
   const months = RANGE_MONTHS[range]
   const end = new Date()
@@ -475,9 +489,8 @@ function onCycleChange(cycle: 'daily' | 'weekly' | 'minute') {
 }
 
 function onSymbolChange(symbol: string) {
-  // 切 symbol 时同时清空两个周期的缓存，触发新一轮加载
+  // symbol 变化由 watch(dailyQuery.symbol) 自动触发响应式查询
   if (!symbol) return
-  workbench.loadDailyBars()
 }
 
 const emptyDescription = computed(() => {

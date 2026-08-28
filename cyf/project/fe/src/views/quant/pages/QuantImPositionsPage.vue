@@ -181,7 +181,9 @@
           <span>当前持仓</span>
         </div>
         <el-table :data="workbench.positionSummary" stripe height="220" class="quant-table">
-          <el-table-column prop="symbol" label="标的" min-width="110" />
+          <el-table-column label="标的" min-width="180">
+            <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
+          </el-table-column>
           <el-table-column prop="net_quantity" label="净持仓" width="96" />
           <el-table-column label="成本" width="100">
             <template #default="{ row }">{{ workbench.formatNumber(row.avg_cost, 4) }}</template>
