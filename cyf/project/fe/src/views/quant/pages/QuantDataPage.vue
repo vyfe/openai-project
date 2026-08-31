@@ -10,25 +10,42 @@
         </div>
         <div class="quant-data-toolbar__toolbar">
           <el-radio-group v-model="workbench.chartCycle" size="small" @change="onCycleChange">
-            <el-radio-button label="daily">日线</el-radio-button>
-            <el-radio-button label="weekly">周线</el-radio-button>
-            <el-radio-button label="minute">分时</el-radio-button>
+            <el-radio-button value="daily">日线</el-radio-button>
+            <el-radio-button value="weekly">周线</el-radio-button>
+            <el-radio-button value="minute">分时</el-radio-button>
           </el-radio-group>
           <el-radio-group v-model="workbench.dailyQueryRange" size="small" @change="applyDailyRange">
-            <el-radio-button label="1m">近1月</el-radio-button>
-            <el-radio-button label="3m">近3月</el-radio-button>
-            <el-radio-button label="6m">近6月</el-radio-button>
-            <el-radio-button label="1y">近1年</el-radio-button>
-            <el-radio-button label="all">全部</el-radio-button>
+            <el-radio-button value="1m">近1月</el-radio-button>
+            <el-radio-button value="3m">近3月</el-radio-button>
+            <el-radio-button value="6m">近6月</el-radio-button>
+            <el-radio-button value="1y">近1年</el-radio-button>
+            <el-radio-button value="all">全部</el-radio-button>
           </el-radio-group>
           <template v-if="workbench.chartCycle === 'minute'">
             <el-radio-group v-model="workbench.minuteQuery.interval" size="small">
-              <el-radio-button label="5m">5分</el-radio-button>
-              <el-radio-button label="15m">15分</el-radio-button>
-              <el-radio-button label="30m">30分</el-radio-button>
+              <el-radio-button value="5m">5分</el-radio-button>
+              <el-radio-button value="15m">15分</el-radio-button>
+              <el-radio-button value="30m">30分</el-radio-button>
             </el-radio-group>
             <span class="quant-mini-tip">新浪分时仅当日可用</span>
           </template>
+        </div>
+        <div class="quant-indicator-controls" aria-label="图表指标选择">
+          <div class="quant-indicator-controls__group">
+            <span class="quant-indicator-controls__label">主图</span>
+            <el-radio-group v-model="workbench.mainIndicator" size="small">
+              <el-radio-button value="ma">均线</el-radio-button>
+              <el-radio-button value="boll">BOLL</el-radio-button>
+            </el-radio-group>
+          </div>
+          <div class="quant-indicator-controls__group">
+            <span class="quant-indicator-controls__label">附图</span>
+            <el-radio-group v-model="workbench.subIndicator" size="small">
+              <el-radio-button value="macd">MACD</el-radio-button>
+              <el-radio-button value="kdj">KDJ</el-radio-button>
+            </el-radio-group>
+          </div>
+          <span class="quant-indicator-controls__hint">主图与附图各显示一组指标</span>
         </div>
         <div class="quant-data-toolbar__row quant-data-toolbar__row--filters">
           <el-form label-position="top" class="quant-data-toolbar__symbol">
@@ -77,13 +94,89 @@
           :symbol="workbench.dailyQuery.symbol"
           :frequency="workbench.chartCycle === 'minute' ? '5m' : '1d'"
           :display-limit="displayLimit"
-          height="480px"
+          :main-indicator="workbench.mainIndicator"
+          :sub-indicator="workbench.subIndicator"
+          :ma-series="(workbench.maSeries as any)"
+          :boll-series="(workbench.bollSeries as any)"
+          :macd-series="(workbench.macdSeries as any)"
+          :kdj-series="(workbench.kdjSeries as any)"
+          :td-marks="(workbench.tdMarks as any)"
+          :bottom-signals="(workbench.bottomSignals as any)"
+          height="540px"
         />
         <el-empty v-else :description="emptyDescription" />
       </div>
     </section>
 
     <div class="quant-side-stack">
+      <section class="quant-panel">
+        <div class="quant-panel__header quant-side-panel__header">
+          <div>
+            <h2>指标摘要</h2>
+            <p class="quant-panel__sub">最新 bar {{ latestBarDate || '—' }} · 主图 {{ mainIndicatorLabel }} · 附图 {{ subIndicatorLabel }}</p>
+          </div>
+          <el-tag v-if="workbench.indicatorState.loading" type="info" size="small">计算中…</el-tag>
+          <el-tag v-else-if="workbench.indicatorState.error" type="danger" size="small">{{ workbench.indicatorState.error }}</el-tag>
+          <el-tag v-else-if="hasIndicatorData" type="success" size="small">已就绪</el-tag>
+        </div>
+        <div class="quant-mini-section quant-mini-section--first">
+          <div v-if="!hasIndicatorData" class="quant-mini-tip">尚无数据 — 选择标的并查询后自动计算</div>
+          <table v-else class="quant-indicator-table">
+            <tbody>
+              <tr v-if="workbench.mainIndicator === 'ma'">
+                <td>MA5 / MA20 / MA60</td>
+                <td class="quant-indicator-table__value">
+                  {{ fmtIndicator(indicatorSummary.ma_5) }} / {{ fmtIndicator(indicatorSummary.ma_20) }} / {{ fmtIndicator(indicatorSummary.ma_60) }}
+                </td>
+              </tr>
+              <tr v-else>
+                <td>BOLL 上 / 中 / 下</td>
+                <td class="quant-indicator-table__value">
+                  {{ fmtIndicator(indicatorSummary.boll_upper) }} / {{ fmtIndicator(indicatorSummary.boll_mid) }} / {{ fmtIndicator(indicatorSummary.boll_lower) }}
+                </td>
+              </tr>
+              <tr v-if="workbench.subIndicator === 'macd'">
+                <td>MACD DIF / DEA</td>
+                <td class="quant-indicator-table__value">{{ fmtIndicator(indicatorSummary.macd_dif) }} / {{ fmtIndicator(indicatorSummary.macd_dea) }}</td>
+              </tr>
+              <tr v-else>
+                <td>KDJ K / D / J</td>
+                <td class="quant-indicator-table__value">
+                  {{ fmtIndicator(indicatorSummary.kdj_k) }} / {{ fmtIndicator(indicatorSummary.kdj_d) }} / {{ fmtIndicator(indicatorSummary.kdj_j) }}
+                </td>
+              </tr>
+              <tr>
+                <td>九转 Setup（买/卖）</td>
+                <td class="quant-indicator-table__value">
+                  <span :class="tdClass('buy')">{{ indicatorSummary.td_buy_setup || '—' }}</span>
+                  /
+                  <span :class="tdClass('sell')">{{ indicatorSummary.td_sell_setup || '—' }}</span>
+                </td>
+              </tr>
+              <tr>
+                <td>九转 Countdown（买/卖）</td>
+                <td class="quant-indicator-table__value">
+                  <span :class="tdClass('buy')">{{ indicatorSummary.td_buy_countdown || '—' }}</span>
+                  /
+                  <span :class="tdClass('sell')">{{ indicatorSummary.td_sell_countdown || '—' }}</span>
+                </td>
+              </tr>
+              <tr>
+                <td>九转信号</td>
+                <td class="quant-indicator-table__value">{{ tdSignalLabel(indicatorSummary.td_signal) }}</td>
+              </tr>
+              <tr>
+                <td>底部背离</td>
+                <td class="quant-indicator-table__value">
+                  <el-tag v-if="indicatorSummary.bottom_divergence" type="warning" size="small">触发</el-tag>
+                  <span v-else>—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="quant-panel">
         <div class="quant-panel__header quant-side-panel__header">
           <div>
@@ -155,10 +248,10 @@
             <el-form label-position="top">
               <el-form-item label="日期范围">
                 <el-radio-group v-model="workbench.taskFormRange" size="small" @change="applyTaskRange">
-                  <el-radio-button label="1m">近1月</el-radio-button>
-                  <el-radio-button label="3m">近3月</el-radio-button>
-                  <el-radio-button label="6m">近6月</el-radio-button>
-                  <el-radio-button label="1y">近1年</el-radio-button>
+                  <el-radio-button value="1m">近1月</el-radio-button>
+                  <el-radio-button value="3m">近3月</el-radio-button>
+                  <el-radio-button value="6m">近6月</el-radio-button>
+                  <el-radio-button value="1y">近1年</el-radio-button>
                 </el-radio-group>
               </el-form-item>
             </el-form>
@@ -202,17 +295,17 @@
             <el-form label-position="top">
               <el-form-item label="周期">
                 <el-radio-group v-model="workbench.taskForm.frequency" size="small">
-                  <el-radio-button label="1d">日线</el-radio-button>
-                  <el-radio-button label="5m">分时</el-radio-button>
+                  <el-radio-button value="1d">日线</el-radio-button>
+                  <el-radio-button value="5m">分时</el-radio-button>
                 </el-radio-group>
               </el-form-item>
             </el-form>
             <el-form label-position="top">
               <el-form-item label="粒度" v-if="workbench.taskForm.frequency === '5m'">
                 <el-radio-group v-model="workbench.taskForm.interval" size="small">
-                  <el-radio-button label="5m">5 分</el-radio-button>
-                  <el-radio-button label="15m">15 分</el-radio-button>
-                  <el-radio-button label="30m">30 分</el-radio-button>
+                  <el-radio-button value="5m">5 分</el-radio-button>
+                  <el-radio-button value="15m">15 分</el-radio-button>
+                  <el-radio-button value="30m">30 分</el-radio-button>
                 </el-radio-group>
               </el-form-item>
             </el-form>
@@ -448,6 +541,50 @@ const displayLimit = computed(() => {
   return workbench.dailyQuery.limit
 })
 
+function _lastBarDate(): string {
+  const bars = workbench.currentBars as any[] | undefined
+  if (!bars || bars.length === 0) return ''
+  const newest = bars.reduce((latest, current) => {
+    const latestKey = latest?.trade_datetime || latest?.trade_date || ''
+    const currentKey = current?.trade_datetime || current?.trade_date || ''
+    return String(currentKey) > String(latestKey) ? current : latest
+  }, bars[0])
+  const raw = newest?.trade_datetime || newest?.trade_date || ''
+  return typeof raw === 'string' ? raw : String(raw)
+}
+
+const indicatorSummary = computed<Record<string, any>>(() => {
+  const dateKey = _lastBarDate()
+  if (!dateKey) return {}
+  return (workbench.indicatorState?.result as Record<string, any>)?.[dateKey] || {}
+})
+
+const latestBarDate = computed(() => _lastBarDate())
+const mainIndicatorLabel = computed(() => workbench.mainIndicator === 'boll' ? 'BOLL' : '均线')
+const subIndicatorLabel = computed(() => workbench.subIndicator === 'kdj' ? 'KDJ' : 'MACD')
+const hasIndicatorData = computed(() => Object.keys(indicatorSummary.value).length > 0)
+
+function fmtIndicator(value: any): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value !== 'number') return String(value)
+  return value.toFixed(value >= 100 ? 2 : 3)
+}
+
+function tdClass(side: 'buy' | 'sell'): string {
+  return side === 'buy' ? 'quant-indicator-table__td-buy' : 'quant-indicator-table__td-sell'
+}
+
+function tdSignalLabel(signal: string | undefined): string {
+  const labels: Record<string, string> = {
+    buy_setup_complete: '买入 Setup 完成',
+    buy_countdown_complete: '买入 Countdown 完成',
+    sell_setup_complete: '卖出 Setup 完成',
+    sell_countdown_complete: '卖出 Countdown 完成',
+    bottom_divergence: '底部背离',
+  }
+  return signal ? (labels[signal] || signal) : '—'
+}
+
 function applyDailyRange(range: string) {
   const months = RANGE_MONTHS[range]
   const end = new Date()
@@ -529,3 +666,37 @@ function formatPoolTime(value: string | null | undefined): string {
   return text.length > 16 ? text.slice(0, 16).replace('T', ' ') : text
 }
 </script>
+
+
+<style scoped>
+.quant-indicator-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.quant-indicator-table td {
+  padding: 4px 8px;
+  border-bottom: 1px dashed rgba(99, 102, 241, 0.18);
+}
+.quant-indicator-table td:first-child {
+  color: var(--quant-text-secondary, #6b7280);
+}
+.quant-indicator-table__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.quant-indicator-table__td-buy {
+  color: #ef232a;
+  font-weight: 600;
+}
+.quant-indicator-table__td-sell {
+  color: #14b143;
+  font-weight: 600;
+}
+.quant-mini-tip {
+  color: var(--quant-text-secondary, #6b7280);
+  font-size: 12px;
+  padding: 4px 0;
+}
+</style>

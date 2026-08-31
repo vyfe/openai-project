@@ -14,7 +14,12 @@ from quant.entities import (
     QuantStrategySignal,
 )
 from service.quant.common import normalize_symbol, parse_trade_date
-from service.quant.rule_engine import evaluate_strategy_rules, get_required_history_size
+from service.quant.indicator_service import compute_indicators
+from service.quant.rule_engine import (
+    INDICATOR_RULE_TYPES,
+    evaluate_strategy_rules,
+    get_required_history_size,
+)
 
 
 def _normalize_symbols(raw_symbols) -> List[str]:
@@ -120,6 +125,24 @@ def _load_history(symbol: str, trade_date, limit: int) -> List[QuantDailyBar]:
     return list(query)
 
 
+def _rule_config_uses_indicators(rule_config: Dict) -> bool:
+    rules = rule_config.get("rules") or []
+    if not isinstance(rules, list):
+        return False
+    return any(str(r.get("rule_type", r.get("type", ""))).strip() in INDICATOR_RULE_TYPES for r in rules)
+
+
+def _build_indicator_context(history: List[QuantDailyBar]) -> Dict[str, Dict]:
+    """计算 history 范围内所有需要的指标（升序传入 compute_indicators）。"""
+    if not history:
+        return {}
+    asc_history = list(reversed(history))
+    return compute_indicators(
+        asc_history,
+        indicator_names=["macd", "kdj", "td_sequential", "bottom_structure"],
+    )
+
+
 def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_signals: bool = True) -> dict:
     strategy = QuantStrategy.get_by_id(strategy_id)
     if strategy.status != "active":
@@ -145,12 +168,14 @@ def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_si
 
     passed_rows = 0
     signal_rows = []
+    needs_indicator_context = _rule_config_uses_indicators(rule_config)
     try:
         for symbol in universe:
             history = _load_history(symbol, resolved_trade_date, max(history_size, 2))
             if not history or history[0].trade_date != resolved_trade_date:
                 continue
-            result = evaluate_strategy_rules(rule_config, history)
+            indicator_context = _build_indicator_context(history) if needs_indicator_context else None
+            result = evaluate_strategy_rules(rule_config, history, indicator_context=indicator_context)
             if result["passed"]:
                 passed_rows += 1
             if save_all_signals or result["passed"]:

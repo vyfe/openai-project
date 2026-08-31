@@ -5,11 +5,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts/core'
-import { CandlestickChart, BarChart, LineChart } from 'echarts/charts'
+import { BarChart, CandlestickChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
   DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkPointComponent,
   TitleComponent,
   TooltipComponent
 } from 'echarts/components'
@@ -19,9 +20,11 @@ echarts.use([
   CandlestickChart,
   BarChart,
   LineChart,
+  ScatterChart,
   DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkPointComponent,
   TitleComponent,
   TooltipComponent,
   CanvasRenderer
@@ -38,6 +41,38 @@ interface Bar {
   amount?: number | null
 }
 
+export interface MaPoint {
+  ma5: number | null
+  ma10: number | null
+  ma20: number | null
+  ma60: number | null
+}
+export interface BollPoint {
+  mid: number | null
+  upper: number | null
+  lower: number | null
+}
+export interface MacdPoint {
+  dif: number | null
+  dea: number | null
+  bar: number | null
+}
+export interface KdjPoint {
+  k: number | null
+  d: number | null
+  j: number | null
+}
+export interface TdMark {
+  date: string
+  num: number
+  side: 'buy' | 'sell'
+  kind?: 'setup' | 'countdown'
+}
+export interface BottomSignal {
+  date: string
+  type: 'divergence'
+}
+
 const props = withDefaults(
   defineProps<{
     bars: Bar[]
@@ -45,14 +80,30 @@ const props = withDefaults(
     isDark?: boolean
     height?: string
     frequency?: '1d' | '5m'
+    /** 主图只显示一组：均线或 BOLL */
+    mainIndicator?: 'ma' | 'boll'
+    /** 附图只显示一组：MACD 或 KDJ */
+    subIndicator?: 'macd' | 'kdj'
     /**
-     * 仅画最后 N 根 K 线/成交量。MA 仍按 bars 全量计算（让前几根 K 线的 MA
-     * 也能算出来），再按 N 切片到对应 X 轴区间。
-     * 留空表示全部显示。
+     * 仅画最后 N 根 K 线/成交量；indicator 序列按当前 bars 全量计算后切片到对应 X 轴区间
      */
     displayLimit?: number
+    /** MA 系列（与 bars 等长） */
+    maSeries?: MaPoint[]
+    /** BOLL 三轨（与 bars 等长） */
+    bollSeries?: BollPoint[]
+    /** MACD 三元（与 bars 等长） */
+    macdSeries?: MacdPoint[]
+    /** KDJ 三元（与 bars 等长） */
+    kdjSeries?: KdjPoint[]
+    /** 神奇九转数字标记（仅含 buy/sell setup > 0 的 bar） */
+    tdMarks?: TdMark[]
+    /** 底部结构信号（含底背离等） */
+    bottomSignals?: BottomSignal[]
   }>(),
-  { symbol: '', isDark: false, height: '460px', frequency: '1d', displayLimit: Infinity }
+  { symbol: '', isDark: false, height: '540px', frequency: '1d', mainIndicator: 'ma', subIndicator: 'macd', displayLimit: Infinity,
+    maSeries: () => [], bollSeries: () => [], macdSeries: () => [],
+    kdjSeries: () => [], tdMarks: () => [], bottomSignals: () => [] }
 )
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -60,15 +111,15 @@ let chart: echarts.ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
 
 const sortedBars = computed(() => {
-  // ECharts 要求按时间正序；后端按 trade_date 倒序返回，这里反转
+  // ECharts 要求按时间正序；日线/分时接口与周线聚合接口的返回方向不同，统一排序。
   return [...(props.bars || [])].sort((a, b) => {
     const aKey = a.trade_datetime || a.trade_date || ''
     const bKey = b.trade_datetime || b.trade_date || ''
-    return aKey < bKey ? -1 : 1
+    return String(aKey).localeCompare(String(bKey))
   })
 })
 
-// 只渲染最后 displayLimit 根 K 线/成交量；更早的 bars 只用来贡献 MA。
+// 显示区间：最后 displayLimit 根
 const displayBars = computed(() => {
   const list = sortedBars.value
   const limit = props.displayLimit
@@ -78,7 +129,25 @@ const displayBars = computed(() => {
 
 const dates = computed(() => displayBars.value.map(b => b.trade_datetime || b.trade_date || ''))
 
-// ECharts candlestick: [open, close, low, high]
+// 按 bar 时间键对齐指标序列，兼容日线/分时倒序和周线升序两种返回方向。
+function _barKey(bar: any): string {
+  const raw = bar?.trade_datetime || bar?.trade_date || ''
+  return typeof raw === 'string' ? raw : String(raw)
+}
+
+function _alignSeries<T>(series: T[] | undefined): T[] {
+  if (!series || series.length === 0) return []
+  const source = props.bars || []
+  const byKey = new Map<string, T>()
+  source.forEach((bar, index) => byKey.set(_barKey(bar), series[index]))
+  return displayBars.value.map(bar => byKey.get(_barKey(bar)) || ({} as T))
+}
+
+const maAligned = computed(() => _alignSeries(props.maSeries))
+const bollAligned = computed(() => _alignSeries(props.bollSeries))
+const macdAligned = computed(() => _alignSeries(props.macdSeries))
+const kdjAligned = computed(() => _alignSeries(props.kdjSeries))
+
 const candleData = computed(() =>
   displayBars.value.map(b => [b.open_price, b.close_price, b.low_price, b.high_price])
 )
@@ -95,39 +164,95 @@ const volumeData = computed(() =>
   })
 )
 
-function maValues(period: number): (number | null)[] {
-  const result: (number | null)[] = []
-  // 用全部 sortedBars（含 padding）算 MA，让前几根 K 线的 MA 也能产出值；
-  // 结果按 displayBars 的尾部区间切片，保证与 X 轴等长。
-  const closes = sortedBars.value.map(b => b.close_price ?? null)
-  for (let i = 0; i < closes.length; i++) {
-    if (i < period - 1) {
-      result.push(null)
-      continue
-    }
-    let sum = 0
-    let count = 0
-    for (let j = i - period + 1; j <= i; j++) {
-      if (closes[j] != null) {
-        sum += closes[j] as number
-        count += 1
+const ma5Series = computed(() => maAligned.value.map(p => p.ma5))
+const ma10Series = computed(() => maAligned.value.map(p => p.ma10))
+const ma20Series = computed(() => maAligned.value.map(p => p.ma20))
+const ma60Series = computed(() => maAligned.value.map(p => p.ma60))
+
+const bollMidSeries = computed(() => bollAligned.value.map(p => p.mid))
+const bollUpperSeries = computed(() => bollAligned.value.map(p => p.upper))
+const bollLowerSeries = computed(() => bollAligned.value.map(p => p.lower))
+
+const macdDifSeries = computed(() => macdAligned.value.map(p => p.dif))
+const macdDeaSeries = computed(() => macdAligned.value.map(p => p.dea))
+const macdBarSeries = computed(() => macdAligned.value.map(p => ({
+  value: p.bar,
+  itemStyle: { color: (p.bar ?? 0) >= 0 ? '#ef232a' : '#14b143' }
+})))
+
+const kdjKSeries = computed(() => kdjAligned.value.map(p => p.k))
+const kdjDSeries = computed(() => kdjAligned.value.map(p => p.d))
+const kdjJSeries = computed(() => kdjAligned.value.map(p => p.j))
+
+// TD 数字标记：把 tdMarks 转换为 markPoint data
+const tdMarkPointData = computed(() => {
+  if (!props.tdMarks || props.tdMarks.length === 0) return []
+  // 找 sortedBars 中 date 对应的 idx（X 轴用 sortedBars 索引）
+  const dateToIdx = new Map<string, number>()
+  sortedBars.value.forEach((b, i) => dateToIdx.set(_barKey(b), i))
+  const out: any[] = []
+  // TD 标记的 X 轴需要从 sortedBars 索引转换成 displayBars 索引
+  // displayBars 是 sortedBars 的尾部切片，所以 sortedIdx - offset = displayIdx
+  const offset = sortedBars.value.length - displayBars.value.length
+  for (const m of props.tdMarks) {
+    const sortedIdx = dateToIdx.get(m.date)
+    if (sortedIdx === undefined) continue
+    const displayIdx = sortedIdx - offset
+    if (displayIdx < 0 || displayIdx >= displayBars.value.length) continue
+    const bar = displayBars.value[displayIdx]
+    if (bar?.high_price == null && bar?.low_price == null) continue
+    const isBuy = m.side === 'buy'
+    const isCountdown = m.kind === 'countdown'
+    const price = isBuy ? (bar.low_price ?? bar.high_price ?? 0) : (bar.high_price ?? bar.low_price ?? 0)
+    const coord = [displayIdx, price * (isBuy ? (isCountdown ? 0.91 : 0.96) : (isCountdown ? 1.09 : 1.04))]
+    out.push({
+      name: String(m.num),
+      coord,
+      value: m.num,
+      symbol: isCountdown ? 'diamond' : 'circle',
+      symbolSize: isCountdown ? 22 : 18,
+      itemStyle: {
+        color: isBuy ? '#ef232a' : '#14b143',
+        borderColor: isCountdown ? '#ffffff' : undefined,
+        borderWidth: isCountdown ? 1 : 0,
+      },
+      label: {
+        show: true,
+        formatter: '{b}',
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
+        position: 'inside',
       }
-    }
-    result.push(count === period ? +(sum / period).toFixed(3) : null)
+    })
   }
-  return result
-}
+  return out
+})
 
-function trimToDisplay(allValues: (number | null)[]): (number | null)[] {
-  const total = allValues.length
-  const visible = displayBars.value.length
-  if (visible >= total) return allValues
-  return allValues.slice(total - visible)
-}
-
-const ma5 = computed(() => trimToDisplay(maValues(5)))
-const ma10 = computed(() => trimToDisplay(maValues(10)))
-const ma20 = computed(() => trimToDisplay(maValues(20)))
+// 底部结构 scatter 数据
+const bottomScatterData = computed(() => {
+  if (!props.bottomSignals || props.bottomSignals.length === 0) return []
+  const dateToIdx = new Map<string, number>()
+  sortedBars.value.forEach((b, i) => dateToIdx.set(_barKey(b), i))
+  const offset = sortedBars.value.length - displayBars.value.length
+  const out: any[] = []
+  for (const s of props.bottomSignals) {
+    const sortedIdx = dateToIdx.get(s.date)
+    if (sortedIdx === undefined) continue
+    const displayIdx = sortedIdx - offset
+    if (displayIdx < 0 || displayIdx >= displayBars.value.length) continue
+    const bar = displayBars.value[displayIdx]
+    if (!bar?.low_price) continue
+    out.push({
+      name: s.date,
+      value: [displayIdx, bar.low_price * 0.97],
+      symbol: 'triangle',
+      symbolSize: 12,
+      itemStyle: { color: '#f59e0b' },
+    })
+  }
+  return out
+})
 
 const baseOption = computed(() => {
   const axis = props.isDark ? '#cbd5e1' : '#1f2937'
@@ -135,28 +260,134 @@ const baseOption = computed(() => {
   const tooltipBg = props.isDark ? '#0f172a' : '#ffffff'
   const tooltipText = props.isDark ? '#e2e8f0' : '#0f172a'
 
+  const grids = [
+    { left: 50, right: 20, top: 44, height: '50%' },        // K线
+    { left: 50, right: 20, top: '65%', height: '12%' },     // 成交量
+    { left: 50, right: 20, top: '80%', height: '14%' },     // 当前附图
+  ]
+  const xAxes = [
+    { type: 'category', gridIndex: 0, data: dates.value, boundaryGap: true,
+      axisLine: { lineStyle: { color: split } },
+      axisLabel: { color: axis, formatter: (v: string) => props.frequency === '5m' ? (v.split('T')[1] || v).slice(0, 5) : (v.split('T')[0]) },
+      splitLine: { show: false }, axisPointer: { z: 100 } },
+    { type: 'category', gridIndex: 1, data: dates.value, boundaryGap: true,
+      axisLine: { lineStyle: { color: split } }, axisLabel: { show: false },
+      axisTick: { show: false }, splitLine: { show: false } },
+    { type: 'category', gridIndex: 2, data: dates.value, boundaryGap: true,
+      axisLine: { lineStyle: { color: split } }, axisLabel: { show: false },
+      axisTick: { show: false }, splitLine: { show: false } },
+  ]
+  const yAxes = [
+    { scale: true, gridIndex: 0, position: 'left',
+      axisLine: { lineStyle: { color: split } }, axisLabel: { color: axis },
+      splitLine: { lineStyle: { color: split, opacity: 0.4 } } },
+    { scale: true, gridIndex: 1, position: 'left',
+      axisLine: { lineStyle: { color: split } }, axisLabel: { color: axis, fontSize: 10 },
+      splitNumber: 2, splitLine: { show: false } },
+    { scale: true, gridIndex: 2, position: 'left',
+      axisLine: { lineStyle: { color: split } }, axisLabel: { color: axis, fontSize: 10 },
+      splitNumber: 2, splitLine: { show: false } },
+  ]
+  const dataZoom = [
+    { type: 'inside', xAxisIndex: [0, 1, 2], start: props.frequency === '5m' ? 70 : 0, end: 100 },
+    { type: 'slider', xAxisIndex: [0, 1, 2], start: props.frequency === '5m' ? 70 : 0, end: 100,
+      bottom: 6, height: 22, borderColor: split,
+      fillerColor: props.isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.18)',
+      handleStyle: { color: '#6366f1' }, textStyle: { color: axis, fontSize: 10 } },
+  ]
+
+  const series: any[] = [
+    {
+      name: 'K线', type: 'candlestick', data: candleData.value,
+      xAxisIndex: 0, yAxisIndex: 0,
+      itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' },
+      markPoint: tdMarkPointData.value.length > 0 ? {
+        symbol: 'pin', symbolSize: 22, data: tdMarkPointData.value,
+        animation: false,
+      } : undefined,
+    },
+  ]
+  // 主图：均线与 BOLL 互斥，避免同一价格面板叠加过多轨道。
+  if (props.mainIndicator === 'boll' && bollMidSeries.value.length > 0) {
+    series.push({ name: 'BOLL中', type: 'line', data: bollMidSeries.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b', type: 'dashed' } })
+    series.push({ name: 'BOLL上', type: 'line', data: bollUpperSeries.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#94a3b8' } })
+    series.push({ name: 'BOLL下', type: 'line', data: bollLowerSeries.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#94a3b8' } })
+  }
+  if (props.mainIndicator === 'ma' && ma5Series.value.length > 0) {
+    series.push({ name: 'MA5', type: 'line', data: ma5Series.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } })
+    series.push({ name: 'MA10', type: 'line', data: ma10Series.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#3b82f6' } })
+    series.push({ name: 'MA20', type: 'line', data: ma20Series.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#a855f7' } })
+    series.push({ name: 'MA60', type: 'line', data: ma60Series.value, xAxisIndex: 0, yAxisIndex: 0,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#6b7280' } })
+  }
+  // 成交量
+  series.push({ name: '成交量', type: 'bar', data: volumeData.value, xAxisIndex: 1, yAxisIndex: 1 })
+  // 附图：MACD 与 KDJ 互斥，共用一个附图区域。
+  if (props.subIndicator === 'macd' && macdDifSeries.value.length > 0) {
+    series.push({ name: 'MACD柱', type: 'bar', data: macdBarSeries.value, xAxisIndex: 2, yAxisIndex: 2 })
+    series.push({ name: 'DIF', type: 'line', data: macdDifSeries.value, xAxisIndex: 2, yAxisIndex: 2,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } })
+    series.push({ name: 'DEA', type: 'line', data: macdDeaSeries.value, xAxisIndex: 2, yAxisIndex: 2,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#3b82f6' } })
+  }
+  if (props.subIndicator === 'kdj' && kdjKSeries.value.length > 0) {
+    series.push({ name: 'K', type: 'line', data: kdjKSeries.value, xAxisIndex: 2, yAxisIndex: 2,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } })
+    series.push({ name: 'D', type: 'line', data: kdjDSeries.value, xAxisIndex: 2, yAxisIndex: 2,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#e2e8f0' } })
+    series.push({ name: 'J', type: 'line', data: kdjJSeries.value, xAxisIndex: 2, yAxisIndex: 2,
+      smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#a855f7' } })
+  }
+  // 底部结构 scatter（叠加在主图）
+  if (bottomScatterData.value.length > 0) {
+    series.push({
+      name: '底部背离', type: 'scatter', data: bottomScatterData.value,
+      xAxisIndex: 0, yAxisIndex: 0,
+      symbol: 'triangle', symbolSize: 12,
+      itemStyle: { color: '#f59e0b' },
+    })
+  }
+
   return {
     backgroundColor: 'transparent',
     legend: {
-      top: 8,
-      left: 'center',
-      textStyle: { color: axis, fontSize: 12 },
-      data: ['K线', 'MA5', 'MA10', 'MA20', '成交量']
+      top: 8, left: 'center', textStyle: { color: axis, fontSize: 12 },
+      data: series.map((s: any) => s.name).filter(Boolean),
     },
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' },
-      backgroundColor: tooltipBg,
-      borderColor: split,
+      trigger: 'axis', axisPointer: { type: 'cross' },
+      backgroundColor: tooltipBg, borderColor: split,
       textStyle: { color: tooltipText, fontSize: 12 },
       formatter: (params: any[]) => {
         const candle = params.find(p => p.seriesType === 'candlestick')
         const lines: string[] = []
         lines.push(`<div style="font-weight:600;margin-bottom:4px">${params[0].axisValue}</div>`)
         if (candle) {
-          const d = candle.data
-          lines.push(`开 <b>${d[0]}</b>  收 <b>${d[1]}</b>`)
-          lines.push(`低 <b>${d[2]}</b>  高 <b>${d[3]}</b>`)
+          // ECharts candlestick 默认维度顺序 OCLH（Open, Close, Lowest, Highest）；
+          // candleData 传入 [open_price, close_price, low_price, high_price] 与之对齐。
+          // axisPointer(trigger:'axis'+cross) 触发时 candle.data 可能是 4 元 OCLH，
+          // 也可能被 ECharts 前置 axisValue 变成 5 元 [axisValue, ...OCLH]，
+          // 还可能被包装成 {value: [...]}。三种形态都要兼容。
+          const raw = candle.data
+          const arr = Array.isArray(raw)
+            ? raw
+            : (raw && Array.isArray(raw.value) ? raw.value : null)
+          if (arr && arr.length >= 4) {
+            // 5 元场景：第 0 位是 axisValue（x 轴类别/序号），丢弃；OCLH 永远在后 4 位
+            const ohlc = arr.length >= 5 ? arr.slice(-4) : arr
+            const fmt = (v: any) => typeof v === 'number' ? v.toFixed(2) : v
+            const [openPrice, closePrice, lowestPrice, highestPrice] = ohlc
+            lines.push(
+              `开 <b>${fmt(openPrice)}</b>  收 <b>${fmt(closePrice)}</b>`
+              + `  高 <b>${fmt(highestPrice)}</b>  低 <b>${fmt(lowestPrice)}</b>`
+            )
+          }
         }
         const vol = params.find(p => p.seriesName === '成交量')
         if (vol) {
@@ -164,104 +395,27 @@ const baseOption = computed(() => {
           lines.push(`成交量 <b>${(Number(v) / 100).toLocaleString('zh-CN')} 手</b>`)
         }
         for (const p of params) {
-          if (p.seriesName && p.seriesName.startsWith('MA') && p.data != null) {
-            lines.push(`${p.seriesName} <b>${p.data}</b>`)
+          const name = p.seriesName || ''
+          if (p.data != null && (name.startsWith('MA') || name.startsWith('BOLL'))) {
+            lines.push(`${name} <b>${typeof p.data === 'number' ? p.data.toFixed(2) : p.data}</b>`)
+          } else if (p.data != null && (name === 'DIF' || name === 'DEA')) {
+            lines.push(`MACD ${name} <b>${typeof p.data === 'number' ? p.data.toFixed(3) : p.data}</b>`)
+          } else if (p.data != null && (name === 'K' || name === 'D' || name === 'J')) {
+            lines.push(`KDJ ${name} <b>${typeof p.data === 'number' ? p.data.toFixed(2) : p.data}</b>`)
+          } else if (name === '底部背离') {
+            lines.push(`<span style="color:#f59e0b">▲ 底部背离</span>`)
+          } else if (p.seriesType === 'candlestick' && p.data && p.data.value && typeof p.data.value === 'object') {
+            // TD markPoint data has coord + value (the number)
           }
         }
         return lines.join('<br/>')
-      }
+      },
     },
-    grid: [
-      { left: 50, right: 20, top: 50, height: '60%' },
-      { left: 50, right: 20, top: '74%', height: '18%' }
-    ],
-    xAxis: [
-      {
-        type: 'category',
-        data: dates.value,
-        boundaryGap: true,
-        axisLine: { lineStyle: { color: split } },
-        axisLabel: {
-          color: axis,
-          formatter: (value: string) => {
-            // 5m 用 HH:mm；1d 用 yyyy-MM-dd（截掉 T 之后部分）
-            if (props.frequency === '5m') {
-              const tail = value.split('T')[1] || value
-              return tail.slice(0, 5)
-            }
-            return value.split('T')[0]
-          }
-        },
-        splitLine: { show: false },
-        axisPointer: { z: 100 }
-      },
-      {
-        type: 'category',
-        gridIndex: 1,
-        data: dates.value,
-        boundaryGap: true,
-        axisLine: { lineStyle: { color: split } },
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false }
-      }
-    ],
-    yAxis: [
-      {
-        scale: true,
-        position: 'left',
-        axisLine: { lineStyle: { color: split } },
-        axisLabel: { color: axis },
-        splitLine: { lineStyle: { color: split, opacity: 0.4 } }
-      },
-      {
-        scale: true,
-        gridIndex: 1,
-        position: 'left',
-        axisLine: { lineStyle: { color: split } },
-        axisLabel: { color: axis, fontSize: 10 },
-        splitNumber: 2,
-        splitLine: { show: false }
-      }
-    ],
-    dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1], start: props.frequency === '5m' ? 70 : 0, end: 100 },
-      {
-        type: 'slider',
-        xAxisIndex: [0, 1],
-        start: props.frequency === '5m' ? 70 : 0,
-        end: 100,
-        bottom: 6,
-        height: 22,
-        borderColor: split,
-        fillerColor: props.isDark ? 'rgba(99,102,241,0.25)' : 'rgba(99,102,241,0.18)',
-        handleStyle: { color: '#6366f1' },
-        textStyle: { color: axis, fontSize: 10 }
-      }
-    ],
-    series: [
-      {
-        name: 'K线',
-        type: 'candlestick',
-        data: candleData.value,
-        itemStyle: {
-          color: '#ef232a',
-          color0: '#14b143',
-          borderColor: '#ef232a',
-          borderColor0: '#14b143'
-        }
-      },
-      { name: 'MA5', type: 'line', data: ma5.value, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } },
-      { name: 'MA10', type: 'line', data: ma10.value, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#3b82f6' } },
-      { name: 'MA20', type: 'line', data: ma20.value, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#a855f7' } },
-      {
-        name: '成交量',
-        type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        data: volumeData.value
-      }
-    ]
+    grid: grids,
+    xAxis: xAxes,
+    yAxis: yAxes,
+    dataZoom,
+    series,
   }
 })
 
@@ -290,7 +444,18 @@ onMounted(() => {
   }
 })
 
-watch(() => [props.bars, props.isDark], () => updateChart(), { deep: true })
+watch(() => [
+  props.bars,
+  props.maSeries,
+  props.bollSeries,
+  props.macdSeries,
+  props.kdjSeries,
+  props.tdMarks,
+  props.bottomSignals,
+  props.mainIndicator,
+  props.subIndicator,
+  props.isDark,
+], () => updateChart(), { deep: true })
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
@@ -303,6 +468,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .quant-echart {
   width: 100%;
-  min-height: 320px;
+  min-height: 360px;
 }
 </style>

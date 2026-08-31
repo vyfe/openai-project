@@ -41,7 +41,9 @@ export function createMockQuantApi() {
       backfill: vi.fn(noop),
       importBatches: vi.fn(noop),
       symbols: vi.fn(noop),
-      fetchNow: vi.fn(noop)
+      fetchNow: vi.fn(noop),
+      computeIndicators: vi.fn(noop),
+      listIndicators: vi.fn(noop),
     },
     quantIndustryAPI: {
       boards: vi.fn(noop),

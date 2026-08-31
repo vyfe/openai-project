@@ -338,7 +338,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       symbol: '600519.SH',
       start_date: undefined,
       end_date: undefined,
-      limit: 43
+      limit: 24
     })
     expect(unwrap(wb.chartCycle)).toBe('weekly')
     expect(unwrap(wb.currentBars)).toEqual(weeklyRows)
@@ -365,7 +365,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       interval: '5m',
       start_datetime: undefined,
       end_datetime: undefined,
-      limit: 499,
+      limit: 480,
       adjust_flag: 'qfq',
     })
     expect(unwrap(wb.chartCycle)).toBe('minute')
@@ -636,5 +636,225 @@ describe('useQuantWorkbench — 初始化', () => {
     expect(quantDataAPI.dashboardOverview).toHaveBeenCalled()
     expect(quantDataAPI.providers).toHaveBeenCalled()
     expect(quantScheduleAPI.meta).toHaveBeenCalled()
+  })
+})
+
+
+describe('useQuantWorkbench — 指标计算', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function _makeBars(n: number) {
+    const bars: any[] = []
+    for (let i = 0; i < n; i++) {
+      const c = 10 + i * 0.1
+      bars.push({
+        trade_date: `2026-01-${String(i + 1).padStart(2, '0')}`,
+        open_price: c - 0.1,
+        close_price: c,
+        high_price: c + 0.2,
+        low_price: c - 0.2,
+        volume: 1_000_000,
+      })
+    }
+    return bars
+  }
+
+  it('currentBars 变化应触发 computeIndicators（debounce 后）', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    const dailyBars = _makeBars(10)
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+      success: true, data: dailyBars, msg: '',
+    })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true,
+      data: { results: { '2026-01-01': { ma_5: 10.0 } }, meta: { bars_count: 10 } },
+      msg: '',
+    })
+
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 10
+    await wb.loadDailyBars()
+
+    // advance debounce timer (300ms)
+    await vi.advanceTimersByTimeAsync(350)
+
+    expect(quantDataAPI.computeIndicators).toHaveBeenCalledTimes(1)
+    const callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls[0][0]
+    // 新形态：symbol + 日期区间 + interval；不再有 bars 字段
+    expect(callArg.symbol).toBe('600519.SH')
+    expect(callArg.start_date).toBe('2026-01-01')
+    expect(callArg.end_date).toBe('2026-01-10')
+    expect(callArg.interval).toBe('daily')
+    expect(callArg.indicator_names).toContain('macd')
+    expect((callArg as any).bars).toBeUndefined()
+  })
+
+  it('computeIndicators 返回结果后 indicatorState.result 被填充', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    const dailyBars = _makeBars(10)
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+      success: true, data: dailyBars, msg: '',
+    })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true,
+      data: {
+        results: {
+          '2026-01-10': { ma_5: 10.5, macd_dif: 0.3, td_buy_setup: 5, bottom_divergence: true }
+        },
+        meta: { bars_count: 10 },
+      },
+      msg: '',
+    })
+
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 10
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    const result = (unwrap(wb.indicatorState) as any).result as Record<string, Record<string, any>>
+    expect(result['2026-01-10']).toBeDefined()
+    expect(result['2026-01-10'].ma_5).toBe(10.5)
+    expect(result['2026-01-10'].td_buy_setup).toBe(5)
+  })
+
+  it('maSeries / macdSeries 按 currentBars 顺序对齐输出', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    const bars = _makeBars(5)
+    const results: Record<string, any> = {}
+    for (const b of bars) {
+      results[b.trade_date] = { ma_5: 10.5, macd_dif: 0.1 }
+    }
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+      success: true, data: bars, msg: '',
+    })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true,
+      data: { results, meta: { bars_count: 5 } },
+      msg: '',
+    })
+
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 5
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    const maSeries = unwrap(wb.maSeries) as Array<{ ma5: number | null }>
+    expect(maSeries.length).toBe(5)
+    // bars 是降序（最新在前），所以 maSeries[0] 对应 bars[0] = 2026-01-05
+    expect(maSeries[0].ma5).toBe(10.5)
+    expect(maSeries[4].ma5).toBe(10.5)
+
+    const macdSeries = unwrap(wb.macdSeries) as Array<{ dif: number | null }>
+    expect(macdSeries.length).toBe(5)
+    expect(macdSeries[0].dif).toBe(0.1)
+  })
+
+  it('tdMarks 只输出 td_buy_setup / td_sell_setup > 0 的 bar', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    const bars = _makeBars(3)
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+      success: true, data: bars, msg: '',
+    })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true,
+      data: {
+        results: {
+          '2026-01-01': { td_buy_setup: 3, td_sell_setup: null },
+          '2026-01-02': { td_buy_setup: null, td_sell_setup: 7 },
+          '2026-01-03': { td_buy_setup: null, td_sell_setup: null },
+        },
+        meta: { bars_count: 3 },
+      },
+      msg: '',
+    })
+
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 3
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    const tdMarks = unwrap(wb.tdMarks) as Array<{ date: string; num: number; side: 'buy' | 'sell' }>
+    expect(tdMarks.length).toBe(2)
+    const buy = tdMarks.find(m => m.side === 'buy')
+    const sell = tdMarks.find(m => m.side === 'sell')
+    expect(buy?.num).toBe(3)
+    expect(sell?.num).toBe(7)
+  })
+
+  it('bottomSignals 只输出 bottom_divergence=true 的 bar', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    const bars = _makeBars(3)
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+      success: true, data: bars, msg: '',
+    })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true,
+      data: {
+        results: {
+          '2026-01-01': { bottom_divergence: true },
+          '2026-01-02': { bottom_divergence: false },
+          '2026-01-03': {},
+        },
+        meta: { bars_count: 3 },
+      },
+      msg: '',
+    })
+
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.limit = 3
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    const signals = unwrap(wb.bottomSignals) as Array<{ date: string; type: 'divergence' }>
+    expect(signals.length).toBe(1)
+    expect(signals[0].date).toBe('2026-01-01')
+  })
+
+  it('computeIndicators 按 chartCycle 映射 interval；weekly→weekly, minute→minute+datetime', async () => {
+    const wb = await getWorkbench()
+    const { quantDataAPI } = await import('@/services/quantApi')
+
+    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue({ success: true, data: _makeBars(3), msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: _makeBars(3), msg: '' })
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+      success: true, data: { results: {}, meta: {} }, msg: '',
+    })
+
+    // weekly tab
+    wb.dailyQuery.symbol = '600519.SH'
+    wb.dailyQuery.startDate = '2024-01-01'
+    wb.dailyQuery.endDate = '2024-12-31'
+    wb.switchChartCycle('weekly')
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    let callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.at(-1)?.[0] as any
+    expect(callArg.interval).toBe('weekly')
+
+    // minute tab — 应当附带 start_datetime/end_datetime
+    vi.mocked(quantDataAPI.computeIndicators).mockClear()
+    wb.switchChartCycle('minute')
+    await wb.loadDailyBars()
+    await vi.advanceTimersByTimeAsync(350)
+
+    callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.at(-1)?.[0] as any
+    expect(callArg.interval).toBe('minute')
+    expect(callArg.start_datetime).toBe('2024-01-01 00:00:00')
+    expect(callArg.end_datetime).toBe('2024-12-31 23:59:59')
   })
 })

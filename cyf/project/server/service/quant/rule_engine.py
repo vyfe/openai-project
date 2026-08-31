@@ -11,6 +11,26 @@ SUPPORTED_OPERATORS = {
     "==": lambda a, b: a is not None and a == b,
 }
 
+INDICATOR_RULE_TYPES = {
+    "macd_golden_cross",
+    "macd_death_cross",
+    "kdj_golden_cross",
+    "kdj_death_cross",
+    "td_buy_setup_complete",
+    "td_sell_setup_complete",
+    "bottom_divergence",
+}
+
+INDICATOR_HISTORY_SIZES = {
+    "macd_golden_cross": 2,
+    "macd_death_cross": 2,
+    "kdj_golden_cross": 2,
+    "kdj_death_cross": 2,
+    "td_buy_setup_complete": 30,
+    "td_sell_setup_complete": 30,
+    "bottom_divergence": 60,
+}
+
 
 def _avg(values: List[Optional[float]]) -> Optional[float]:
     cleaned = [float(item) for item in values if item is not None]
@@ -53,7 +73,68 @@ def _breakout_high(history: List[QuantDailyBar], window: int) -> Optional[float]
     return max(previous_highs)
 
 
-def _evaluate_one_rule(rule: Dict[str, Any], current_bar: QuantDailyBar, history: List[QuantDailyBar]) -> Tuple[bool, Dict[str, Any], str]:
+def _date_key(date_value) -> str:
+    if hasattr(date_value, "isoformat"):
+        return date_value.isoformat()
+    return str(date_value) if date_value is not None else ""
+
+
+def _indicator_lookup(indicator_context: Optional[Dict[str, Dict[str, Any]]], bar: QuantDailyBar, name: str) -> Any:
+    if not indicator_context:
+        return None
+    return indicator_context.get(_date_key(bar.trade_date), {}).get(name)
+
+
+def _evaluate_macd_cross(rule_type: str, current_bar: QuantDailyBar, history: List[QuantDailyBar], indicator_context: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, Dict[str, Any], str]:
+    is_golden = rule_type == "macd_golden_cross"
+    cur_dif = _indicator_lookup(indicator_context, current_bar, "macd_dif")
+    cur_dea = _indicator_lookup(indicator_context, current_bar, "macd_dea")
+    if len(history) < 2:
+        return False, {"dif": cur_dif, "dea": cur_dea}, rule_type
+    prev_bar = history[1]
+    prev_dif = _indicator_lookup(indicator_context, prev_bar, "macd_dif")
+    prev_dea = _indicator_lookup(indicator_context, prev_bar, "macd_dea")
+    if None in (cur_dif, cur_dea, prev_dif, prev_dea):
+        return False, {"dif": cur_dif, "dea": cur_dea}, rule_type
+    passed = (prev_dif <= prev_dea and cur_dif > cur_dea) if is_golden else (prev_dif >= prev_dea and cur_dif < cur_dea)
+    metrics = {"dif": cur_dif, "dea": cur_dea, "prev_dif": prev_dif, "prev_dea": prev_dea, "cross": "golden" if is_golden else "death"}
+    return passed, metrics, rule_type
+
+
+def _evaluate_kdj_cross(rule_type: str, current_bar: QuantDailyBar, history: List[QuantDailyBar], indicator_context: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, Dict[str, Any], str]:
+    is_golden = rule_type == "kdj_golden_cross"
+    cur_k = _indicator_lookup(indicator_context, current_bar, "kdj_k")
+    cur_d = _indicator_lookup(indicator_context, current_bar, "kdj_d")
+    if len(history) < 2:
+        return False, {"k": cur_k, "d": cur_d}, rule_type
+    prev_bar = history[1]
+    prev_k = _indicator_lookup(indicator_context, prev_bar, "kdj_k")
+    prev_d = _indicator_lookup(indicator_context, prev_bar, "kdj_d")
+    if None in (cur_k, cur_d, prev_k, prev_d):
+        return False, {"k": cur_k, "d": cur_d}, rule_type
+    passed = (prev_k <= prev_d and cur_k > cur_d) if is_golden else (prev_k >= prev_d and cur_k < cur_d)
+    metrics = {"k": cur_k, "d": cur_d, "prev_k": prev_k, "prev_d": prev_d, "cross": "golden" if is_golden else "death"}
+    return passed, metrics, rule_type
+
+
+def _evaluate_td_setup_complete(rule_type: str, current_bar: QuantDailyBar, indicator_context: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, Dict[str, Any], str]:
+    is_buy = rule_type == "td_buy_setup_complete"
+    signal = _indicator_lookup(indicator_context, current_bar, "td_signal")
+    expected = "buy_setup_complete" if is_buy else "sell_setup_complete"
+    passed = signal == expected
+    metrics = {"signal": signal, "expected": expected}
+    return passed, metrics, rule_type
+
+
+def _evaluate_bottom_divergence(rule_type: str, current_bar: QuantDailyBar, indicator_context: Optional[Dict[str, Dict[str, Any]]]) -> Tuple[bool, Dict[str, Any], str]:
+    signal = _indicator_lookup(indicator_context, current_bar, "td_signal")
+    bottom_flag = _indicator_lookup(indicator_context, current_bar, "bottom_divergence")
+    passed = bool(signal == "bottom_divergence" or bottom_flag)
+    metrics = {"signal": signal, "bottom_divergence": bottom_flag}
+    return passed, metrics, rule_type
+
+
+def _evaluate_one_rule(rule: Dict[str, Any], current_bar: QuantDailyBar, history: List[QuantDailyBar], indicator_context: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[bool, Dict[str, Any], str]:
     rule_type = str(rule.get("rule_type", rule.get("type", ""))).strip()
     label = str(rule.get("label", rule_type or "rule")).strip()
     operator = str(rule.get("operator", ">=")).strip()
@@ -104,6 +185,18 @@ def _evaluate_one_rule(rule: Dict[str, Any], current_bar: QuantDailyBar, history
         passed = actual is not None and breakout_line is not None and actual > breakout_line
         return passed, {"actual": actual, "expected": breakout_line, "window": window, "operator": ">"}, label
 
+    if rule_type in ("macd_golden_cross", "macd_death_cross"):
+        return _evaluate_macd_cross(rule_type, current_bar, history, indicator_context)
+
+    if rule_type in ("kdj_golden_cross", "kdj_death_cross"):
+        return _evaluate_kdj_cross(rule_type, current_bar, history, indicator_context)
+
+    if rule_type in ("td_buy_setup_complete", "td_sell_setup_complete"):
+        return _evaluate_td_setup_complete(rule_type, current_bar, indicator_context)
+
+    if rule_type == "bottom_divergence":
+        return _evaluate_bottom_divergence(rule_type, current_bar, indicator_context)
+
     raise ValueError(f"不支持的规则类型: {rule_type}")
 
 
@@ -119,10 +212,12 @@ def get_required_history_size(rule_config: Dict[str, Any]) -> int:
             size = max(size, int(rule.get("lookback", 5)) + 1)
         elif rule_type == "breakout_high":
             size = max(size, int(rule.get("window", 20)) + 1)
+        elif rule_type in INDICATOR_RULE_TYPES:
+            size = max(size, INDICATOR_HISTORY_SIZES[rule_type])
     return size
 
 
-def evaluate_strategy_rules(rule_config: Dict[str, Any], history: List[QuantDailyBar]) -> Dict[str, Any]:
+def evaluate_strategy_rules(rule_config: Dict[str, Any], history: List[QuantDailyBar], indicator_context: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
     if not history:
         return {
             "passed": False,
@@ -150,7 +245,7 @@ def evaluate_strategy_rules(rule_config: Dict[str, Any], history: List[QuantDail
     evaluations = []
     score = 0.0
     for rule in rules:
-        passed, metrics, label = _evaluate_one_rule(rule, current_bar, history)
+        passed, metrics, label = _evaluate_one_rule(rule, current_bar, history, indicator_context=indicator_context)
         weight = float(rule.get("weight", 1) or 1)
         if passed:
             score += weight

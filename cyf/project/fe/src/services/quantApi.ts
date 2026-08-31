@@ -47,7 +47,27 @@ export const quantDataAPI = {
   deleteSymbol: (symbol: string) =>
     quantApi.delete('/never_guess_my_usage/quant/symbols', { params: { symbol } }),
   batchDeleteSymbols: (symbols: string[]) =>
-    quantApi.post('/never_guess_my_usage/quant/symbols/batch_delete', { symbols })
+    quantApi.post('/never_guess_my_usage/quant/symbols/batch_delete', { symbols }),
+  computeIndicators: (data: {
+    symbol: string
+    start_date: string
+    end_date: string
+    interval?: 'daily' | 'weekly' | 'minute'
+    start_datetime?: string
+    end_datetime?: string
+    adjust_flag?: string
+    indicator_names?: string[]
+    params?: Record<string, any>
+  }) => quantApi.post('/never_guess_my_usage/quant/data/indicators/compute', data),
+  listIndicators: (params: {
+    symbol: string
+    names?: string
+    start_date?: string
+    end_date?: string
+    adjust_flag?: string
+    indicator_version?: string
+    limit?: number
+  }) => quantApi.get('/never_guess_my_usage/quant/data/indicators', { params })
 }
 
 export const quantIndustryAPI = {

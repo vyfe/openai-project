@@ -170,11 +170,12 @@ def fetch_weekly_bars(symbol: str, start_date: Optional[str] = None, end_date: O
         query = query.where(QuantDailyBar.trade_date >= parse_trade_date(start_date))
     if end_date:
         query = query.where(QuantDailyBar.trade_date <= parse_trade_date(end_date))
-    # limit 字段语义：返回多少根周线 → 多查 7 倍日线再聚合
+    # limit 字段语义：返回"最近的"多少根周线 → 多查 7 倍日线再聚合
     daily_limit = max(limit * 7, 50)
     rows = [item.to_dict() for item in query.order_by(QuantDailyBar.trade_date.desc()).limit(daily_limit).iterator()]
-    weekly = _aggregate_weekly_bars(rows)
-    return weekly[:limit]
+    weekly = _aggregate_weekly_bars(rows)  # 输出 ASC
+    # 取最近的 N 根并以 DESC 返回，与 fetch_daily_bars / fetch_minute_bars 保持一致
+    return list(reversed(weekly[-limit:]))
 
 
 def _aggregate_weekly_bars(daily_rows: list[dict]) -> list[dict]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -12,6 +13,7 @@ from quant.db import quant_db
 from quant.entities import QuantDailyBar, QuantImportBatch, QuantInstrument, QuantMinuteBar
 from quant_client.constants import SUPPORTED_DATASET, SUPPORTED_DATASETS
 from service.quant.common import infer_exchange, normalize_code, normalize_symbol, parse_trade_date, parse_trade_datetime, to_float
+from service.quant.indicator_service import upsert_daily_indicators
 
 
 def ensure_quant_runtime_dirs(bundle_dir: str):
@@ -197,6 +199,19 @@ def import_bundle(bundle: dict, file_name: str = "", payload_bytes: Optional[byt
             else:
                 for chunk in _chunked(bar_rows):
                     QuantMinuteBar.insert_many(chunk).on_conflict_replace().execute()
+
+        if normalized["dataset"] == SUPPORTED_DATASET and bar_rows:
+            unique_symbols = list({row["symbol"] for row in bar_rows if row.get("symbol")})
+            if unique_symbols:
+                try:
+                    adjust_flag = str(bar_rows[0].get("adjust_flag") or "qfq")
+                    upsert_daily_indicators(symbols=unique_symbols, adjust_flag=adjust_flag)
+                except Exception as exc:
+                    logging.getLogger("quant").warning(
+                        "指标写入失败（不影响导入结果）symbols=%s err=%s",
+                        unique_symbols[:5],
+                        exc,
+                    )
 
         batch.status = "success"
         batch.records_imported = len(bar_rows)

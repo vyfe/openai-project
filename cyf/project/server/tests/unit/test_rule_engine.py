@@ -310,3 +310,148 @@ class TestRequiredHistorySize:
 
     def test_empty_rules(self):
         assert get_required_history_size({"rules": []}) == 1
+
+    def test_indicator_rule_sizes(self):
+        assert get_required_history_size({"rules": [{"rule_type": "macd_golden_cross"}]}) == 2
+        assert get_required_history_size({"rules": [{"rule_type": "kdj_death_cross"}]}) == 2
+        assert get_required_history_size({"rules": [{"rule_type": "td_buy_setup_complete"}]}) == 30
+        assert get_required_history_size({"rules": [{"rule_type": "bottom_divergence"}]}) == 60
+
+    def test_indicator_mixed_with_classic(self):
+        config = {"rules": [
+            {"rule_type": "close_above_ma", "window": 5},
+            {"rule_type": "bottom_divergence"},
+        ]}
+        assert get_required_history_size(config) == 60
+
+
+# ===========================================================================
+# 指标规则 (macd_*/kdj_*/td_*/bottom_*)
+# ===========================================================================
+
+
+def _date(d_str: str):
+    from datetime import date
+    y, m, d = map(int, d_str.split("-"))
+    return date(y, m, d)
+
+
+class TestIndicatorRules:
+    """测试基于 indicator_context 的新规则类型。"""
+
+    def test_macd_golden_cross_passes(self):
+        # 当前 bar: DIF > DEA；前一 bar: DIF <= DEA
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        ctx = {
+            "2026-01-09": {"macd_dif": 1.0, "macd_dea": 2.0},
+            "2026-01-10": {"macd_dif": 2.5, "macd_dea": 2.0},
+        }
+        rule = {"rule_type": "macd_golden_cross"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bars[0], bars, indicator_context=ctx)
+        assert passed is True
+        assert metrics["cross"] == "golden"
+
+    def test_macd_death_cross_passes(self):
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        ctx = {
+            "2026-01-09": {"macd_dif": 2.0, "macd_dea": 1.0},
+            "2026-01-10": {"macd_dif": 0.5, "macd_dea": 1.0},
+        }
+        rule = {"rule_type": "macd_death_cross"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bars[0], bars, indicator_context=ctx)
+        assert passed is True
+        assert metrics["cross"] == "death"
+
+    def test_macd_cross_missing_context_fails(self):
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        rule = {"rule_type": "macd_golden_cross"}
+        passed, _, _ = _evaluate_one_rule(rule, bars[0], bars, indicator_context=None)
+        assert passed is False
+
+    def test_kdj_golden_cross_passes(self):
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        ctx = {
+            "2026-01-09": {"kdj_k": 20.0, "kdj_d": 25.0},
+            "2026-01-10": {"kdj_k": 30.0, "kdj_d": 22.0},
+        }
+        rule = {"rule_type": "kdj_golden_cross"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bars[0], bars, indicator_context=ctx)
+        assert passed is True
+
+    def test_kdj_death_cross_passes(self):
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        ctx = {
+            "2026-01-09": {"kdj_k": 80.0, "kdj_d": 75.0},
+            "2026-01-10": {"kdj_k": 70.0, "kdj_d": 78.0},
+        }
+        rule = {"rule_type": "kdj_death_cross"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bars[0], bars, indicator_context=ctx)
+        assert passed is True
+
+    def test_td_buy_setup_complete_passes(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        ctx = {"2026-01-10": {"td_signal": "buy_setup_complete"}}
+        rule = {"rule_type": "td_buy_setup_complete"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bar, [bar], indicator_context=ctx)
+        assert passed is True
+        assert metrics["signal"] == "buy_setup_complete"
+
+    def test_td_buy_setup_complete_no_signal_fails(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        ctx = {"2026-01-10": {"td_signal": None}}
+        rule = {"rule_type": "td_buy_setup_complete"}
+        passed, _, _ = _evaluate_one_rule(rule, bar, [bar], indicator_context=ctx)
+        assert passed is False
+
+    def test_td_sell_setup_complete_passes(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        ctx = {"2026-01-10": {"td_signal": "sell_setup_complete"}}
+        rule = {"rule_type": "td_sell_setup_complete"}
+        passed, _, _ = _evaluate_one_rule(rule, bar, [bar], indicator_context=ctx)
+        assert passed is True
+
+    def test_bottom_divergence_passes_via_signal(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        ctx = {"2026-01-10": {"td_signal": "bottom_divergence"}}
+        rule = {"rule_type": "bottom_divergence"}
+        passed, metrics, _ = _evaluate_one_rule(rule, bar, [bar], indicator_context=ctx)
+        assert passed is True
+        assert metrics["signal"] == "bottom_divergence"
+
+    def test_bottom_divergence_passes_via_flag(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        ctx = {"2026-01-10": {"bottom_divergence": True}}
+        rule = {"rule_type": "bottom_divergence"}
+        passed, _, _ = _evaluate_one_rule(rule, bar, [bar], indicator_context=ctx)
+        assert passed is True
+
+    def test_indicator_rule_without_context_fails_gracefully(self):
+        bar = MockBar(trade_date=_date("2026-01-10"))
+        rule = {"rule_type": "macd_golden_cross"}
+        passed, _, _ = _evaluate_one_rule(rule, bar, [bar])
+        assert passed is False
+
+
+class TestEvaluateStrategyRulesWithIndicatorContext:
+    """测试 evaluate_strategy_rules 顶层支持 indicator_context 透传。"""
+
+    def test_top_level_passes_context_to_inner(self):
+        bars = [MockBar(trade_date=_date("2026-01-10")), MockBar(trade_date=_date("2026-01-09"))]
+        ctx = {
+            "2026-01-09": {"macd_dif": 1.0, "macd_dea": 2.0},
+            "2026-01-10": {"macd_dif": 2.5, "macd_dea": 2.0},
+        }
+        result = evaluate_strategy_rules(
+            {"rules": [{"rule_type": "macd_golden_cross", "weight": 2}]},
+            bars,
+            indicator_context=ctx,
+        )
+        assert result["passed"] is True
+        assert result["score"] == 2
+
+    def test_indicator_rule_passes_without_context_gracefully(self):
+        """旧规则路径不应被 indicator_context 影响。"""
+        bars = _make_history(5)
+        result_no_ctx = evaluate_strategy_rules({"rules": [{"rule_type": "field_compare", "field": "pct_change", "operator": ">=", "value": 0}]}, bars)
+        result_with_none_ctx = evaluate_strategy_rules({"rules": [{"rule_type": "field_compare", "field": "pct_change", "operator": ">=", "value": 0}]}, bars, indicator_context=None)
+        assert result_no_ctx["passed"] == result_with_none_ctx["passed"]

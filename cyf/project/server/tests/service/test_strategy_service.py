@@ -11,6 +11,7 @@ from service.quant.strategy_service import (
     get_strategy,
     list_available_symbols,
     list_strategies,
+    list_strategy_signals,
     run_strategy,
     soft_delete_instrument,
     update_strategy,
@@ -130,6 +131,21 @@ class TestRunStrategy:
         result = run_strategy(strategy["id"])
         assert result["status"] == "success"
         assert result["id"] > 0
+
+    def test_run_with_indicator_rule_does_not_crash(self, seed_daily_bars):
+        """含指标规则的策略应能跑通（indicator_context 注入无异常）。"""
+        strategy = create_strategy(
+            name="TDSetup",
+            symbols=["000001.SZ"],
+            rule_config={"logic": "all", "rules": [
+                {"rule_type": "td_buy_setup_complete"},
+                {"rule_type": "bottom_divergence"},
+            ]},
+        )
+        result = run_strategy(strategy["id"])
+        assert result["status"] == "success"
+        signals = list_strategy_signals(strategy_id=strategy["id"])
+        assert isinstance(signals, list)
 
 
 # ---------------------------------------------------------------------------

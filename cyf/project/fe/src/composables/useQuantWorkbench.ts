@@ -43,11 +43,8 @@ import type {
 
 
 function createQuantWorkbench() {
-  // K 线图最长的均线周期（MA5/10/20），多查 MA_PADDING 条让前几根 K 线的 MA 也能产出值。
-  // 真正的显示条数由 dailyQuery.limit / chartCycle 控制，padding 部分会被 EChartsCandlestick
-  // 通过 displayLimit prop 截掉不画。
-  const MA_PERIOD_MAX = 20
-  const MA_PADDING = MA_PERIOD_MAX - 1
+  // 指标 warmup 由后端 compute 路由根据 indicator_names 自动决定；
+  // 前端只传 symbol + 日期区间 + interval，不再加 MA_PADDING。
 
   const providers = ref<string[]>([])
   const symbolOptions = ref<SymbolOption[]>([])
@@ -160,11 +157,198 @@ function createQuantWorkbench() {
 
   const dailyQueryRange = ref('3m')
   const chartCycle = ref<'daily' | 'weekly' | 'minute'>('daily')
+  const mainIndicator = ref<'ma' | 'boll'>('ma')
+  const subIndicator = ref<'macd' | 'kdj'>('macd')
   const minuteBars = ref<any[]>([])
   const currentBars = computed(() => {
     if (chartCycle.value === 'weekly') return weeklyBars.value
     if (chartCycle.value === 'minute') return minuteBars.value
     return dailyBars.value
+  })
+
+  const indicatorState = reactive({
+    loading: false,
+    error: null as string | null,
+    result: {} as Record<string, Record<string, any>>,
+  })
+
+  let _computeTimer: ReturnType<typeof setTimeout> | null = null
+  let _computeRequestId = 0
+  const COMPUTE_DEBOUNCE_MS = 300
+
+  function _barDateKey(bar: any): string {
+    const raw = bar?.trade_datetime || bar?.trade_date || ''
+    if (typeof raw === 'string') return raw
+    return String(raw)
+  }
+
+  async function computeIndicatorsForCurrentBars() {
+    if (_computeTimer) {
+      clearTimeout(_computeTimer)
+      _computeTimer = null
+    }
+    _computeTimer = setTimeout(async () => {
+      const requestId = ++_computeRequestId
+      const cycle = chartCycle.value
+      const interval = cycle === 'weekly' ? 'weekly'
+        : cycle === 'minute' ? 'minute'
+          : 'daily'
+      const symbol = (cycle === 'minute'
+        ? (minuteQuery.symbol || dailyQuery.symbol)
+        : dailyQuery.symbol
+      ).trim()
+      // 用户没填 start/end 时，从已加载的 K 线推导，保持旧行为"没指定范围也算指标"
+      let start_date = dailyQuery.startDate
+      let end_date = dailyQuery.endDate
+      if (!start_date || !end_date) {
+        const sourceBars = cycle === 'minute' ? minuteBars.value
+          : cycle === 'weekly' ? weeklyBars.value
+            : dailyBars.value
+        if (sourceBars && sourceBars.length > 0) {
+          const sorted = [...sourceBars].sort((a, b) =>
+            String(_barDateKey(a)).localeCompare(String(_barDateKey(b)))
+          )
+          start_date = String(_barDateKey(sorted[0])).slice(0, 10)
+          end_date = String(_barDateKey(sorted[sorted.length - 1])).slice(0, 10)
+        }
+      }
+      if (!symbol || !start_date || !end_date) {
+        indicatorState.result = {}
+        indicatorState.error = null
+        indicatorState.loading = false
+        return
+      }
+      indicatorState.loading = true
+      indicatorState.error = null
+      try {
+        const payload: Record<string, any> = {
+          symbol,
+          start_date,
+          end_date,
+          interval,
+          indicator_names: ['ma', 'boll', 'macd', 'kdj', 'td_sequential', 'bottom_structure'],
+        }
+        if (interval === 'minute') {
+          payload.start_datetime = minuteQuery.startDatetime || `${start_date} 00:00:00`
+          payload.end_datetime = minuteQuery.endDatetime || `${end_date} 23:59:59`
+          payload.adjust_flag = minuteQuery.adjustFlag || dailyQuery.adjustFlag || 'qfq'
+        } else {
+          payload.adjust_flag = dailyQuery.adjustFlag || 'qfq'
+        }
+        const resp = await quantDataAPI.computeIndicators(payload)
+        if (requestId !== _computeRequestId) return
+        if (resp?.success && resp?.data?.results) {
+          indicatorState.result = resp.data.results
+        } else {
+          indicatorState.error = resp?.msg || '计算指标失败'
+        }
+      } catch (err: any) {
+        if (requestId !== _computeRequestId) return
+        indicatorState.error = err?.message || '计算指标失败'
+      } finally {
+        if (requestId === _computeRequestId) indicatorState.loading = false
+      }
+    }, COMPUTE_DEBOUNCE_MS)
+  }
+
+  const maSeries = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    return bars.map((b: any) => {
+      const row = map[_barDateKey(b)] || {}
+      return {
+        ma5: row.ma_5 ?? null,
+        ma10: row.ma_10 ?? null,
+        ma20: row.ma_20 ?? null,
+        ma60: row.ma_60 ?? null,
+      }
+    })
+  })
+
+  const bollSeries = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    return bars.map((b: any) => {
+      const row = map[_barDateKey(b)] || {}
+      return {
+        mid: row.boll_mid ?? null,
+        upper: row.boll_upper ?? null,
+        lower: row.boll_lower ?? null,
+      }
+    })
+  })
+
+  const macdSeries = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    return bars.map((b: any) => {
+      const row = map[_barDateKey(b)] || {}
+      return {
+        dif: row.macd_dif ?? null,
+        dea: row.macd_dea ?? null,
+        bar: row.macd_bar ?? null,
+      }
+    })
+  })
+
+  const kdjSeries = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    return bars.map((b: any) => {
+      const row = map[_barDateKey(b)] || {}
+      return {
+        k: row.kdj_k ?? null,
+        d: row.kdj_d ?? null,
+        j: row.kdj_j ?? null,
+      }
+    })
+  })
+
+  const tdMarks = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    const out: Array<{ date: string; num: number; side: 'buy' | 'sell'; kind: 'setup' | 'countdown' }> = []
+    for (const b of bars) {
+      const date = _barDateKey(b)
+      const row = map[date]
+      if (!row) continue
+      const buy = row.td_buy_setup
+      const sell = row.td_sell_setup
+      const buyCountdown = row.td_buy_countdown
+      const sellCountdown = row.td_sell_countdown
+      if (typeof buy === 'number' && buy > 0) {
+        out.push({ date, num: buy, side: 'buy', kind: 'setup' })
+      }
+      if (typeof sell === 'number' && sell > 0) {
+        out.push({ date, num: sell, side: 'sell', kind: 'setup' })
+      }
+      // Countdown 允许不连续计数，图上只标完成的 13，避免把附加图层堆满。
+      if (buyCountdown === 13) {
+        out.push({ date, num: buyCountdown, side: 'buy', kind: 'countdown' })
+      }
+      if (sellCountdown === 13) {
+        out.push({ date, num: sellCountdown, side: 'sell', kind: 'countdown' })
+      }
+    }
+    return out
+  })
+
+  const bottomSignals = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    const out: Array<{ date: string; type: 'divergence' }> = []
+    for (const b of bars) {
+      const date = _barDateKey(b)
+      const row = map[date]
+      if (row?.bottom_divergence) {
+        out.push({ date, type: 'divergence' })
+      }
+    }
+    return out
+  })
+
+  watch(currentBars, () => {
+    computeIndicatorsForCurrentBars()
   })
 
   const taskForm = reactive({
@@ -1155,15 +1339,13 @@ function createQuantWorkbench() {
           interval: minuteQuery.interval,
           start_datetime: startDatetime,
           end_datetime: endDatetime,
-          // 多查 MA_PADDING 根，让前几根 K 线的 MA 也能算出值
-          limit: minuteQuery.limit + MA_PADDING,
+          limit: minuteQuery.limit,
           adjust_flag: minuteQuery.adjustFlag
         })
         rows = response.data || []
         minuteBars.value = rows
       } else {
         const apiCall = target === 'weekly' ? quantDataAPI.weeklyBars : quantDataAPI.dailyBars
-        // 日线/周线都多查 MA_PADDING 条作为 MA 计算的 padding
         const baseLimit = target === 'weekly'
           ? Math.max(Math.floor(dailyQuery.limit / 5), 24)
           : dailyQuery.limit
@@ -1171,7 +1353,7 @@ function createQuantWorkbench() {
           symbol: dailyQuery.symbol.trim(),
           start_date: dailyQuery.startDate || undefined,
           end_date: dailyQuery.endDate || undefined,
-          limit: baseLimit + MA_PADDING
+          limit: baseLimit
         })
         rows = response.data || []
         if (target === 'weekly') weeklyBars.value = rows
@@ -2075,7 +2257,17 @@ function createQuantWorkbench() {
     minuteBars,
     minuteQuery,
     chartCycle,
+    mainIndicator,
+    subIndicator,
     currentBars,
+    indicatorState,
+    maSeries,
+    bollSeries,
+    macdSeries,
+    kdjSeries,
+    tdMarks,
+    bottomSignals,
+    computeIndicatorsForCurrentBars,
     strategies,
     strategyRuns,
     strategySignals,
