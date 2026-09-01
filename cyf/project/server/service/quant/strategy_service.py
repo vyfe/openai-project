@@ -17,9 +17,11 @@ from service.quant.common import normalize_symbol, parse_trade_date
 from service.quant.indicator_service import compute_indicators
 from service.quant.rule_engine import (
     INDICATOR_RULE_TYPES,
+    evaluate_series,
     evaluate_strategy_rules,
-    get_required_history_size,
+    get_required_history_size_v2,
 )
+from service.quant.rule_migration import migrate_v1_to_v2
 
 
 def _normalize_symbols(raw_symbols) -> List[str]:
@@ -30,12 +32,16 @@ def _normalize_symbols(raw_symbols) -> List[str]:
 
 
 def _normalize_rule_config(rule_config) -> Dict:
+    """读时迁移：DB 里 v1 配置自动转 v2（不写库，用户下次保存才落 v2）。
+
+    已在 v2 时直接返回（幂等）。
+    """
     if rule_config is None:
-        return {}
+        return migrate_v1_to_v2({})
     if isinstance(rule_config, str):
-        return json.loads(rule_config)
+        return migrate_v1_to_v2(json.loads(rule_config))
     if isinstance(rule_config, dict):
-        return rule_config
+        return migrate_v1_to_v2(rule_config)
     raise ValueError("rule_config 格式不正确")
 
 
@@ -129,18 +135,32 @@ def _rule_config_uses_indicators(rule_config: Dict) -> bool:
     rules = rule_config.get("rules") or []
     if not isinstance(rules, list):
         return False
+    # v2 形态：expr 字符串里引用了 macd_/kdj_/td_/bottom_divergence 任一即算
+    for r in rules:
+        if not isinstance(r, dict):
+            continue
+        expr = str(r.get("expr") or "")
+        if any(token in expr for token in ("macd_", "kdj_", "td_signal", "bottom_divergence")):
+            return True
     return any(str(r.get("rule_type", r.get("type", ""))).strip() in INDICATOR_RULE_TYPES for r in rules)
 
 
-def _build_indicator_context(history: List[QuantDailyBar]) -> Dict[str, Dict]:
-    """计算 history 范围内所有需要的指标（升序传入 compute_indicators）。"""
+def _build_indicator_context(history: List[QuantDailyBar], rule_config: Dict) -> Dict[str, Dict]:
+    """按 v2 表达式实际引用的指标精确计算（不再硬编码 macd/kdj/td/bottom 全算）。"""
     if not history:
         return {}
     asc_history = list(reversed(history))
-    return compute_indicators(
-        asc_history,
-        indicator_names=["macd", "kdj", "td_sequential", "bottom_structure"],
-    )
+    names: list[str] = []
+    expr_blob = " ".join(str(r.get("expr") or "") for r in (rule_config.get("rules") or []))
+    if "macd_" in expr_blob:
+        names.append("macd")
+    if "kdj_" in expr_blob:
+        names.append("kdj")
+    if "td_signal" in expr_blob:
+        names.append("td_sequential")
+    if "bottom_divergence" in expr_blob:
+        names.append("bottom_structure")
+    return compute_indicators(asc_history, indicator_names=names or None)
 
 
 def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_signals: bool = True) -> dict:
@@ -149,8 +169,9 @@ def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_si
         raise ValueError("策略未启用")
 
     resolved_trade_date = _resolve_trade_date(trade_date)
-    rule_config = json.loads(strategy.rule_config_json or "{}")
-    history_size = get_required_history_size(rule_config)
+    raw_rule_config = json.loads(strategy.rule_config_json or "{}")
+    rule_config = _normalize_rule_config(raw_rule_config)  # v1 自动迁移到 v2
+    history_size = get_required_history_size_v2(rule_config)
     universe = _resolve_universe(strategy, resolved_trade_date)
     run_key = f"strategy-{strategy.id}-{resolved_trade_date.isoformat()}-{uuid.uuid4().hex[:8]}"
     now = datetime.now()
@@ -174,8 +195,12 @@ def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_si
             history = _load_history(symbol, resolved_trade_date, max(history_size, 2))
             if not history or history[0].trade_date != resolved_trade_date:
                 continue
-            indicator_context = _build_indicator_context(history) if needs_indicator_context else None
-            result = evaluate_strategy_rules(rule_config, history, indicator_context=indicator_context)
+            indicator_context = _build_indicator_context(history, rule_config) if needs_indicator_context else None
+            # 走 v2 路径：一次算全序列（单 symbol 也享受 v2 表达式能力）
+            series_results = evaluate_series(rule_config, history, indicator_context=indicator_context)
+            result = series_results[0] if series_results else {
+                "passed": False, "score": 0.0, "signal_type": "watch", "reasons": [], "metrics": {},
+            }
             if result["passed"]:
                 passed_rows += 1
             if save_all_signals or result["passed"]:

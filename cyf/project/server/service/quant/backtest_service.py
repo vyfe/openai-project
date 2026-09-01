@@ -8,7 +8,8 @@ from peewee import fn
 
 from quant.entities import QuantBacktestRun, QuantDailyBar, QuantStrategy
 from service.quant.common import normalize_symbol, parse_trade_date
-from service.quant.rule_engine import evaluate_strategy_rules, get_required_history_size
+from service.quant.rule_engine import evaluate_series, get_required_history_size_v2
+from service.quant.rule_migration import migrate_v1_to_v2
 
 
 def _safe_float(value, default: float) -> float:
@@ -182,8 +183,9 @@ def run_backtest(
     )
 
     try:
-        rule_config = json.loads(strategy.rule_config_json or "{}")
-        history_size = get_required_history_size(rule_config)
+        raw_rule_config = json.loads(strategy.rule_config_json or "{}")
+        rule_config = migrate_v1_to_v2(raw_rule_config)  # v1 自动迁移到 v2
+        history_size = get_required_history_size_v2(rule_config)
         bars_by_symbol = {}
         index_by_symbol = {}
         all_trade_dates = set()
@@ -205,21 +207,32 @@ def run_backtest(
         candidate_signals_total = 0
         skipped_due_to_future = 0
 
-        for trade_date in sorted(all_trade_dates):
-            candidates = []
-            for symbol, bars in bars_by_symbol.items():
-                idx = index_by_symbol[symbol].get(trade_date)
+        # v2 路径：对每只 symbol 一次性 evaluate_series 全序列，按日索引取结果。
+        # 旧实现按日循环 evaluate_strategy_rules，每天重算一遍指标（O(天数×标的数)）。
+        # 新实现按 symbol 循环（O(标的数)），单 symbol 内的指标只算一次。
+        for symbol, bars in bars_by_symbol.items():
+            trade_date_to_idx = index_by_symbol[symbol]
+            # 序列视角：bars 已经是升序；需要降序（新→旧）传给 evaluate_series
+            asc_history = bars  # ascending old→new
+            desc_history = list(reversed(asc_history))  # descending new→old
+            series_results = evaluate_series(rule_config, desc_history)
+            for result in series_results:
+                if not result.get("passed"):
+                    continue
+                trade_date = result["metrics"]["trade_date"]
+                if trade_date is None:
+                    continue
+                # parse back to date for index lookup
+                from datetime import date as _date
+                try:
+                    dt_obj = _date.fromisoformat(str(trade_date))
+                except ValueError:
+                    continue
+                if dt_obj < resolved_start_date or dt_obj > resolved_end_date:
+                    continue
+                idx = trade_date_to_idx.get(dt_obj)
                 if idx is None:
                     continue
-                history_start = max(0, idx - max(history_size, 2) + 1)
-                history = list(reversed(bars[history_start : idx + 1]))
-                if not history or history[0].trade_date != trade_date:
-                    continue
-
-                result = evaluate_strategy_rules(rule_config, history)
-                if not result["passed"]:
-                    continue
-
                 candidate_signals_total += 1
                 next_idx = idx + 1
                 exit_idx = idx + hold_days
@@ -237,10 +250,10 @@ def run_backtest(
 
                 gross_return = (exit_price - entry_price) / entry_price
                 net_return = gross_return - (commission_rate + slippage_rate) * 2
-                candidates.append(
+                trades.append(
                     {
                         "symbol": symbol,
-                        "signal_date": trade_date.isoformat(),
+                        "signal_date": dt_obj.isoformat(),
                         "entry_date": entry_bar.trade_date.isoformat(),
                         "exit_date": exit_bar.trade_date.isoformat(),
                         "entry_price": round(entry_price, 4),
@@ -254,8 +267,15 @@ def run_backtest(
                     }
                 )
 
-            candidates.sort(key=lambda item: (-item["score"], item["symbol"]))
-            trades.extend(candidates[:top_n])
+        # 按 (signal_date, symbol) 取每天 top_n（保持与旧实现一致的语义）
+        from collections import defaultdict
+        by_date: dict[str, list] = defaultdict(list)
+        for t in trades:
+            by_date[t["signal_date"]].append(t)
+        trades = []
+        for signal_date in sorted(by_date):
+            by_date[signal_date].sort(key=lambda item: (-item["score"], item["symbol"]))
+            trades.extend(by_date[signal_date][:top_n])
 
         trades.sort(key=lambda item: (item["exit_date"], item["entry_date"], item["symbol"]))
         returns = [float(item["net_return"]) for item in trades]

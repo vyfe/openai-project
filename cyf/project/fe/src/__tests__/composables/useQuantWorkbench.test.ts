@@ -10,13 +10,14 @@
  *
  * 测试范围：
  * - 纯函数：formatRate / formatNumber / strategyStatusTag / buildSchedulePayload
- * - 表单操作：resetStrategyForm / hydrateStrategyForm / resetOperationForm
- * - 核心业务：saveStrategy / executeSelectedStrategy / saveOperation / createTask
+ * - 状态：selectedStrategyId 联动 / selectStrategy 同步上下文
+ * - 表单操作：resetOperationForm / hydrateOperationForm（策略表单已迁出到 useStrategyIde）
+ * - 核心业务：saveOperation / createTask
  * - 初始化：initialize 调用 bootstrap
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createMockQuantApi, mockApiSuccess } from '../helpers'
+import { createMockQuantApi } from '../helpers'
 
 // ─── mock 依赖 ───
 
@@ -223,20 +224,7 @@ describe('useQuantWorkbench — 纯函数', () => {
 })
 
 describe('useQuantWorkbench — 表单操作', () => {
-  it('resetStrategyForm 应清空策略表单', async () => {
-    const wb = await getWorkbench()
-    wb.strategyForm.name = '测试策略'
-    wb.strategyForm.id = 1
-
-    wb.resetStrategyForm()
-
-    expect(wb.strategyForm.name).toBe('')
-    expect(wb.strategyForm.id).toBeNull()
-    expect(unwrap(wb.selectedStrategyId)).toBeNull()
-    expect(wb.strategyForm.status).toBe('active')
-  })
-
-  it('hydrateStrategyForm 应填充策略表单并同步上下文', async () => {
+  it('selectStrategy 应同步 selectedStrategyId 与各业务表单的 strategyId', async () => {
     const wb = await getWorkbench()
     const strategy = {
       id: 5,
@@ -246,16 +234,14 @@ describe('useQuantWorkbench — 表单操作', () => {
       symbols: ['000001.SZ'],
       rule_config: { logic: 'all', rules: [] },
       updated_at: '2025-01-01'
-    }
+    } as any
 
-    wb.hydrateStrategyForm(strategy)
+    wb.selectStrategy(strategy)
 
-    expect(wb.strategyForm.id).toBe(5)
-    expect(wb.strategyForm.name).toBe('趋势放量')
     expect(unwrap(wb.selectedStrategyId)).toBe(5)
-    // syncStrategyContext
     expect(unwrap(wb.operationForm.strategyId)).toBe(5)
     expect(unwrap(wb.backtestForm.strategyId)).toBe(5)
+    expect(unwrap(wb.backtestForm.symbols)).toEqual(['000001.SZ'])
   })
 
   it('resetOperationForm 应保留当前 strategyId', async () => {
@@ -503,24 +489,8 @@ describe('useQuantWorkbench — 核心业务', () => {
     expect(quantDataAPI.weeklyBars).not.toHaveBeenCalled()
   })
 
-  it('saveStrategy 空名称应触发 warning', async () => {
-    const wb = await getWorkbench()
-    const { ElMessage } = await import('element-plus')
-    wb.strategyForm.name = ''
-
-    await wb.saveStrategy()
-
-    expect(ElMessage.warning).toHaveBeenCalledWith('策略名称不能为空')
-  })
-
-  it('executeSelectedStrategy 未选择策略应返回 null', async () => {
-    const wb = await getWorkbench()
-    wb.strategyForm.id = null
-
-    const result = await wb.executeSelectedStrategy()
-
-    expect(result).toBeNull()
-  })
+  // saveStrategy / executeSelectedStrategy 已迁到 useStrategyIde.ts，
+// 不再属于 useQuantWorkbench 的职责。这里只保留 workbench 自身状态相关的用例。
 
   it('createTask 缺少必填字段应触发 warning', async () => {
     const wb = await getWorkbench()

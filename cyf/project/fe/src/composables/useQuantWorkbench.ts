@@ -384,46 +384,8 @@ function createQuantWorkbench() {
     leaseSeconds: 600
   })
 
-  const defaultRuleConfig = {
-    logic: 'all',
-    signal_type: 'watch',
-    min_score: 2,
-    rules: [
-      { type: 'field_compare', field: 'pct_change', operator: '>=', value: 2, weight: 1, label: '涨跌幅至少 2%' },
-      { type: 'close_above_ma', window: 5, weight: 1, label: '收盘站上 5 日线' },
-      { type: 'volume_ratio', window: 5, operator: '>=', value: 1.2, weight: 1, label: '量比至少 1.2' }
-    ]
-  }
-
-  const breakoutRuleConfig = {
-    logic: 'all',
-    signal_type: 'watch',
-    min_score: 3,
-    rules: [
-      { type: 'breakout_high', window: 20, weight: 1, label: '突破前 20 日高点' },
-      { type: 'field_compare', field: 'turnover_rate', operator: '>=', value: 1, weight: 1, label: '换手率至少 1%' },
-      { type: 'volume_ratio', window: 5, operator: '>=', value: 1.5, weight: 1, label: '量比至少 1.5' }
-    ]
-  }
-
-  const strategyPresets = [
-    { key: 'trend', title: '趋势放量', summary: '适合找短期走强的日线标的', config: defaultRuleConfig },
-    { key: 'breakout', title: '突破观察', summary: '适合找放量突破前高的观察名单', config: breakoutRuleConfig }
-  ]
-
-  const strategyForm = reactive({
-    id: null as number | null,
-    name: '',
-    description: '',
-    status: 'active',
-    symbols: [] as string[],
-    ruleConfigText: JSON.stringify(defaultRuleConfig, null, 2)
-  })
-
-  const runForm = reactive({
-    tradeDate: '',
-    saveAllSignals: true
-  })
+  // 策略编辑相关的状态 / 模板 / 规则配置已迁移到 composables/useStrategyIde.ts；
+  // 这里只保留策略列表 + 选中态 + load 等数据访问面。
 
   const operationForm = reactive({
     id: null as number | null,
@@ -676,9 +638,8 @@ function createQuantWorkbench() {
     (s) => symbolOptions.value.find(item => item.symbol === s)?.name,
   )
 
-  const applyStrategyPreset = (config: Record<string, any>) => {
-    strategyForm.ruleConfigText = JSON.stringify(config, null, 2)
-  }
+  // 策略模板/表单/规则编辑相关逻辑已迁移到 composables/useStrategyIde.ts；
+  // 这里只保留 select 列表联动（选中策略时同步给其他表单）。
 
   const syncStrategyContext = (strategy: StrategyRecord | null) => {
     if (!strategy) return
@@ -690,24 +651,8 @@ function createQuantWorkbench() {
     if (!scheduleForm.analysisStrategyIds.length) scheduleForm.analysisStrategyIds = [strategy.id]
   }
 
-  const resetStrategyForm = () => {
-    selectedStrategyId.value = null
-    strategyForm.id = null
-    strategyForm.name = ''
-    strategyForm.description = ''
-    strategyForm.status = 'active'
-    strategyForm.symbols = []
-    strategyForm.ruleConfigText = JSON.stringify(defaultRuleConfig, null, 2)
-  }
-
-  const hydrateStrategyForm = (strategy: StrategyRecord) => {
+  const selectStrategy = (strategy: StrategyRecord) => {
     selectedStrategyId.value = strategy.id
-    strategyForm.id = strategy.id
-    strategyForm.name = strategy.name
-    strategyForm.description = strategy.description || ''
-    strategyForm.status = strategy.status
-    strategyForm.symbols = [...(strategy.symbols || [])]
-    strategyForm.ruleConfigText = JSON.stringify(strategy.rule_config || defaultRuleConfig, null, 2)
     syncStrategyContext(strategy)
   }
 
@@ -780,7 +725,7 @@ function createQuantWorkbench() {
   }
 
   const handleStrategySelect = async (strategy: StrategyRecord) => {
-    hydrateStrategyForm(strategy)
+    selectStrategy(strategy)
     selectedRunId.value = null
     strategySignals.value = []
     await Promise.all([loadRuns(), loadBacktests(), loadPositionSummary(), loadPositionJournal()])
@@ -1382,11 +1327,7 @@ function createQuantWorkbench() {
     try {
       const response: any = await quantStrategyAPI.list()
       strategies.value = response.data || []
-      if (selectedStrategyId.value) {
-        const matched = strategies.value.find(item => item.id === selectedStrategyId.value)
-        if (matched) hydrateStrategyForm(matched)
-        else resetStrategyForm()
-      }
+      // 选中态只跟策略 id 联动；表单回填由 useStrategyIde.loadFromRecord 处理。
     } finally {
       loading.strategies = false
     }
@@ -1586,83 +1527,10 @@ function createQuantWorkbench() {
     }
   }
 
-  const saveStrategy = async () => {
-    if (!strategyForm.name.trim()) {
-      ElMessage.warning('策略名称不能为空')
-      return
-    }
-    let parsedRuleConfig: Record<string, any>
-    try {
-      parsedRuleConfig = JSON.parse(strategyForm.ruleConfigText)
-    } catch {
-      ElMessage.error('规则 JSON 解析失败，请先修正格式')
-      return
-    }
-    loading.savingStrategy = true
-    try {
-      const payload = {
-        name: strategyForm.name.trim(),
-        description: strategyForm.description.trim(),
-        status: strategyForm.status,
-        symbols: strategyForm.symbols,
-        rule_config: parsedRuleConfig
-      }
-      if (strategyForm.id) {
-        await quantStrategyAPI.update({ id: strategyForm.id, ...payload })
-        ElMessage.success('策略已更新')
-      } else {
-        await quantStrategyAPI.create(payload)
-        ElMessage.success('策略已创建')
-      }
-      await Promise.all([loadStrategies(), loadRuns(), loadOverview()])
-    } catch (error: any) {
-      ElMessage.error(error?.message || '保存策略失败')
-    } finally {
-      loading.savingStrategy = false
-    }
-  }
+  // saveStrategy / deleteSelectedStrategy / executeSelectedStrategy 已迁到
+  // useStrategyIde（前端 QuantStrategyPage 直接调用，避免跨 composable 共享 form）。
 
-  const deleteSelectedStrategy = async () => {
-    if (!strategyForm.id) {
-      ElMessage.info('先选中一个策略再删除')
-      return
-    }
-    await ElMessageBox.confirm('删除策略会连同它的运行记录一起删除，继续吗？', '删除策略', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
-    try {
-      await quantStrategyAPI.delete(strategyForm.id)
-      ElMessage.success('策略已删除')
-      resetStrategyForm()
-      await Promise.all([loadStrategies(), loadRuns(), loadBacktests(), loadOverview()])
-      strategySignals.value = []
-    } catch (error: any) {
-      ElMessage.error(error?.message || '删除策略失败')
-    }
-  }
-
-  const executeSelectedStrategy = async () => {
-    if (!strategyForm.id) {
-      ElMessage.info('先保存或选择一个策略')
-      return null
-    }
-    loading.runningStrategy = true
-    try {
-      const response: any = await quantStrategyAPI.run({
-        strategy_id: strategyForm.id,
-        trade_date: runForm.tradeDate || undefined,
-        save_all_signals: runForm.saveAllSignals
-      })
-      ElMessage.success('策略执行完成')
-      await Promise.all([loadRuns(), loadOverview()])
-      const runRecord = response.data
-      if (runRecord?.id) await loadSignals(runRecord.id)
-      return runRecord
-    } catch (error: any) {
-      ElMessage.error(error?.message || '执行策略失败')
-      return null
-    } finally {
-      loading.runningStrategy = false
-    }
-  }
+  // 透出"当前选中的策略"快捷方式，供非策略页（操作、回测）做联动
 
   const saveOperation = async () => {
     if (!operationForm.symbol.trim() || !operationForm.tradeDate) {
@@ -2307,11 +2175,6 @@ function createQuantWorkbench() {
     taskFormRange,
     stockPoolForm,
     backfillForm,
-    defaultRuleConfig,
-    breakoutRuleConfig,
-    strategyPresets,
-    strategyForm,
-    runForm,
     operationForm,
     backtestForm,
     scheduleForm,
@@ -2353,10 +2216,8 @@ function createQuantWorkbench() {
     formatNumber,
     displaySymbol,
     resolveStrategyName,
-    applyStrategyPreset,
+    selectStrategy,
     syncStrategyContext,
-    resetStrategyForm,
-    hydrateStrategyForm,
     resetOperationForm,
     hydrateOperationForm,
     prefillOperationFromSignal,
@@ -2410,9 +2271,6 @@ function createQuantWorkbench() {
     fetchNowFromTaskForm,
     createBackfillTask,
     resetTask,
-    saveStrategy,
-    deleteSelectedStrategy,
-    executeSelectedStrategy,
     saveOperation,
     deleteSelectedOperation,
     runBacktest,

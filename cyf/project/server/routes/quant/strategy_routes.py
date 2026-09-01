@@ -4,6 +4,14 @@ from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, parse_json_list, success_response
 from service.auth_service import require_admin_auth, require_auth
+from service.quant.common import normalize_symbol
+from service.quant.expression_engine import (
+    BAR_FIELD_NAMES,
+    EXPRESSION_FUNCTION_NAMES,
+    validate_expression,
+)
+from service.quant.indicator_registry import INDICATOR_REGISTRY, catalog_payload
+from service.quant.query_service import fetch_daily_bars
 from service.quant.report_service import (
     create_prompt_template,
     create_report_for_run,
@@ -14,6 +22,9 @@ from service.quant.report_service import (
     list_reports,
     update_prompt_template,
 )
+from service.quant.rule_engine import evaluate_series
+from service.quant.rule_migration import migrate_v1_to_v2
+from service.quant.expr_llm_service import generate_expr_from_description
 from service.quant.strategy_service import (
     batch_soft_delete_instruments,
     count_available_symbols,
@@ -28,6 +39,7 @@ from service.quant.strategy_service import (
     soft_delete_instrument,
     update_strategy,
 )
+from service.quant.strategy_templates import STRATEGY_TEMPLATES
 from service.quant.symbol_search_service import search_symbols_fallback
 
 
@@ -305,4 +317,252 @@ def quant_report_generate():
         return success_response(data=result, msg="测试报告生成成功")
     except Exception as exc:
         return error_response(f"生成测试报告失败: {exc}")
+
+
+# ===========================================================================
+# 策略 IDE 元数据 + 试算（P1 前端用）
+# ===========================================================================
+
+
+@bp.route("/meta/indicators", methods=["GET"])
+@require_auth
+def quant_meta_indicators(user, password):
+    """指标 catalog：前端据此渲染指标面板 + 参数表单。
+
+    返回 [{key, label, category, base_lookback, params: [...], outputs: [...]}, ...]
+    """
+    del user, password
+    return success_response(data=catalog_payload())
+
+
+@bp.route("/meta/expression_functions", methods=["GET"])
+@require_auth
+def quant_meta_expression_functions(user, password):
+    """表达式沙箱允许的函数 + bar 字段；前端用来做变量/函数自动补全。
+
+    返回 {bar_fields: [...], functions: [...]}，每个 function 给出签名。
+    """
+    del user, password
+    functions = [
+        {"name": "prev", "signature": "prev(x)", "desc": "x 的前 1 根（与 ref(x, 1) 等价）"},
+        {"name": "ref", "signature": "ref(x, n)", "desc": "x 的前 n 根"},
+        {"name": "avg", "signature": "avg(x, n)", "desc": "x 在当前及之前 n-1 根的均值"},
+        {"name": "abs", "signature": "abs(x)", "desc": "绝对值"},
+        {"name": "min", "signature": "min(a, b, ...)", "desc": "最小值，跳过 None"},
+        {"name": "max", "signature": "max(a, b, ...)", "desc": "最大值，跳过 None"},
+        {"name": "cross_up", "signature": "cross_up(a, b)", "desc": "a 上穿 b（当前 a>b 且前一根 a<=b）"},
+        {"name": "cross_down", "signature": "cross_down(a, b)", "desc": "a 下穿 b"},
+        {"name": "any_", "signature": "any_(a, b, ...)", "desc": "任一为真"},
+        {"name": "all_", "signature": "all_(a, b, ...)", "desc": "全部为真"},
+    ]
+    return success_response(data={"bar_fields": list(BAR_FIELD_NAMES), "functions": functions})
+
+
+@bp.route("/meta/strategy_templates", methods=["GET"])
+@require_auth
+def quant_meta_strategy_templates(user, password):
+    """预设策略模板（v2 形态）；前端"模板"按钮据此渲染。"""
+    del user, password
+    return success_response(data=STRATEGY_TEMPLATES)
+
+
+@bp.route("/strategy/validate", methods=["POST"])
+@require_auth
+def quant_strategy_validate(user, password):
+    """校验 rule_config 各条 expr 的语法与变量合法性，不落库、不打数据库。
+
+    body: {rule_config: {...}} 或直接传 v2 配置。
+    返回 {ok, rules: [{id, label, expr, ok, error}]}。
+    """
+    del user, password
+    try:
+        data = get_request_data() or {}
+        cfg = data.get("rule_config") or {}
+        if not isinstance(cfg, dict):
+            return error_response("rule_config 必须是 JSON 对象")
+        v2 = migrate_v1_to_v2(cfg)
+        # 收集已知变量：bar 字段 + registry 中所有字面 + 模板展开后的 output 名
+        known: set = set(BAR_FIELD_NAMES)
+        known.update({"open", "high", "low", "close", "vol", "amt", "pct", "turnover"})  # 别名
+        for spec in INDICATOR_REGISTRY.values():
+            for out in spec.outputs:
+                if "{" not in out.name:
+                    known.add(out.name)
+                else:
+                    # 模板展开：用 spec.params 的 default 把 {window} 等替换成具体名
+                    if spec.key == "ma":
+                        for w in spec.params[0].default:
+                            known.add(out.name.replace("{window}", str(w)))
+                    elif spec.key in ("vol_ratio", "period_return", "rolling_high_low"):
+                        # 第一参数即 window，default 必有
+                        try:
+                            w = spec.params[0].default
+                            known.add(out.name.replace("{window}", str(w)))
+                        except (IndexError, AttributeError):
+                            pass
+        known.update(EXPRESSION_FUNCTION_NAMES)
+
+        results = []
+        any_error = False
+        for rule in v2.get("rules") or []:
+            if not isinstance(rule, dict):
+                continue
+            rid = str(rule.get("id") or "")
+            expr_text = str(rule.get("expr") or "")
+            label = str(rule.get("label") or rid)
+            vr = validate_expression(expr_text, known)
+            if not vr.ok:
+                any_error = True
+            results.append({
+                "id": rid,
+                "label": label,
+                "expr": expr_text,
+                "ok": vr.ok,
+                "error": vr.error,
+                "used_vars": list(vr.used_vars),
+            })
+        return success_response(
+            data={"ok": not any_error, "rules": results},
+            msg="校验完成" if not any_error else "存在语法错误",
+        )
+    except Exception as exc:
+        return error_response(f"校验失败: {exc}")
+
+
+@bp.route("/strategy/llm_generate_expr", methods=["POST"])
+@require_auth
+def quant_strategy_llm_generate_expr(user, password):
+    """调大模型把自然语言描述生成 expr。不入库；不需要 admin。"""
+    del password
+    try:
+        data = get_request_data() or {}
+        description = str(data.get("description") or "").strip()
+        indicator_keys = data.get("indicator_keys") or []
+        if not isinstance(indicator_keys, list):
+            indicator_keys = []
+        model = str(data.get("model") or "gpt-5.6-luna").strip() or "gpt-5.6-luna"
+        result = generate_expr_from_description(
+            username=user,
+            description=description,
+            indicator_keys=[str(k) for k in indicator_keys],
+            model=model,
+        )
+        if "error" in result:
+            return success_response(data=result, msg=result["error"])
+        return success_response(data=result, msg="大模型生成成功")
+    except Exception as exc:
+        return error_response(f"LLM 生成失败: {exc}")
+
+
+@bp.route("/strategy/dry_run", methods=["POST"])
+@require_auth
+def quant_strategy_dry_run(user, password):
+    """不落库试算：按 symbol 跑日线 evaluate_series，返回逐日结果。
+
+    body: {rule_config, symbol, start_date, end_date, adjust_flag?}
+    返回 {rule_config, symbol, bars: [...], results: [{date, passed, score, signal_type,
+           reasons, rule_results: [{id, label, passed, value}]}], meta: {...}}
+    """
+    del user, password
+    try:
+        data = get_request_data() or {}
+        cfg = data.get("rule_config") or {}
+        symbol_raw = str(data.get("symbol") or "").strip()
+        start_date = str(data.get("start_date") or "").strip()
+        end_date = str(data.get("end_date") or "").strip()
+        adjust_flag = str(data.get("adjust_flag", "qfq")).strip() or "qfq"
+        if not isinstance(cfg, dict):
+            return error_response("rule_config 必须是 JSON 对象")
+        if not symbol_raw or not start_date or not end_date:
+            return error_response("symbol / start_date / end_date 均不能为空")
+        symbol = normalize_symbol(symbol_raw)
+
+        # fetch_daily_bars 返回的是 dict；evaluate_series 用 getattr 取字段，把 dict 套成简易对象
+        from datetime import date as _date, datetime as _datetime
+
+        class _Bar(dict):
+            def __getattr__(self, item):
+                value = self.get(item)
+                if value is None:
+                    return None
+                # trade_date / trade_datetime 字段 to_dict() 序列化时是 ISO 字符串，
+                # evaluate_series 后续会调 .isoformat() / .fromisoformat()，需要 date/datetime 对象。
+                if item in ("trade_date",) and isinstance(value, str):
+                    try:
+                        return _date.fromisoformat(value)
+                    except ValueError:
+                        return value
+                if item == "trade_datetime" and isinstance(value, str):
+                    try:
+                        return _datetime.fromisoformat(value.replace(" ", "T"))
+                    except ValueError:
+                        return value
+                return value
+
+        raw_bars = fetch_daily_bars(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            adjust_flag=adjust_flag,
+        )
+        bars_desc = [_Bar(b) for b in raw_bars]
+        results_raw = evaluate_series(cfg, bars_desc)
+
+        # 序列化 bars 与 results；挑出命中点
+        bars_out = []
+        results_out = []
+        passed_dates = []
+        for bar, r in zip(bars_desc, results_raw):
+            bars_out.append({
+                "trade_date": bar.trade_date.isoformat() if getattr(bar, "trade_date", None) else None,
+                "open_price": getattr(bar, "open_price", None),
+                "high_price": getattr(bar, "high_price", None),
+                "low_price": getattr(bar, "low_price", None),
+                "close_price": getattr(bar, "close_price", None),
+                "volume": getattr(bar, "volume", None),
+                "amount": getattr(bar, "amount", None),
+                "pct_change": getattr(bar, "pct_change", None),
+                "turnover_rate": getattr(bar, "turnover_rate", None),
+            })
+            rule_results = []
+            for ev in (r.get("metrics") or {}).get("rules") or []:
+                rule_results.append({
+                    "id": ev.get("id") or "",
+                    "label": ev.get("label") or "",
+                    "passed": bool(ev.get("passed")),
+                    "value": (ev.get("metrics") or {}).get("value"),
+                })
+            results_out.append({
+                "date": r.get("metrics", {}).get("trade_date") or (bar.trade_date.isoformat() if bar.trade_date else None),
+                "passed": bool(r.get("passed")),
+                "score": float(r.get("score") or 0),
+                "signal_type": r.get("signal_type"),
+                "reasons": r.get("reasons") or [],
+                "rule_results": rule_results,
+            })
+            if r.get("passed"):
+                passed_dates.append(
+                    getattr(bar, "trade_date", None).isoformat()
+                    if getattr(bar, "trade_date", None) else None
+                )
+
+        return success_response(
+            data={
+                "rule_config": cfg,
+                "symbol": symbol,
+                "start_date": start_date,
+                "end_date": end_date,
+                "bars": bars_out,
+                "results": results_out,
+                "passed_dates": passed_dates,
+                "meta": {
+                    "bars_count": len(bars_desc),
+                    "passed_count": len(passed_dates),
+                    "adjust_flag": adjust_flag,
+                },
+            },
+            msg=f"试算完成，{len(passed_dates)} 个命中 / {len(bars_desc)} 个交易日",
+        )
+    except Exception as exc:
+        return error_response(f"试算失败: {exc}")
 

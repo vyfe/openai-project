@@ -5,6 +5,8 @@ import {
   ElCard,
   ElCheckbox,
   ElCheckboxGroup,
+  ElCollapse,
+  ElCollapseItem,
   ElDatePicker,
   ElDialog,
   ElDrawer,
@@ -41,6 +43,8 @@ import 'element-plus/es/components/alert/style/css'
 import 'element-plus/es/components/button/style/css'
 import 'element-plus/es/components/card/style/css'
 import 'element-plus/es/components/checkbox/style/css'
+import 'element-plus/es/components/collapse/style/css'
+import 'element-plus/es/components/collapse-item/style/css'
 import 'element-plus/es/components/date-picker/style/css'
 import 'element-plus/es/components/dialog/style/css'
 import 'element-plus/es/components/drawer/style/css'
@@ -81,6 +85,8 @@ const components = [
   ElCard,
   ElCheckbox,
   ElCheckboxGroup,
+  ElCollapse,
+  ElCollapseItem,
   ElDatePicker,
   ElDialog,
   ElDrawer,

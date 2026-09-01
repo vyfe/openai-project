@@ -9,12 +9,14 @@ from quant_client.bundle_builder import build_fetch_bundle
 from service.quant.dashboard_service import get_dashboard_overview
 from service.quant.import_service import fetch_import_batches, import_bundle, parse_bundle_bytes
 from service.quant.indicator_service import (
+    DEFAULT_INDICATOR_WINDOWS,
     INDICATOR_SET_VERSION,
     SUPPORTED_INDICATOR_GROUPS,
     compute_indicators,
     list_daily_indicators,
     max_lookback_bars,
 )
+from service.quant import indicator_registry as ireg
 from service.quant.name_refresh_service import refresh_instrument_names
 from service.quant.position_service import enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
@@ -349,14 +351,29 @@ def quant_indicators_compute(user, password):
         return error_response(f"计算指标失败: {exc}")
 
 
-_INDICATOR_FIELD_NAMES = {
-    "ma_5", "ma_10", "ma_20", "ma_60",
-    "boll_mid", "boll_upper", "boll_lower",
-    "macd_dif", "macd_dea", "macd_bar",
-    "kdj_k", "kdj_d", "kdj_j",
-    "td_buy_setup", "td_buy_countdown", "td_sell_setup", "td_sell_countdown", "td_signal",
-    "bottom_divergence",
-}
+def _concrete_output_names() -> set[str]:
+    """registry 派生：用默认参数把模板输出名展开成具体名（如 ma_{window} → ma_5/ma_10/...）。
+
+    新指标的真实 key 一律经此路径，禁删。
+    """
+    names: set[str] = set()
+    for spec in ireg.INDICATOR_REGISTRY.values():
+        for out in spec.outputs:
+            if "{" in out.name:
+                if spec.key == "ma":
+                    for w in DEFAULT_INDICATOR_WINDOWS["ma"]:
+                        names.add(out.name.replace("{window}", str(w)))
+                elif spec.key in ("vol_ratio", "period_return", "rolling_high_low"):
+                    p = spec.params[0]
+                    default_val = p.default
+                    if p.type == "int":
+                        names.add(out.name.replace("{window}", str(default_val)))
+            else:
+                names.add(out.name)
+    return names
+
+
+_INDICATOR_FIELD_NAMES = _concrete_output_names()
 
 
 def _validate_indicator_names(indicator_names):

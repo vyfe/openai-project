@@ -96,12 +96,24 @@ def _resample_5m_to_buckets(rows_asc: list[dict], bucket_minutes: int, target_in
     return aggregated[:limit]
 
 
-def fetch_daily_bars(symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 500):
+def fetch_daily_bars(
+    symbol: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 500,
+    adjust_flag: Optional[str] = None,
+):
+    """日线查询。
+
+    adjust_flag：可选过滤（None = 不过滤，返回该 symbol 在区间内的所有 adjust_flag 行）。
+    """
     query = QuantDailyBar.select().where(QuantDailyBar.symbol == normalize_symbol(symbol))
     if start_date:
         query = query.where(QuantDailyBar.trade_date >= parse_trade_date(start_date))
     if end_date:
         query = query.where(QuantDailyBar.trade_date <= parse_trade_date(end_date))
+    if adjust_flag:
+        query = query.where(QuantDailyBar.adjust_flag == adjust_flag)
     query = query.order_by(QuantDailyBar.trade_date.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 

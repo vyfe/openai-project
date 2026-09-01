@@ -128,7 +128,30 @@ export const quantStrategyAPI = {
   runs: (params?: { strategy_id?: number; limit?: number }) =>
     quantApi.get('/never_guess_my_usage/quant/strategy/runs', { params }),
   signals: (params?: { strategy_id?: number; run_id?: number; passed_only?: boolean; limit?: number }) =>
-    quantApi.get('/never_guess_my_usage/quant/strategy/signals', { params })
+    quantApi.get('/never_guess_my_usage/quant/strategy/signals', { params }),
+  validate: (data: { rule_config: Record<string, any> }) =>
+    quantApi.post('/never_guess_my_usage/quant/strategy/validate', data),
+  dryRun: (data: {
+    rule_config: Record<string, any>
+    symbol: string
+    start_date: string
+    end_date: string
+    adjust_flag?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/strategy/dry_run', data),
+  llmGenerateExpr: (data: {
+    description: string
+    indicator_keys?: string[]
+    model?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/strategy/llm_generate_expr', data)
+}
+
+export const quantMetaAPI = {
+  indicators: () =>
+    quantApi.get('/never_guess_my_usage/quant/meta/indicators'),
+  expressionFunctions: () =>
+    quantApi.get('/never_guess_my_usage/quant/meta/expression_functions'),
+  strategyTemplates: () =>
+    quantApi.get('/never_guess_my_usage/quant/meta/strategy_templates')
 }
 
 export const quantOperationAPI = {

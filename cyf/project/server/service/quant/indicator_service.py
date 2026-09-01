@@ -8,6 +8,7 @@ from typing import Iterable, Optional
 
 from quant.db import quant_db
 from quant.entities import QuantDailyBar, QuantDailyIndicator
+from service.quant import indicator_registry as ireg
 
 
 INDICATOR_SET_VERSION = "v2"
@@ -53,21 +54,28 @@ def max_lookback_bars(indicator_names=None, params=None) -> int:
     关键决策：
     - indicator_names 为 None → 当作"全开"，按全部指标取 max（最保险）
     - indicator_names 为 [] 显式空 → 返回最小值 1（无需前置 bar）
-    - params["ma_windows"] 自定义时覆盖默认 [5, 10, 20, 60]
+    - params 自定义时（如 ma_windows）按 registry 的 params 解析
     - 至少返回 1
+
+    数值与历史完全一致：INDICATOR_BASE_LOOKBACK 的语义迁到 indicator_registry，
+    老的"ma 默认 60"靠 ma 注册时的 base_lookback=60 保证。
     """
     if indicator_names is None:
-        names = set(INDICATOR_BASE_LOOKBACK.keys())
+        names = set(ireg.all_keys())
     else:
         names = set(indicator_names)
     params = params or {}
     base = 0
     for name in names:
+        try:
+            spec = ireg.get_spec(name)
+        except KeyError:
+            continue
         if name == "ma":
-            windows = params.get("ma_windows") or DEFAULT_INDICATOR_WINDOWS["ma"]
+            windows = params.get("ma_windows") or list(spec.params[0].default)
             base = max(base, max(windows) if windows else 1)
         else:
-            base = max(base, INDICATOR_BASE_LOOKBACK.get(name, 0))
+            base = max(base, spec.base_lookback)
     return max(base, 1)
 
 
@@ -261,6 +269,71 @@ def _compute_indicator_snapshot(bars: list[QuantDailyBar], params: Optional[dict
             }
         )
     return snapshots
+
+
+def compute_vol_ratio(bars: list, window: int = 5) -> dict[str, list]:
+    """量比：当前成交量 / 前 N 根平均成交量。bars 任意顺序，返回与 bars 对齐。
+
+    返回 {f"vol_ratio_{window}": list[float|None]}。
+    语义与 rule_engine._evaluate_one_rule 的 volume_ratio 分支对齐：
+    - 平均分母用清洗 None 后的有效值个数，与 v1 `_avg` 行为一致；
+    - 当前 bar 自身为 None 或 0 → 返回 None。
+    """
+    n = len(bars)
+    result: list[Optional[float]] = [None] * n
+    for i in range(n):
+        if i + window >= n:
+            break
+        vols = [getattr(bars[i + j + 1], "volume", None) for j in range(window)]
+        clean = [v for v in vols if v is not None]
+        cur = getattr(bars[i], "volume", None)
+        if not clean or cur is None or cur == 0:
+            continue
+        avg = sum(clean) / len(clean)
+        if avg > 0:
+            result[i] = cur / avg
+    return {f"vol_ratio_{window}": result}
+
+
+def compute_period_return(bars: list, lookback: int = 5) -> dict[str, list]:
+    """区间收益率（百分比）：(close[i] / close[i+lookback] - 1) * 100。
+
+    返回 {f"period_return_{lookback}": list[float|None]}。i + lookback 越界时为 None。
+    """
+    n = len(bars)
+    result: list[Optional[float]] = [None] * n
+    for i in range(n):
+        if i + lookback >= n:
+            break
+        cur = getattr(bars[i], "close_price", None)
+        past = getattr(bars[i + lookback], "close_price", None)
+        if cur is None or past in (None, 0):
+            continue
+        result[i] = (cur - past) / past * 100
+    return {f"period_return_{lookback}": result}
+
+
+def compute_rolling_high_low(bars: list, window: int = 20) -> dict[str, list]:
+    """N 根前最高/最低（**排除当前 bar**，与 v1 _breakout_high 语义对齐）。
+
+    返回 {"rolling_high_{w}": [...], "rolling_low_{w}": [...]}。
+    语义与 rule_engine._breakout_high 对齐：忽略 None，按实际有效值取 max/min。
+    """
+    n = len(bars)
+    highs: list[Optional[float]] = [None] * n
+    lows: list[Optional[float]] = [None] * n
+    for i in range(n):
+        if i + window >= n:
+            break
+        prior_h = [getattr(bars[i + j + 1], "high_price", None) for j in range(window)]
+        prior_h = [v for v in prior_h if v is not None]
+        if prior_h:
+            highs[i] = max(prior_h)
+        prior_l = [getattr(bars[i + j + 1], "low_price", None) for j in range(window)]
+        prior_l = [v for v in prior_l if v is not None]
+        if prior_l:
+            lows[i] = min(prior_l)
+    return {f"rolling_high_{window}": highs, f"rolling_low_{window}": lows}
 
 
 def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = None, params: Optional[dict] = None) -> dict:
@@ -661,3 +734,138 @@ def list_daily_indicators(
         query = query.where(QuantDailyIndicator.indicator_version == indicator_version)
     query = query.limit(limit)
     return [item.to_dict() for item in query.iterator()]
+
+
+# ===========================================================================
+# 指标注册表绑定
+# ===========================================================================
+DEFAULT_INDICATOR_WINDOWS = {
+    "ma": [5, 10, 20, 60],
+    "boll": [20],
+    "macd": {"fast": 12, "slow": 26, "signal": 9},
+    "kdj": {"n": 9, "k": 3, "d": 3},
+}
+
+
+def _bind_registry() -> None:
+    """把 compute 函数注入 registry。必须在 compute_* 定义后才能调用。
+
+    ParamSpec.help 字段：前端 hover 显示，给用户写表达式时参考。
+    """
+    ireg.register(ireg.IndicatorSpec(
+        key="ma", label="均线", category="trend", base_lookback=60,
+        params=(ireg.ParamSpec(
+            "windows", "窗口(天)", "int_list", [5, 10, 20, 60], min=2, max=250,
+            help="用逗号分隔的整数列表，如 5,10,20,60；会同时输出 ma_5/ma_10/ma_20/ma_60"
+        ),),
+        outputs=(ireg.OutputSpec("ma_{window}", "MA{window}", "numeric"),),
+        compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="boll", label="布林线", category="trend", base_lookback=20,
+        params=(ireg.ParamSpec(
+            "window", "周期(天)", "int", 20, min=5, max=120,
+            help="布林线中轨的 SMA 周期；上下轨 = 中轨 ± 2 倍标准差"
+        ),),
+        outputs=(
+            ireg.OutputSpec("boll_mid", "中轨", "numeric"),
+            ireg.OutputSpec("boll_upper", "上轨", "numeric"),
+            ireg.OutputSpec("boll_lower", "下轨", "numeric"),
+        ),
+        compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="macd", label="MACD", category="momentum", base_lookback=26,
+        params=(
+            ireg.ParamSpec("fast", "快线 EMA 周期", "int", 12, min=2, max=60,
+                           help="DIF = EMA(close, fast) - EMA(close, slow)"),
+            ireg.ParamSpec("slow", "慢线 EMA 周期", "int", 26, min=2, max=120),
+            ireg.ParamSpec("signal", "信号线 EMA 周期", "int", 9, min=2, max=60,
+                           help="DEA = EMA(DIF, signal)；柱状图 = (DIF-DEA)*2"),
+        ),
+        outputs=(
+            ireg.OutputSpec("macd_dif", "DIF（快慢差）", "numeric"),
+            ireg.OutputSpec("macd_dea", "DEA（信号线）", "numeric"),
+            ireg.OutputSpec("macd_bar", "BAR（柱）", "numeric"),
+        ),
+        compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="kdj", label="KDJ", category="momentum", base_lookback=9,
+        params=(
+            ireg.ParamSpec("n", "RSV 周期", "int", 9, min=2, max=60,
+                           help="RSV = (close - n日最低) / (n日最高 - n日最低) * 100"),
+            ireg.ParamSpec("k", "K 平滑", "int", 3, min=1, max=10,
+                           help="K = (k-1)/k * 旧K + 1/k * RSV"),
+            ireg.ParamSpec("d", "D 平滑", "int", 3, min=1, max=10,
+                           help="D = (d-1)/d * 旧D + 1/d * K；J = 3K - 2D"),
+        ),
+        outputs=(
+            ireg.OutputSpec("kdj_k", "K 值", "numeric"),
+            ireg.OutputSpec("kdj_d", "D 值", "numeric"),
+            ireg.OutputSpec("kdj_j", "J 值", "numeric"),
+        ),
+        compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="td_sequential", label="神奇九转", category="structure",
+        base_lookback=9,
+        params=(),
+        outputs=(
+            ireg.OutputSpec("td_buy_setup", "买入 Setup 计数", "numeric"),
+            ireg.OutputSpec("td_buy_countdown", "买入 Countdown 计数", "numeric"),
+            ireg.OutputSpec("td_sell_setup", "卖出 Setup 计数", "numeric"),
+            ireg.OutputSpec("td_sell_countdown", "卖出 Countdown 计数", "numeric"),
+            ireg.OutputSpec("td_signal", "TD 信号", "enum"),
+        ),
+        compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="bottom_structure", label="底背离", category="structure",
+        base_lookback=30,
+        params=(),
+        outputs=(ireg.OutputSpec("bottom_divergence", "底背离信号", "bool"),),
+        compute=None,
+    ))
+    # ----- 以下为策略 IDE 新增指标：从 rule_engine 私算的逻辑升格而来 -----
+    ireg.register(ireg.IndicatorSpec(
+        key="vol_ratio", label="量比", category="volume", base_lookback=6,
+        params=(ireg.ParamSpec(
+            "window", "回看窗口(天)", "int", 5, min=2, max=120,
+            help="量比 = 当日成交量 / 前 N 日平均成交量"
+        ),),
+        outputs=(ireg.OutputSpec("vol_ratio_{window}", "量比{window}", "numeric"),),
+        compute=compute_vol_ratio,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="period_return", label="区间收益率", category="trend", base_lookback=6,
+        params=(ireg.ParamSpec(
+            "lookback", "回看天数", "int", 5, min=2, max=120,
+            help="N 日涨幅：(close / N日前close - 1) * 100"
+        ),),
+        outputs=(ireg.OutputSpec("period_return_{lookback}", "N日涨幅(%)", "numeric"),),
+        compute=compute_period_return,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="rolling_high_low", label="前 N 根最高/最低", category="trend", base_lookback=2,
+        params=(ireg.ParamSpec(
+            "window", "回看窗口(天)", "int", 20, min=2, max=250,
+            help="返回前 N 日最高/最低；排除当前 bar（避免未来函数）"
+        ),),
+        outputs=(
+            ireg.OutputSpec("rolling_high_{window}", "前{window}日最高", "numeric"),
+            ireg.OutputSpec("rolling_low_{window}", "前{window}日最低", "numeric"),
+        ),
+        compute=compute_rolling_high_low,
+    ))
+
+
+_bind_registry()
+
+
+# 旧 SUPPORTED_INDICATOR_GROUPS / INDICATOR_BASE_LOOKBACK 已在调用方迁往 registry，
+# 这里只保留别名用于向后兼容。必须在 _bind_registry() 之后赋值，否则拿到的是空值。
+SUPPORTED_INDICATOR_GROUPS = ireg.all_groups()
+INDICATOR_BASE_LOOKBACK = {
+    key: ireg.get_spec(key).base_lookback for key in ireg.all_keys()
+}
