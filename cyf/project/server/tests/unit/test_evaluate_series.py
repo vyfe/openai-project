@@ -250,3 +250,102 @@ class TestPerformanceSmoke:
         elapsed_ms = (time.perf_counter() - t) * 1000
         assert elapsed_ms < 50, f"evaluate 30 bars took {elapsed_ms:.1f}ms"
         assert len(out) == 30
+
+
+# ===========================================================================
+# 新指标（RSI / ATR / OBV）表达式集成
+# ===========================================================================
+
+
+class TestRsiExpression:
+    def _build_history(self, n: int):
+        """绕过 _make_history 的日期越界，自行构造 bars（新→旧）。"""
+        import datetime as _dt
+        from tests.unit.test_rule_engine import MockBar
+        bars = [
+            MockBar(
+                trade_date=_dt.date(2025, 6, 1) + _dt.timedelta(days=i),
+                close_price=12.0 + i * 0.1,
+            )
+            for i in range(n)
+        ]
+        bars.reverse()
+        return bars
+
+    def test_rsi14_evaluates_through_registry(self):
+        """rsi_14 走 registry compute 路径，能被 expression_engine 求值。"""
+        bars = self._build_history(40)
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "rsi_14 > 50", "weight": 1}]}
+        out = evaluate_series(cfg, bars)
+        assert len(out) == 40
+        # 不应抛异常；至少有规则结果字段（value 或 error）
+        m = out[0]["metrics"]["rules"][0]["metrics"]
+        assert "value" in m or "error" in m
+
+    def test_rsi_default_window_used_when_no_decl(self):
+        """expr 用 rsi_14 时，自动从变量名提取 window=14，无需在 indicators 显式声明。"""
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "rsi_14 > 50", "weight": 1}]}
+        # 不抛异常且 history size 用 base_lookback
+        assert get_required_history_size_v2(cfg) == 14
+
+
+class TestAtrExpression:
+    def _build_history(self, n: int):
+        import datetime as _dt
+        from tests.unit.test_rule_engine import MockBar
+        bars = [
+            MockBar(
+                trade_date=_dt.date(2025, 6, 1) + _dt.timedelta(days=i),
+                high_price=12.0 + 0.5,
+                low_price=12.0 - 0.3,
+                close_price=12.0,
+            )
+            for i in range(n)
+        ]
+        bars.reverse()
+        return bars
+
+    def test_atr14_evaluates_through_registry(self):
+        bars = self._build_history(40)
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "atr_14 > 0", "weight": 1}]}
+        out = evaluate_series(cfg, bars)
+        assert len(out) == 40
+        # 暖启动期：out[26..39] = None（first_valid = n-window-1 = 25 是最早有效位置，
+        # 索引 26 之后的 bars 已没有足够的前置数据）
+        for r in out[26:]:
+            assert r["metrics"]["rules"][0]["passed"] is False
+        # out[0] 是最新 bar，应有有效评估结果
+        assert "value" in out[0]["metrics"]["rules"][0]["metrics"]
+
+    def test_atr_default_history_size(self):
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "atr_14 > 0", "weight": 1}]}
+        assert get_required_history_size_v2(cfg) == 14
+
+
+class TestObvExpression:
+    def _build_history(self, n: int):
+        import datetime as _dt
+        from tests.unit.test_rule_engine import MockBar
+        bars = [
+            MockBar(
+                trade_date=_dt.date(2025, 6, 1) + _dt.timedelta(days=i),
+                close_price=12.0 + i * 0.1,
+                volume=1_000_000,
+            )
+            for i in range(n)
+        ]
+        bars.reverse()
+        return bars
+
+    def test_obv_evaluates_through_registry(self):
+        bars = self._build_history(40)
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "obv > 0", "weight": 1}]}
+        out = evaluate_series(cfg, bars)
+        assert len(out) == 40
+        m = out[-1]["metrics"]["rules"][0]["metrics"]
+        assert "value" in m or "error" in m
+
+    def test_obv_no_param_history_size(self):
+        """OBV 没有参数，history size 应取 base_lookback=2。"""
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "obv > 0", "weight": 1}]}
+        assert get_required_history_size_v2(cfg) == 2

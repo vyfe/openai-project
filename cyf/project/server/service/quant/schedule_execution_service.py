@@ -222,9 +222,20 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
     if isinstance(channel_ids, str):
         channel_ids = [item.strip() for item in channel_ids.split(",") if item.strip()]
     save_all_signals = str(payload.get("save_all_signals", True)).strip().lower() in ("true", "1", "yes", "on")
+    # 新增：AI 改写参数（缺省=走 deterministic 模板，与旧行为兼容）
+    llm_enabled = str(payload.get("llm_enabled", False)).strip().lower() in ("true", "1", "yes", "on")
+    prompt_template_id = payload.get("prompt_template_id")
+    if prompt_template_id in (None, ""):
+        prompt_template_id = None
+    else:
+        try:
+            prompt_template_id = int(prompt_template_id)
+        except (TypeError, ValueError):
+            prompt_template_id = None
+    model_name = str(payload.get("model_name") or "").strip()
     logger.info(
-        "analysis_report_start run_id=%s trade_date=%s strategy_ids=%s channel_ids=%s save_all_signals=%s",
-        run.id, run.trade_date, strategy_ids, channel_ids, save_all_signals,
+        "analysis_report_start run_id=%s trade_date=%s strategy_ids=%s channel_ids=%s save_all_signals=%s llm_enabled=%s prompt_template_id=%s model_name=%s",
+        run.id, run.trade_date, strategy_ids, channel_ids, save_all_signals, llm_enabled, prompt_template_id, model_name,
     )
     results, reports, deliveries = [], [], []
     for raw_strategy_id in strategy_ids:
@@ -232,7 +243,15 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
         logger.info("analysis_report_strategy run_id=%s strategy_id=%s", run.id, strategy_id)
         strategy_run = run_strategy(strategy_id=strategy_id, trade_date=run.trade_date.isoformat() if run.trade_date else None, save_all_signals=save_all_signals)
         results.append(strategy_run)
-        report = create_report_for_run(int(strategy_run["id"]), report_type="test_report", schedule_run_id=run.id)
+        report = create_report_for_run(
+            int(strategy_run["id"]),
+            report_type="test_report",
+            schedule_run_id=run.id,
+            prompt_template_id=prompt_template_id,
+            llm_enabled=llm_enabled,
+            model_name=model_name,
+            username="scheduler",
+        )
         reports.append(report)
         logger.info(
             "analysis_report_created run_id=%s strategy_id=%s report_id=%s signals=%s",

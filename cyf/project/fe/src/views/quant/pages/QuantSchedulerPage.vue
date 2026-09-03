@@ -222,7 +222,7 @@
                 placeholder="执行完报告后自动推送到这些 IM 通道"
               >
                 <el-option
-                  v-for="item in workbench.schedulerMeta?.im_channel_options || []"
+                  v-for="item in workbench.imChannels"
                   :key="item.id"
                   :label="item.name"
                   :value="item.id"
@@ -233,6 +233,40 @@
           <el-form label-position="top">
             <el-form-item label="附带未通过信号">
               <el-checkbox v-model="workbench.scheduleForm.analysisSaveAllSignals">保存全部信号，方便复盘</el-checkbox>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top">
+            <el-form-item label="AI 改写报告">
+              <el-switch
+                v-model="workbench.scheduleForm.analysisLlmEnabled"
+                active-text="启用"
+                inactive-text="使用确定性模板"
+              />
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top">
+            <el-form-item label="关联 Prompt 模板（可选）">
+              <el-select
+                v-model="workbench.scheduleForm.analysisPromptTemplateId"
+                clearable
+                filterable
+                placeholder="留空走 latest_prompt 自动选"
+              >
+                <el-option
+                  v-for="item in workbench.promptTemplates"
+                  :key="item.id"
+                  :label="`${item.prompt_version} · ${item.template_name}${item.model_name ? ' · ' + item.model_name : ''}`"
+                  :value="item.id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-form>
+          <el-form label-position="top">
+            <el-form-item label="覆盖模型（可选）">
+              <el-input
+                v-model="workbench.scheduleForm.analysisModelName"
+                placeholder="留空走 Prompt 模板默认模型"
+              />
             </el-form-item>
           </el-form>
         </template>

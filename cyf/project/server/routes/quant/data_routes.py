@@ -359,17 +359,31 @@ def _concrete_output_names() -> set[str]:
     names: set[str] = set()
     for spec in ireg.INDICATOR_REGISTRY.values():
         for out in spec.outputs:
-            if "{" in out.name:
-                if spec.key == "ma":
-                    for w in DEFAULT_INDICATOR_WINDOWS["ma"]:
-                        names.add(out.name.replace("{window}", str(w)))
-                elif spec.key in ("vol_ratio", "period_return", "rolling_high_low"):
-                    p = spec.params[0]
-                    default_val = p.default
-                    if p.type == "int":
-                        names.add(out.name.replace("{window}", str(default_val)))
-            else:
+            if "{" not in out.name:
                 names.add(out.name)
+                continue
+            # 模板输出：用 spec.params 的 int / int_list 类型的 default 展开。
+            # 通用规则（不再硬编码 key 列表）：
+            # 1. 输出模板里出现 "{window}" 时，按 params 里 name=="window" 的 default 展开
+            # 2. 否则按 params[0].default 展开
+            template = out.name
+            target_param = None
+            for p in spec.params:
+                if p.name == "window":
+                    target_param = p
+                    break
+            if target_param is None and spec.params:
+                target_param = spec.params[0]
+            if target_param is None:
+                continue
+            if target_param.type == "int_list" and isinstance(target_param.default, list):
+                for v in target_param.default:
+                    names.add(template.replace("{window}", str(v)))
+            elif target_param.type == "int":
+                names.add(template.replace("{window}", str(target_param.default)))
+            else:
+                # 模板存在但没有 int 默认值，跳过（旧逻辑会静默丢）
+                continue
     return names
 
 

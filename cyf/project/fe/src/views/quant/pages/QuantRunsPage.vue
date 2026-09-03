@@ -10,12 +10,39 @@
           <el-button :icon="RefreshRight" @click="workbench.loadRuns" :loading="workbench.loading.runs">刷新</el-button>
         </div>
       </div>
+
+      <div class="quant-form-stack quant-section-gap">
+        <el-select
+          v-model="selectedRunIdProxy"
+          placeholder="从下拉里选一条执行记录"
+          filterable
+          clearable
+          class="quant-run-picker"
+          @change="onSelectRun"
+        >
+          <el-option
+            v-for="run in workbench.strategyRuns"
+            :key="run.id"
+            :label="runLabel(run)"
+            :value="run.id"
+          >
+            <div class="quant-run-option">
+              <span class="quant-run-option__id">#{{ run.id }}</span>
+              <span class="quant-run-option__date">{{ run.trade_date }}</span>
+              <span class="quant-run-option__strategy">{{ run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) }}</span>
+              <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ run.status }}</el-tag>
+              <span class="quant-run-option__ratio">{{ run.signals_total }}/{{ run.symbols_total }}</span>
+            </div>
+          </el-option>
+        </el-select>
+      </div>
+
       <el-table
         :data="workbench.strategyRuns"
         stripe
-        height="680"
+        height="560"
         class="quant-table"
-        @row-click="workbench.loadSignals($event.id)"
+        @row-click="(row) => workbench.handleRunSelect(row)"
         :row-class-name="({ row }) => row.id === workbench.selectedRunId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="trade_date" label="交易日" width="110" />
@@ -89,6 +116,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { RefreshRight, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
@@ -104,5 +132,24 @@ const openOperationFromSignal = (signal: any) => {
 const generateReportAndOpenAiMemory = async () => {
   const report = await workbench.generateReportFromRun()
   if (report?.id) router.push('/quant/ai-memory')
+}
+
+// 下拉选择 run：用 computed proxy 绑 workbench.selectedRunId，
+// 让 v-model 的 setter 直接调 handleRunSelect（先 setRunId 再 fetch）。
+// 避免 v-model.number 直接改 ref 后还要手动调 loadSignals 二次触发。
+const selectedRunIdProxy = computed<number | null>({
+  get: () => workbench.selectedRunId,
+  set: (value) => workbench.handleRunSelect(value ?? null),
+})
+
+const onSelectRun = (runId: number | null) => {
+  // el-select @change 自带新值；这里走 workbench 入口以便统一 future 副作用
+  workbench.handleRunSelect(runId ?? null)
+}
+
+const runLabel = (run: any) => {
+  const strategy = run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) || '未知策略'
+  const ratio = `${run.signals_total}/${run.symbols_total}`
+  return `#${run.id} · ${run.trade_date} · ${strategy} · ${ratio} · ${run.status}`
 }
 </script>

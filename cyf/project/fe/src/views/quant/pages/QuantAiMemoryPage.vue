@@ -81,6 +81,8 @@
         </div>
       </div>
 
+      <ReportPreviewIde />
+
       <el-table
         :data="workbench.reports"
         stripe
@@ -225,8 +227,9 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshRight, Setting, VideoPlay } from '@element-plus/icons-vue'
+import { RefreshRight, Setting } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import ReportPreviewIde from './ReportPreviewIde.vue'
 
 const workbench = useQuantWorkbench()
 

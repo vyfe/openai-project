@@ -349,6 +349,55 @@ HTTP ──► routes/  (Flask Blueprint)
 
 **数据流参考**：`doc/quant/quant-mvp-runbook.md`、`a-share-data-integration-module.md`、`strategy-rule-module.md`、`quant-data-collection-deploy.md`、`feishu-setup-guide.md`、`lightweight-ai-quant-design-evaluation.md`。
 
+#### 3.5.1 量化 DB schema 变更流程（必须遵守）
+
+> **项目原则**。`quant_*` 表的列变更**禁止**靠 peewee 自动建表（仅 `safe=True` 不补列）；必须走 `tools/quant_db_migrate.py` 生成 + 落档 + 应用。
+
+**完整流程**（新加 / 删列 / 改类型时）：
+
+1. **改 entity**：`cyf/project/server/quant/quant_entities_*.py` 修改 `Field` 定义（`null` / `default` / 类型）。
+2. **生成 ALTER SQL**：在 `cyf/project/server/` 目录跑：
+   ```bash
+   .venv/bin/python tools/quant_db_migrate.py \
+     --mode dry-run \
+     --output server/ddl/<YYYY-MM-DD>_<change_name>.sql \
+     --change-name <change_name>
+   ```
+   会自动扫描所有 `QUANT_MODELS`，列出缺列；落档到 `server/ddl/` 作为审计 / 回滚参考。
+3. **应用 ALTER**（区分模式）：
+   - **dev / 测试环境**：直接 `--mode hard`（无备份，假定可重置 DB）。
+   - **生产环境**：必须 `--mode soft`（自动 `CREATE TABLE ... AS SELECT *` 备份 → ALTER → 提交）。
+   - **线上 SQLite（生产 DB 文件）**：先 scp 备份到 `cyf/project/server/quant.db` 旁，再 `--db <线上 DB 路径> --mode soft`。
+4. **跑回归**：`pytest tests/service tests/unit` 确认 entity 字段与 DB 对齐后代码能 INSERT/SELECT 成功。
+5. **commit 改动**：entity 改动 + `server/ddl/<change_name>.sql` 一起提交；commit message 注明"需 ALTER"。
+
+**关键约束**：
+
+- `NOT NULL` 列必须有 `default`，否则 SQLite `ADD COLUMN` 会被拒；工具会自动检测并 fallback 为 `NULL`，并在日志里 warn。
+- 备份表命名 `<原表>_backup_<YYYYMMDD_HHMMSS>_<字段名>`；运行一周无异常后手动 `DROP TABLE ...` 清理。
+- 备份目录 `cyf/project/server/ddl/` 应 `.gitignore`（本地审计文件）— 至少**commit 一份带字段语义的 SQL**作为变更证据。
+- 工具支持的 entity 字段类型：`CharField / TextField / IntegerField / FloatField / BooleanField / DateTimeField / DateField / BigIntegerField`；其它类型 fallback 为 TEXT。
+
+**工具命令总览**：
+
+```bash
+# dry-run：扫缺列并打印（默认 stdout）
+.venv/bin/python tools/quant_db_migrate.py --mode dry-run
+
+# dry-run + 落档
+.venv/bin/python tools/quant_db_migrate.py \
+  --mode dry-run --output server/ddl/2026-XX-XX_<name>.sql
+
+# 软模式（生产）：先备份再 ALTER
+.venv/bin/python tools/quant_db_migrate.py --mode soft
+
+# 硬模式（dev）：直接 ALTER
+.venv/bin/python tools/quant_db_migrate.py --mode hard
+
+# 覆盖 DB 路径（线上 / 临时 DB）
+.venv/bin/python tools/quant_db_migrate.py --db /path/to/quant.db --mode soft
+```
+
 ---
 
 
@@ -572,6 +621,7 @@ npm run test:coverage                  # 覆盖率
 - `start-dev.sh` 预检端口绑定权限，在受限沙箱/容器里会直接报错退出——遇到"permission:"提示说明环境不允许本地端口监听。
 - 生产部署时 `admin.enable_sql_execute` 必须保持 `false`，否则暴露 SQL 后门。
 - 飞书回调地址变更时同时更新 `quant.feishu_*` 与 `routes/quant/im_memory_routes.py` 中注册的路径。
+- 量化子系统 DB schema 变更必须走 `tools/quant_db_migrate.py`（见 §3.5.1）；禁止靠 peewee 自动建表补缺列。
 - `doc/` 与 `cyf/project/server/docs/` 下的 markdown 文件**不被** `.gitignore`，是有意保留的专题文档；改动时同步更新本文件"参考文档索引"小节。`.claude/` 已被 `.gitignore` 排除，本地仅保留 `settings.local.json`。
 
 ---
@@ -588,6 +638,8 @@ npm run test:coverage                  # 覆盖率
 - `doc/quant/lightweight-ai-quant-design-evaluation.md` —— 轻量 AI 量化设计评估
 - `doc/quant/quant-data-collection-deploy.md` —— 数据采集部署
 - `doc/quant/feishu-setup-guide.md` —— 飞书自建应用配置
+- `doc/quant/indicator-extension-playbook.md` —— 量化指标横向扩展开发指南（registry → compute → IDE/回测/测试 五步）
+- `doc/quant/report-feishu-delivery.md` —— 报告 → 飞书投递链路
 
 ### 10.2 后端专题（`cyf/project/server/docs/`）
 

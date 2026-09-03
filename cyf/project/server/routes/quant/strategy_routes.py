@@ -20,6 +20,7 @@ from service.quant.report_service import (
     get_report,
     list_prompt_templates,
     list_reports,
+    preview_report_for_run,
     update_prompt_template,
 )
 from service.quant.rule_engine import evaluate_series
@@ -254,6 +255,7 @@ def quant_prompt_template_create():
             status=str(data.get("status", "active")).strip() or "active",
             report_type=str(data.get("report_type", "test_report")).strip() or "test_report",
             prompt_template=str(data.get("prompt_template", "")).strip(),
+            model_name=str(data.get("model_name", "")).strip(),
             change_note=str(data.get("change_note", "")).strip(),
         )
         return success_response(data=result, msg="Prompt 模板创建成功")
@@ -267,7 +269,7 @@ def quant_prompt_template_update():
     try:
         data = get_request_data()
         template_id = int(data.get("id"))
-        updates = {key: data.get(key) for key in ("strategy_id", "template_name", "prompt_version", "status", "report_type", "prompt_template", "change_note") if key in data}
+        updates = {key: data.get(key) for key in ("strategy_id", "template_name", "prompt_version", "status", "report_type", "prompt_template", "model_name", "change_note") if key in data}
         result = update_prompt_template(template_id, **updates)
         return success_response(data=result, msg="Prompt 模板更新成功")
     except Exception as exc:
@@ -306,17 +308,57 @@ def quant_report_get(user, password, report_id):
         return error_response(f"获取报告失败: {exc}")
 
 
+def _parse_report_request(data: dict) -> dict:
+    """从 request body 抽取 /report/generate 与 /report/preview 共享参数。
+
+    prompt_template_id 空 → None；否则 int。
+    llm_enabled 接受 bool / "true" / "1" / "yes" / "on" 多种形式。
+    """
+    run_id = int(data.get("run_id"))
+    report_type = str(data.get("report_type", "test_report")).strip() or "test_report"
+    prompt_template_id = data.get("prompt_template_id")
+    if prompt_template_id in (None, ""):
+        prompt_template_id = None
+    else:
+        prompt_template_id = int(prompt_template_id)
+    llm_enabled = str(data.get("llm_enabled", False)).strip().lower() in ("true", "1", "yes", "on")
+    model_name = str(data.get("model_name") or "").strip()
+    username = str(data.get("username") or "admin").strip() or "admin"
+    return {
+        "run_id": run_id,
+        "report_type": report_type,
+        "prompt_template_id": prompt_template_id,
+        "llm_enabled": llm_enabled,
+        "model_name": model_name,
+        "username": username,
+    }
+
+
 @bp.route("/report/generate", methods=["POST"])
 @require_admin_auth
 def quant_report_generate():
+    """生成 + 落库报告。body 同 /report/preview。"""
     try:
-        data = get_request_data()
-        run_id = int(data.get("run_id"))
-        report_type = str(data.get("report_type", "test_report")).strip() or "test_report"
-        result = create_report_for_run(run_id=run_id, report_type=report_type)
+        params = _parse_report_request(get_request_data())
+        result = create_report_for_run(**params)
         return success_response(data=result, msg="测试报告生成成功")
     except Exception as exc:
         return error_response(f"生成测试报告失败: {exc}")
+
+
+@bp.route("/report/preview", methods=["POST"])
+@require_admin_auth
+def quant_report_preview():
+    """不落库的"报告 IDE"：返回 bundle + draft + markdown + meta，便于前端预览 / 调试。
+
+    body: {run_id, report_type?, llm_enabled?, prompt_template_id?, model_name?, username?}
+    """
+    try:
+        params = _parse_report_request(get_request_data())
+        result = preview_report_for_run(**params)
+        return success_response(data=result, msg="报告预览已生成")
+    except Exception as exc:
+        return error_response(f"生成报告预览失败: {exc}")
 
 
 # ===========================================================================

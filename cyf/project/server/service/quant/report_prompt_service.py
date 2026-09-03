@@ -14,10 +14,22 @@ DEFAULT_REPORT_TEMPLATE = """你是量化研究助理。基于结构化 Analysis
 4. 输出应包含摘要、信号概览、风险、动作建议、记忆引用。
 """
 
+# 兜底默认模型：当 Prompt 模板未指定 model_name 时使用。命中 [claude]/[api] 配置。
+DEFAULT_REPORT_MODEL_NAME = "gpt-5.6-luna"
+
 
 def normalize_report_type(report_type: str) -> str:
     text = str(report_type or "test_report").strip()
     return text or "test_report"
+
+
+def resolve_model_name(prompt_template: Optional[dict]) -> str:
+    """从 prompt_template 解析要用的 model_name；空 → 兜底默认。"""
+    if prompt_template:
+        candidate = str(prompt_template.get("model_name") or "").strip()
+        if candidate:
+            return candidate
+    return DEFAULT_REPORT_MODEL_NAME
 
 
 def latest_prompt(strategy_id: Optional[int] = None, report_type: str = "test_report") -> Optional[dict]:
@@ -55,6 +67,7 @@ def create_prompt_template(
     template_name: str = "default",
     status: str = "active",
     report_type: str = "test_report",
+    model_name: str = "",
     change_note: str = "",
 ) -> dict:
     if not str(prompt_version or "").strip():
@@ -66,6 +79,7 @@ def create_prompt_template(
         status=str(status or "active").strip() or "active",
         report_type=normalize_report_type(report_type),
         prompt_template=str(prompt_template or "").strip() or DEFAULT_REPORT_TEMPLATE,
+        model_name=str(model_name or "").strip(),
         change_note=str(change_note or "").strip(),
         created_at=datetime.now(),
         updated_at=datetime.now(),
@@ -87,6 +101,8 @@ def update_prompt_template(template_id: int, **updates) -> dict:
         record.report_type = normalize_report_type(updates["report_type"])
     if "prompt_template" in updates:
         record.prompt_template = str(updates["prompt_template"] or "").strip() or DEFAULT_REPORT_TEMPLATE
+    if "model_name" in updates:
+        record.model_name = str(updates["model_name"] or "").strip()
     if "change_note" in updates:
         record.change_note = str(updates["change_note"] or "").strip()
     record.updated_at = datetime.now()

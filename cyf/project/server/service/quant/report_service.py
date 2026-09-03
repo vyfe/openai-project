@@ -8,9 +8,11 @@ from service.quant.report_generation_service import (
     generate_report_draft,
     get_report,
     list_reports,
+    preview_report_for_run,
     render_report_markdown,
 )
 from service.quant.report_prompt_service import (
+    DEFAULT_REPORT_MODEL_NAME,
     DEFAULT_REPORT_TEMPLATE,
     create_prompt_template,
     delete_prompt_template,
@@ -18,6 +20,7 @@ from service.quant.report_prompt_service import (
     latest_prompt,
     list_prompt_templates,
     normalize_report_type,
+    resolve_model_name,
     update_prompt_template,
 )
 

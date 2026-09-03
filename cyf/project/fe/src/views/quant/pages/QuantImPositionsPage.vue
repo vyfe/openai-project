@@ -200,3 +200,17 @@
     </section>
   </div>
 </template>
+
+<script setup lang="ts">
+import { RefreshRight, Setting } from '@element-plus/icons-vue'
+import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+
+const workbench = useQuantWorkbench()
+
+const refreshPositions = () => {
+  void Promise.all([
+    workbench.loadPositionSummary(),
+    workbench.loadPositionJournal(),
+  ])
+}
+</script>

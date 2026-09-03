@@ -174,6 +174,7 @@ class QuantBacktestRun(QuantBaseModel):
     summary_json = TextField(default="{}")
     metrics_json = TextField(default="{}")
     equity_curve_json = TextField(default="[]")
+    benchmark_curve_json = TextField(default="[]")
     trades_json = TextField(default="[]")
     strategy_snapshot_json = TextField(default="{}")
     data_source_version = CharField(default="")
@@ -206,6 +207,7 @@ class QuantBacktestRun(QuantBaseModel):
             "summary": json.loads(self.summary_json or "{}"),
             "metrics": json.loads(self.metrics_json or "{}"),
             "equity_curve": json.loads(self.equity_curve_json or "[]"),
+            "benchmark_curve": json.loads(self.benchmark_curve_json or "[]"),
             "trades": json.loads(self.trades_json or "[]"),
             "strategy_snapshot": json.loads(self.strategy_snapshot_json or "{}"),
             "data_source_version": self.data_source_version,

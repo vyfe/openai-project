@@ -104,6 +104,9 @@ export const buildSchedulePayload = (scheduleForm: any): any => {
   return {
     strategy_ids: scheduleForm.analysisStrategyIds,
     channel_ids: scheduleForm.analysisChannelIds,
-    save_all_signals: scheduleForm.analysisSaveAllSignals
+    save_all_signals: scheduleForm.analysisSaveAllSignals,
+    prompt_template_id: scheduleForm.analysisPromptTemplateId || undefined,
+    model_name: scheduleForm.analysisModelName || undefined,
+    llm_enabled: scheduleForm.analysisLlmEnabled
   }
 }

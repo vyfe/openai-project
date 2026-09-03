@@ -106,6 +106,7 @@ class QuantPromptTemplate(QuantBaseModel):
     status = CharField(default="active", index=True)
     report_type = CharField(default="test_report", index=True)
     prompt_template = TextField(default="")
+    model_name = CharField(default="")
     change_note = TextField(default="")
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
@@ -123,6 +124,7 @@ class QuantPromptTemplate(QuantBaseModel):
             "status": self.status,
             "report_type": self.report_type,
             "prompt_template": self.prompt_template,
+            "model_name": self.model_name,
             "change_note": self.change_note,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -182,6 +184,9 @@ class QuantImChannel(QuantBaseModel):
     name = CharField(unique=True)
     channel_type = CharField(default="feishu_app", index=True)
     status = CharField(default="active", index=True)
+    # webhook_url 是历史遗留字段（NOT NULL，无业务读写）。保留以对齐现有 DB schema，
+    # 业务代码不读写它。如需清理，请走专门的迁移脚本。
+    webhook_url = TextField(default="")
     config_json = TextField(default="{}")
     mention_list_json = TextField(default="[]")
     description = TextField(default="")
@@ -197,6 +202,7 @@ class QuantImChannel(QuantBaseModel):
             "name": self.name,
             "channel_type": self.channel_type,
             "status": self.status,
+            "webhook_url": self.webhook_url,
             "config": json.loads(self.config_json or "{}"),
             "mention_list": json.loads(self.mention_list_json or "[]"),
             "description": self.description,

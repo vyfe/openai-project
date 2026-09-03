@@ -158,18 +158,53 @@
         <div class="quant-sparkline-card">
           <div class="quant-sparkline-card__header">
             <div>
-              <h3>净值曲线</h3>
-              <p>当前为轻量聚合净值，适合做版本比较，不适合作为逐日持仓还原。</p>
+              <h3>净值曲线 vs 基准</h3>
+              <p>
+                策略线为事件回测净值（按平仓日聚合）；基准线为
+                <code v-if="workbench.selectedBacktest.summary?.benchmark_symbol">{{ workbench.selectedBacktest.summary.benchmark_symbol }}</code>
+                <code v-else>未配置基准</code>
+                同期买入持有净值（满仓买入到末日卖出）。alpha = 策略净收益 − 基准净收益。
+              </p>
             </div>
             <div class="quant-sparkline-stats">
               <span>交易数 {{ workbench.selectedBacktest.trades_total }}</span>
               <span>信号数 {{ workbench.selectedBacktest.signals_total }}</span>
+              <span v-if="workbench.selectedBacktest.summary?.benchmark_net_return !== null && workbench.selectedBacktest.summary?.benchmark_net_return !== undefined">
+                基准 {{ workbench.formatRate(workbench.selectedBacktest.summary.benchmark_net_return) }}
+              </span>
+              <span v-if="workbench.selectedBacktest.summary?.alpha !== null && workbench.selectedBacktest.summary?.alpha !== undefined"
+                    :class="workbench.selectedBacktest.summary.alpha >= 0 ? 'quant-pill quant-pill--good' : 'quant-pill quant-pill--warn'">
+                Alpha {{ workbench.formatRate(workbench.selectedBacktest.summary.alpha) }}
+              </span>
             </div>
           </div>
           <div class="quant-sparkline">
-            <svg viewBox="0 0 760 220" preserveAspectRatio="none">
-              <path v-if="workbench.backtestCurvePath" :d="workbench.backtestCurvePath" class="quant-sparkline__line" />
+            <svg viewBox="0 0 760 220" preserveAspectRatio="none" class="quant-sparkline__svg">
+              <!-- 网格 / 坐标 / baseline（paths in :d of innerHTML） -->
+              <g v-html="workbench.backtestCurvePaths.axes" />
+              <!-- 基准线（虚线 / 副色） -->
+              <path
+                v-if="workbench.backtestCurvePaths.benchmark"
+                :d="workbench.backtestCurvePaths.benchmark"
+                class="quant-sparkline__line quant-sparkline__line--benchmark"
+              />
+              <!-- 策略线（实线 / 主色） -->
+              <path
+                v-if="workbench.backtestCurvePaths.strategy"
+                :d="workbench.backtestCurvePaths.strategy"
+                class="quant-sparkline__line"
+              />
             </svg>
+            <div v-if="workbench.backtestCurvePaths.benchmark" class="quant-sparkline-legend">
+              <span class="quant-sparkline-legend__item">
+                <span class="quant-sparkline-legend__swatch quant-sparkline-legend__swatch--strategy"></span>
+                策略净值
+              </span>
+              <span class="quant-sparkline-legend__item">
+                <span class="quant-sparkline-legend__swatch quant-sparkline-legend__swatch--benchmark"></span>
+                基准净值 ({{ workbench.selectedBacktest.summary?.benchmark_symbol || '—' }})
+              </span>
+            </div>
           </div>
         </div>
 

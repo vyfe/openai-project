@@ -64,6 +64,7 @@ export type BacktestRunRecord = {
   summary?: Record<string, any>
   metrics?: Record<string, any>
   equity_curve?: Array<{ date: string; capital: number; net_value: number; avg_return?: number; closed_trades?: number }>
+  benchmark_curve?: Array<{ date: string; capital?: number; net_value: number }>
   trades?: Array<Record<string, any>>
   error_message?: string
   created_at?: string
@@ -114,6 +115,7 @@ export type PromptTemplateRecord = {
   status: string
   report_type: string
   prompt_template: string
+  model_name?: string
   change_note?: string
   updated_at?: string
 }

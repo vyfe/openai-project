@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
 
 from quant.entities import (
+    QuantInstrument,
     QuantOperationRecord,
     QuantReportRecord,
     QuantStrategy,
@@ -13,11 +15,21 @@ from quant.entities import (
     QuantStrategySignal,
 )
 from service.quant.memory_service import extract_memory_snippets
-from service.quant.report_prompt_service import latest_prompt, normalize_report_type
+from service.quant.report_draft import (
+    REPORT_DRAFT_VERSION,
+    _validate_report_draft,
+    generate_report_draft,
+)
+from service.quant.report_prompt_service import (
+    latest_prompt,
+    normalize_report_type,
+)
+
+
+logger = logging.getLogger("quant.report")
 
 
 ANALYSIS_BUNDLE_VERSION = "analysis-bundle-v1"
-REPORT_DRAFT_VERSION = "report-draft-v1"
 
 
 def _load_strategy_run(run_id: int) -> QuantStrategyRun:
@@ -38,6 +50,17 @@ def _load_run_signals(run_id: int, limit: int = 20) -> list[dict]:
     return [item.to_dict() for item in query.iterator()]
 
 
+def _bulk_lookup_instrument_names(symbols: list) -> dict:
+    """批量查 quant_instrument.name；空字符串表示该 symbol 在股票池里没有 name。"""
+    cleaned = sorted({str(s).strip() for s in symbols if str(s or "").strip()})
+    if not cleaned:
+        return {}
+    rows = QuantInstrument.select(QuantInstrument.symbol, QuantInstrument.name).where(
+        QuantInstrument.symbol.in_(cleaned)
+    )
+    return {row.symbol: (row.name or "") for row in rows}
+
+
 def _load_recent_operations(strategy_id: int, trade_date, limit: int = 10) -> list[dict]:
     query = (
         QuantOperationRecord.select()
@@ -54,13 +77,16 @@ def _strategy_version(strategy: QuantStrategy) -> str:
     return version or "strategy-v1"
 
 
-def _build_top_signals(signals: list[dict], limit: int = 5) -> list[dict]:
+def _build_top_signals(signals: list[dict], limit: int = 5, name_map: Optional[dict] = None) -> list[dict]:
     items = []
+    name_map = name_map or {}
     for signal in signals[:limit]:
         metrics = signal.get("metrics") or {}
+        symbol = signal.get("symbol")
         items.append(
             {
-                "symbol": signal.get("symbol"),
+                "symbol": symbol,
+                "name": name_map.get(symbol, ""),
                 "score": signal.get("score"),
                 "signal_type": signal.get("signal_type"),
                 "passed": signal.get("passed"),
@@ -124,6 +150,9 @@ def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_
     prompt_template = prompt_template or latest_prompt(strategy.id, report_type=normalize_report_type(report_type))
     run_dict = strategy_run.to_dict()
     strategy_dict = strategy.to_dict()
+    # top_signals 涉及的 symbol 批量查股票中文名（供报告渲染与 LLM 改写使用）
+    top_symbols = [s.get("symbol") for s in signals[:5] if s.get("symbol")]
+    name_map = _bulk_lookup_instrument_names(top_symbols)
     risk_flags = _build_risk_flags(run_dict, operations_snapshot, signals)
     bundle = {
         "bundle_version": ANALYSIS_BUNDLE_VERSION,
@@ -155,7 +184,7 @@ def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_
             "symbols_total": strategy_run.symbols_total,
             "pass_rate": round(strategy_run.signals_total / strategy_run.symbols_total, 6) if strategy_run.symbols_total else 0.0,
         },
-        "top_signals": _build_top_signals(signals),
+        "top_signals": _build_top_signals(signals, name_map=name_map),
         "signals": signals,
         "risk_flags": risk_flags,
         "operations_snapshot": operations_snapshot,
@@ -175,85 +204,6 @@ def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_
     return bundle
 
 
-def _validate_analysis_bundle(bundle: dict):
-    for key in ("bundle_version", "prompt_version", "strategy", "run", "signals", "top_signals", "memory_snippets", "risk_flags"):
-        if key not in bundle:
-            raise ValueError(f"AnalysisBundle 缺少字段: {key}")
-
-
-def _top_signal_lines(bundle: dict) -> list[str]:
-    lines = []
-    for signal in bundle.get("top_signals", [])[:5]:
-        reasons = "；".join((signal.get("reasons") or [])[:2]) or "规则通过"
-        lines.append(
-            f"{signal.get('symbol')} 得分 {signal.get('score')}，收盘 {signal.get('close_price')}，涨跌幅 {signal.get('pct_change')}%：{reasons}"
-        )
-    return lines
-
-
-def generate_report_draft(bundle: dict, prompt_template: Optional[dict] = None) -> dict:
-    _validate_analysis_bundle(bundle)
-    strategy = bundle["strategy"]
-    run = bundle["run"]
-    memory_refs = [item["symbol"] for item in bundle.get("memory_snippets", [])]
-    signal_lines = _top_signal_lines(bundle)
-    market_summary = bundle.get("market_summary") or {}
-    risk_lines = [item.get("message") for item in bundle.get("risk_flags", []) if item.get("message")]
-    operator_notes = bundle.get("operator_notes") or []
-    market_view = []
-    if market_summary.get("avg_pct_change") is not None:
-        market_view.append(
-            f"本次信号样本平均涨跌幅 `{market_summary.get('avg_pct_change')}`%，平均换手 `{market_summary.get('avg_turnover_rate')}`%。"
-        )
-    if not market_view:
-        market_view.append("当前样本不足以形成稳定市场概览，报告以规则信号解释为主。")
-    footer_notes = [
-        f"Bundle 版本 `{bundle.get('bundle_version')}`，Prompt 版本 `{bundle.get('prompt_version')}`。",
-        "所有数值字段均来自结构化 AnalysisBundle，当前未启用自由生成数值。",
-    ]
-    if operator_notes:
-        footer_notes.append(f"最近人工备注共 {len(operator_notes)} 条，已纳入解释上下文预算。")
-    report_draft = {
-        "draft_version": REPORT_DRAFT_VERSION,
-        "title": f"{strategy['name']} · {run['trade_date']} 测试报告",
-        "summary": [
-            f"本次扫描 {run['symbols_total']} 个标的，通过 {run['signals_total']} 个。",
-            "当前报告为结构化测试报告，数值均来源于 AnalysisBundle，不依赖自由生成。",
-        ],
-        "market_view": market_view,
-        "signal_highlights": signal_lines or ["本次没有通过信号，建议检查数据是否完整或规则是否过严。"],
-        "risk_warnings": risk_lines or [
-            "该报告仅用于研究和测试，不构成自动交易指令。",
-            "若当天未完成数据拉取或有大量失败任务，需优先核对样本完整性。",
-        ],
-        "action_watchlist": [
-            "优先复核得分最高的前 3 个标的，再决定是否进入人工操作登记。",
-            "如需形成长期经验，请在执行后及时回填结果，以便记忆梳理任务吸收。",
-        ],
-        "memory_references": memory_refs,
-        "footer_notes": footer_notes,
-        "prompt_version": (prompt_template or {}).get("prompt_version", "template-v1"),
-        "disclaimer": "数值字段禁止由 LLM 自由生成；当前为模板化测试报告。",
-    }
-    report_draft["signal_overview"] = report_draft["signal_highlights"]
-    report_draft["risk_alerts"] = report_draft["risk_warnings"]
-    report_draft["suggested_actions"] = report_draft["action_watchlist"]
-    return report_draft
-
-
-def _validate_report_draft(report_draft: dict):
-    for key in (
-        "title",
-        "summary",
-        "market_view",
-        "signal_highlights",
-        "risk_warnings",
-        "action_watchlist",
-        "memory_references",
-        "footer_notes",
-    ):
-        if key not in report_draft:
-            raise ValueError(f"ReportDraft 缺少字段: {key}")
 
 
 def render_report_markdown(bundle: dict, report_draft: dict) -> str:
@@ -289,12 +239,40 @@ def render_report_markdown(bundle: dict, report_draft: dict) -> str:
     return "\n".join(sections)
 
 
-def create_report_for_run(run_id: int, report_type: str = "test_report", schedule_run_id: Optional[int] = None) -> dict:
+def create_report_for_run(
+    run_id: int,
+    report_type: str = "test_report",
+    schedule_run_id: Optional[int] = None,
+    *,
+    prompt_template_id: Optional[int] = None,
+    llm_enabled: bool = False,
+    model_name: str = "",
+    username: str = "system",
+) -> dict:
+    """生成并落库一条报告。
+
+    prompt_template_id：指定具体模板；None 时走 latest_prompt 自动选。
+    llm_enabled：是否走 LLM 改写（失败自动兜底）。
+    model_name：覆盖 prompt_template 默认模型。
+    """
     report_type = normalize_report_type(report_type)
     strategy_run = _load_strategy_run(run_id)
-    prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
+    if prompt_template_id is not None:
+        from service.quant.report_prompt_service import get_prompt_template
+        try:
+            prompt_template = get_prompt_template(int(prompt_template_id))
+        except Exception:
+            prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
+    else:
+        prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
     bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template)
-    report_draft = generate_report_draft(bundle, prompt_template=prompt_template)
+    report_draft = generate_report_draft(
+        bundle,
+        prompt_template=prompt_template,
+        llm_enabled=llm_enabled,
+        model_name=model_name,
+        username=username,
+    )
     markdown = render_report_markdown(bundle, report_draft)
     run = bundle["run"]
     record = QuantReportRecord.create(
@@ -315,7 +293,9 @@ def create_report_for_run(run_id: int, report_type: str = "test_report", schedul
         meta_json=json.dumps(
             {
                 "prompt_template_id": (prompt_template or {}).get("id"),
-                "model_name": "template-engine",
+                "model_name": report_draft.get("model_name") or model_name or "template-engine",
+                "llm_status": report_draft.get("llm_status", "disabled"),
+                "report_type": report_type,
                 "model_params": {"mode": "deterministic", "report_type": report_type},
                 "token_budget": bundle.get("token_budget", {}),
                 "generated_at": datetime.now().isoformat(),
@@ -335,6 +315,54 @@ def list_reports(strategy_id: Optional[int] = None, run_id: Optional[int] = None
     if run_id:
         query = query.where(QuantReportRecord.run_id == run_id)
     return [item.to_dict() for item in query.iterator()]
+
+
+def preview_report_for_run(
+    run_id: int,
+    report_type: str = "test_report",
+    *,
+    prompt_template_id: Optional[int] = None,
+    llm_enabled: bool = False,
+    model_name: str = "",
+    username: str = "system",
+) -> dict:
+    """不落库的"报告 IDE"：返回 bundle + draft + markdown + meta，供前端调试 / 预览用。
+
+    与 create_report_for_run 几乎一致，唯一区别是不写 QuantReportRecord。
+    """
+    report_type = normalize_report_type(report_type)
+    strategy_run = _load_strategy_run(run_id)
+    if prompt_template_id is not None:
+        from service.quant.report_prompt_service import get_prompt_template
+        try:
+            prompt_template = get_prompt_template(int(prompt_template_id))
+        except Exception:
+            prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
+    else:
+        prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
+    bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template)
+    report_draft = generate_report_draft(
+        bundle,
+        prompt_template=prompt_template,
+        llm_enabled=llm_enabled,
+        model_name=model_name,
+        username=username,
+    )
+    markdown = render_report_markdown(bundle, report_draft)
+    return {
+        "bundle": bundle,
+        "draft": report_draft,
+        "markdown": markdown,
+        "meta": {
+            "prompt_template_id": (prompt_template or {}).get("id"),
+            "prompt_version": (prompt_template or {}).get("prompt_version", "template-v1"),
+            "model_name": report_draft.get("model_name") or model_name or "template-engine",
+            "llm_status": report_draft.get("llm_status", "disabled"),
+            "report_type": report_type,
+            "run_id": run_id,
+            "strategy_id": int(strategy_run.strategy_id),
+        },
+    }
 
 
 def get_report(report_id: int) -> dict:

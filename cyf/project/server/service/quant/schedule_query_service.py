@@ -96,6 +96,21 @@ def validate_schedule(task_type: str, cron_expr: str, payload: dict):
     if normalized_task_type == TASK_TYPE_ANALYSIS:
         if not payload.get("strategy_ids"):
             raise ValueError("analysis_report 任务至少需要一个 strategy_id")
+        # 可选字段校验
+        prompt_template_id = payload.get("prompt_template_id")
+        if prompt_template_id not in (None, ""):
+            try:
+                int(prompt_template_id)
+            except (TypeError, ValueError):
+                raise ValueError("analysis_report.prompt_template_id 必须是整数")
+        model_name = payload.get("model_name")
+        if model_name is not None and not isinstance(model_name, str):
+            raise ValueError("analysis_report.model_name 必须是字符串")
+        llm_enabled = payload.get("llm_enabled")
+        if llm_enabled is not None and not isinstance(llm_enabled, bool):
+            # 允许字符串 "true"/"false"
+            if str(llm_enabled).strip().lower() not in ("true", "false", "1", "0", "yes", "no", "on", "off"):
+                raise ValueError("analysis_report.llm_enabled 必须是 bool 或对应字符串")
     if normalized_task_type == TASK_TYPE_MEMORY_DIGEST:
         lookback_days = int(payload.get("lookback_days", 120) or 120)
         if lookback_days < 1:

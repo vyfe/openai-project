@@ -21,6 +21,7 @@ import {
   quantTaskAPI
 } from '@/services/quantApi'
 import { formatRate, formatNumber, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl, displaySymbolWithName } from './quant/format'
+import { buildSparklinePaths } from './quant/sparkline'
 
 // 类型定义已抽到 composables/quant/types.ts
 import type {
@@ -410,6 +411,7 @@ function createQuantWorkbench() {
 
   const backtestForm = reactive({
     strategyId: null as number | null,
+    dateRange: ['', ''] as [string, string],
     startDate: '',
     endDate: '',
     topN: 3,
@@ -444,6 +446,9 @@ function createQuantWorkbench() {
     analysisStrategyIds: [] as number[],
     analysisChannelIds: [] as number[],
     analysisSaveAllSignals: true,
+    analysisPromptTemplateId: null as number | null,
+    analysisModelName: '',
+    analysisLlmEnabled: false,
     memorySymbols: [] as string[],
     memoryLookbackDays: 120,
     memoryLimit: 50,
@@ -575,24 +580,19 @@ function createQuantWorkbench() {
     ]
   })
 
-  const backtestCurvePath = computed(() => {
-    const points = selectedBacktest.value?.equity_curve || []
-    if (points.length < 2) return ''
-    const width = 760
-    const height = 220
-    const padding = 18
-    const values = points.map(point => Number(point.net_value) || 0)
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    const span = max - min || 1
-    return points
-      .map((point, index) => {
-        const x = padding + ((width - padding * 2) * index) / Math.max(points.length - 1, 1)
-        const y = padding + ((max - (Number(point.net_value) || 0)) / span) * (height - padding * 2)
-        return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
-      })
-      .join(' ')
+  const backtestCurvePaths = computed(() => {
+    const backtest = selectedBacktest.value
+    if (!backtest) return { strategy: '', benchmark: '', axes: '' }
+    const strategyPoints = (backtest.equity_curve || []) as Array<{ date: string; net_value: number | string }>
+    const benchmarkPoints = (backtest.benchmark_curve || []) as Array<{ date: string; net_value: number | string }>
+    if (strategyPoints.length < 2 && benchmarkPoints.length < 2) {
+      return { strategy: '', benchmark: '', axes: '' }
+    }
+    return buildSparklinePaths(strategyPoints, benchmarkPoints)
   })
+
+  // 向后兼容：保留旧单线 path（取策略线）
+  const backtestCurvePath = computed(() => backtestCurvePaths.value.strategy)
 
 
   const taskStatusTag = (status: string) => {
@@ -845,6 +845,9 @@ function createQuantWorkbench() {
       analysisStrategyIds: selectedStrategyId.value ? [selectedStrategyId.value] : [],
       analysisChannelIds: [],
       analysisSaveAllSignals: true,
+      analysisPromptTemplateId: null,
+      analysisModelName: '',
+      analysisLlmEnabled: false,
       memorySymbols: [],
       memoryLookbackDays: 120,
       memoryLimit: 50,
@@ -892,6 +895,9 @@ function createQuantWorkbench() {
     scheduleForm.analysisStrategyIds = payload.strategy_ids || []
     scheduleForm.analysisChannelIds = payload.channel_ids || []
     scheduleForm.analysisSaveAllSignals = payload.save_all_signals !== false
+    scheduleForm.analysisPromptTemplateId = payload.prompt_template_id ?? null
+    scheduleForm.analysisModelName = payload.model_name || ''
+    scheduleForm.analysisLlmEnabled = payload.llm_enabled === true
     scheduleForm.memorySymbols = payload.symbols || []
     scheduleForm.memoryLookbackDays = payload.lookback_days || 120
     scheduleForm.memoryLimit = payload.limit || 50
@@ -1349,14 +1355,27 @@ function createQuantWorkbench() {
       strategySignals.value = []
       return
     }
+    // 先设置 selectedRunId，避免用户点 row 后立刻点"生成报告"按钮时还在 await
+    selectedRunId.value = finalRunId
     loading.signals = true
     try {
       const response: any = await quantStrategyAPI.signals({ run_id: finalRunId, limit: 300 })
       strategySignals.value = response.data || []
-      selectedRunId.value = finalRunId
     } finally {
       loading.signals = false
     }
+  }
+
+  // 显式 row-click 处理：先设置 selectedRunId（同步同步），再异步加载 signals。
+  // 解决两个 bug：
+  // 1. template 里 $event 是原生 PointerEvent，不能直接拿 row.id — 必须显式接收 row
+  // 2. selectedRunId 必须在 await 之前设置，否则"立刻点生成报告"按钮会拿到 null
+  const handleRunSelect = (row: { id: number } | number | null | undefined) => {
+    if (row == null) return
+    const runId = typeof row === 'number' ? row : row.id
+    if (!runId) return
+    selectedRunId.value = runId
+    void loadSignals(runId)
   }
 
   const loadOperations = async () => {
@@ -1961,7 +1980,10 @@ function createQuantWorkbench() {
     }
   }
 
-  const generateReportFromRun = async (runId?: number | null) => {
+  const generateReportFromRun = async (
+    runId?: number | null,
+    options: { llm_enabled?: boolean; prompt_template_id?: number | null; model_name?: string } = {},
+  ) => {
     const finalRunId = runId || selectedRunId.value
     if (!finalRunId) {
       ElMessage.info('先选中一条策略执行记录')
@@ -1969,7 +1991,13 @@ function createQuantWorkbench() {
     }
     loading.generatingReport = true
     try {
-      const response: any = await quantReportAPI.generate({ run_id: finalRunId, report_type: 'test_report' })
+      const response: any = await quantReportAPI.generate({
+        run_id: finalRunId,
+        report_type: 'test_report',
+        llm_enabled: options.llm_enabled,
+        prompt_template_id: options.prompt_template_id ?? null,
+        model_name: options.model_name,
+      })
       ElMessage.success('测试报告已生成')
       await loadReports()
       if (response.data?.id) await loadReportDetail(response.data.id)
@@ -1980,6 +2008,52 @@ function createQuantWorkbench() {
     } finally {
       loading.generatingReport = false
     }
+  }
+
+  // 不落库的"报告 IDE"预览：返回 bundle + draft + markdown + meta
+  const reportPreview = ref<null | {
+    run_id: number
+    bundle: any
+    draft: any
+    markdown: string
+    meta: { prompt_template_id?: number | null; prompt_version: string; model_name: string; llm_status: string; report_type: string; strategy_id: number }
+  }>(null)
+  const previewReportDraft = async (
+    runId?: number | null,
+    options: { llm_enabled?: boolean; prompt_template_id?: number | null; model_name?: string } = {},
+  ) => {
+    const finalRunId = runId || selectedRunId.value
+    if (!finalRunId) {
+      ElMessage.info('先选中一条策略执行记录')
+      return null
+    }
+    loading.generatingReport = true
+    try {
+      const response: any = await quantReportAPI.preview({
+        run_id: finalRunId,
+        report_type: 'test_report',
+        llm_enabled: options.llm_enabled,
+        prompt_template_id: options.prompt_template_id ?? null,
+        model_name: options.model_name,
+      })
+      reportPreview.value = {
+        run_id: finalRunId,
+        bundle: response.data?.bundle,
+        draft: response.data?.draft,
+        markdown: response.data?.markdown,
+        meta: response.data?.meta,
+      }
+      ElMessage.success('报告预览已生成')
+      return reportPreview.value
+    } catch (error: any) {
+      ElMessage.error(error?.message || '生成报告预览失败')
+      return null
+    } finally {
+      loading.generatingReport = false
+    }
+  }
+  const clearReportPreview = () => {
+    reportPreview.value = null
   }
 
   const curateMemoryNow = async (symbol?: string) => {
@@ -2073,6 +2147,7 @@ function createQuantWorkbench() {
   syncDateRange(dailyQuery)
   syncDateRange(taskForm)
   syncDateRange(backfillForm)
+  syncDateRange(backtestForm)
 
   // 响应式查询：监测 chartCycle / symbol / dateRange / interval 变化，自动触发对应周期查询。
   // 用 nextTick 去重：同一 microtask 内多次触发只执行一次（避免 symbol 同步设置时
@@ -2207,6 +2282,7 @@ function createQuantWorkbench() {
     schedulerCards,
     positionSummaryCards,
     backtestCurvePath,
+    backtestCurvePaths,
     strategyStatusTag,
     taskStatusTag,
     operationStatusTag,
@@ -2261,6 +2337,7 @@ function createQuantWorkbench() {
     loadStrategies,
     loadRuns,
     loadSignals,
+    handleRunSelect,
     loadOperations,
     loadBacktests,
     loadBacktestDetail,
@@ -2292,6 +2369,9 @@ function createQuantWorkbench() {
     savePromptTemplate,
     deleteSelectedPrompt,
     generateReportFromRun,
+    previewReportDraft,
+    reportPreview,
+    clearReportPreview,
     curateMemoryNow,
     bootstrap,
     initialize

@@ -225,8 +225,22 @@ export const quantReportAPI = {
     quantApi.get('/never_guess_my_usage/quant/reports', { params }),
   get: (id: number) =>
     quantApi.get(`/never_guess_my_usage/quant/report/${id}`),
-  generate: (data: { run_id: number; report_type?: string }) =>
-    quantApi.post('/never_guess_my_usage/quant/report/generate', data)
+  generate: (data: {
+    run_id: number
+    report_type?: string
+    llm_enabled?: boolean
+    prompt_template_id?: number | null
+    model_name?: string
+    username?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/report/generate', data),
+  preview: (data: {
+    run_id: number
+    report_type?: string
+    llm_enabled?: boolean
+    prompt_template_id?: number | null
+    model_name?: string
+    username?: string
+  }) => quantApi.post('/never_guess_my_usage/quant/report/preview', data),
 }
 
 export const quantImAPI = {

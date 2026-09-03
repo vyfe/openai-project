@@ -12,7 +12,7 @@ from lark_oapi.api.im.v1 import CreateMessageRequest, CreateMessageRequestBody, 
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 from quant.entities import QuantImInboundEvent, QuantReportDelivery, QuantReportRecord
 from service.quant.im_channel_service import load_channel
-from service.quant.im_helpers import truncate_text
+from service.quant.im_helpers import truncate_markdown, truncate_text
 from service.quant.position_service import list_position_summary
 
 
@@ -42,6 +42,28 @@ def require_feishu_client() -> Client:
 
 def feishu_content_text(content: str) -> str:
     return json.dumps({"text": truncate_text(content)}, ensure_ascii=False)
+
+
+def feishu_content_card(title: str, markdown: str) -> str:
+    """构造飞书 interactive 卡片 content JSON 字符串。
+
+    单一 markdown 元素（飞书 markdown 元素自带 markdown 渲染）。markdown 超过 3800 字会被
+    truncate_markdown 截断，与 im_helpers 既有约定一致。
+    """
+    safe_title = (str(title or "").strip()[:80]) or "量化推送"
+    card = {
+        "config": {"wide_screen_mode": True},
+        "header": {
+            "title": {
+                "tag": "plain_text",
+                "content": safe_title,
+            }
+        },
+        "elements": [
+            {"tag": "markdown", "content": truncate_markdown(markdown, limit=3800)},
+        ],
+    }
+    return json.dumps(card, ensure_ascii=False)
 
 
 def send_feishu_text(channel: dict, content: str) -> dict:
@@ -77,6 +99,49 @@ def send_feishu_text(channel: dict, content: str) -> dict:
         raise ValueError(f"飞书消息发送失败: code={resp.code}, msg={resp.msg}")
     return {
         "message_type": "text",
+        "request_payload": request_payload,
+        "response_payload": {"code": resp.code, "msg": resp.msg, "message_id": resp.data.message_id if resp.data else None},
+    }
+
+
+def send_feishu_card(channel: dict, title: str, markdown: str) -> dict:
+    """走 msg_type='interactive'，飞书会用 markdown 元素渲染。
+
+    markdown 内容上限 3800 字（飞书单元素限制），超出走 truncate_markdown。
+    """
+    config = channel.get("config") or {}
+    receive_id = str(config.get("receive_id") or "").strip()
+    receive_id_type = str(config.get("receive_id_type") or "chat_id").strip()
+    if not receive_id:
+        raise ValueError("飞书通道缺少 receive_id")
+    msg_uuid = str(uuid.uuid4())
+    content_json = feishu_content_card(title, markdown)
+    request_payload = {
+        "receive_id": receive_id,
+        "receive_id_type": receive_id_type,
+        "msg_type": "interactive",
+        "content": content_json,
+        "uuid": msg_uuid,
+    }
+    client = require_feishu_client()
+    req = (
+        CreateMessageRequest.builder()
+        .receive_id_type(receive_id_type)
+        .request_body(
+            CreateMessageRequestBody.builder()
+            .receive_id(receive_id)
+            .msg_type("interactive")
+            .content(content_json)
+            .uuid(msg_uuid)
+            .build()
+        )
+        .build()
+    )
+    resp: CreateMessageResponse = client.im.v1.message.create(req)
+    if resp.code != 0:
+        raise ValueError(f"飞书消息卡片发送失败: code={resp.code}, msg={resp.msg}")
+    return {
+        "message_type": "interactive",
         "request_payload": request_payload,
         "response_payload": {"code": resp.code, "msg": resp.msg, "message_id": resp.data.message_id if resp.data else None},
     }
@@ -156,7 +221,13 @@ def create_delivery_record(*, report_id=None, run_id=None, channel_id=None, chan
     return record.to_dict()
 
 
-def send_channel_content(channel: dict, content: str) -> dict:
+def send_channel_content(channel: dict, content: str, *, title: str = "量化推送", message_type: str = "interactive") -> dict:
+    """统一推送入口。默认 message_type='interactive'，飞书会用 markdown 卡片渲染。
+
+    传 message_type='text' 走纯文本路径（兼容旧行为或机器人命令回复）。
+    """
+    if message_type == "interactive":
+        return send_feishu_card(channel, title=title, markdown=content)
     return send_feishu_text(channel, content)
 
 
@@ -183,8 +254,9 @@ def render_position_summary_markdown(strategy_id: Optional[int] = None, created_
 def send_report_to_channel(report_id: int, *, channel_id: Optional[int] = None) -> dict:
     report = QuantReportRecord.get_by_id(report_id).to_dict()
     channel = load_channel(channel_id=channel_id)
+    title = str(report.get("title") or "量化报告").strip() or "量化报告"
     try:
-        result = send_channel_content(channel, report["final_markdown"])
+        result = send_channel_content(channel, report["final_markdown"], title=title)
         return create_delivery_record(
             report_id=report["id"],
             run_id=report.get("run_id"),
@@ -212,8 +284,9 @@ def send_report_to_channel(report_id: int, *, channel_id: Optional[int] = None) 
 def send_position_summary_to_channel(*, channel_id: Optional[int] = None, strategy_id: Optional[int] = None) -> dict:
     channel = load_channel(channel_id=channel_id)
     content = render_position_summary_markdown(strategy_id=strategy_id)
+    title = f"策略 #{strategy_id} 持仓快照" if strategy_id else "持仓快照"
     try:
-        result = send_channel_content(channel, content)
+        result = send_channel_content(channel, content, title=title)
         return create_delivery_record(
             channel_id=channel["channel_id"],
             channel_type=channel["channel_type"],
@@ -236,7 +309,8 @@ def send_position_summary_to_channel(*, channel_id: Optional[int] = None, strate
 
 def send_test_message(*, content: str, channel_id: Optional[int] = None) -> dict:
     channel = load_channel(channel_id=channel_id)
-    result = send_channel_content(channel, f"# 量化 IM 测试\n\n{str(content or '测试消息').strip()}")
+    body = str(content or "测试消息").strip() or "测试消息"
+    result = send_channel_content(channel, body, title="量化 IM 测试")
     return {
         "channel_id": channel["channel_id"],
         "channel_target": channel["channel_target"],

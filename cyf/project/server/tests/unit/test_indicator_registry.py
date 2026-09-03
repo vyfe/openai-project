@@ -13,7 +13,8 @@ def _all_concrete_output_names():
 def test_all_keys_registered():
     """registry 的 key 与 indicator_service 内部 hard-coded groups 一致。"""
     expected = {"ma", "boll", "macd", "kdj", "td_sequential", "bottom_structure",
-                "vol_ratio", "period_return", "rolling_high_low"}
+                "vol_ratio", "period_return", "rolling_high_low",
+                "rsi", "atr", "obv"}
     assert expected.issubset(set(ireg.all_keys()))
 
 
@@ -53,6 +54,39 @@ def test_concrete_output_names_includes_legacy_set():
         "bottom_divergence",
     }
     assert legacy.issubset(_all_concrete_output_names())
+
+
+def test_new_indicators_rsi_atr_obv_concrete_outputs():
+    """RSI/ATR/OBV 的默认参数展开必须出现在 _INDICATOR_FIELD_NAMES。"""
+    names = _all_concrete_output_names()
+    assert "rsi_14" in names
+    assert "atr_14" in names
+    assert "obv" in names
+
+
+def test_new_indicators_rsi_atr_obv_metadata():
+    """RSI/ATR/OBV 的 base_lookback / category / compute 绑定必须正确。"""
+    rsi = ireg.get_spec("rsi")
+    assert rsi.category == "momentum"
+    assert rsi.base_lookback == 14
+    assert rsi.compute is not None
+
+    atr = ireg.get_spec("atr")
+    assert atr.category == "volatility"
+    assert atr.base_lookback == 14
+    assert atr.compute is not None
+
+    obv = ireg.get_spec("obv")
+    assert obv.category == "volume"
+    assert obv.base_lookback == 2
+    assert obv.compute is not None
+
+
+def test_max_lookback_for_new_indicators():
+    """max_lookback_bars 对 RSI/ATR 必须返回 base_lookback，OBV 返回 2。"""
+    assert isvc.max_lookback_bars(["rsi"]) == 14
+    assert isvc.max_lookback_bars(["atr"]) == 14
+    assert isvc.max_lookback_bars(["obv"]) == 2
 
 
 def test_catalog_payload_shape():

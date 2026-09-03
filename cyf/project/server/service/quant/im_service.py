@@ -10,6 +10,7 @@ from service.quant.im_channel_service import (
 )
 from service.quant.im_delivery_service import (
     create_delivery_record,
+    feishu_content_card,
     get_feishu_client,
     list_delivery_records,
     list_inbound_events,
@@ -17,6 +18,8 @@ from service.quant.im_delivery_service import (
     reply_feishu_text,
     require_feishu_client,
     send_channel_content,
+    send_feishu_card,
+    send_feishu_text,
     send_position_summary_to_channel,
     send_report_to_channel,
     send_test_message,

@@ -386,6 +386,12 @@ def _v2_extract_params_from_expr(expr: str) -> Dict[str, Dict[str, Any]]:
             m = _PARAM_NAME_PATTERNS["rolling_high_low"].match(name)
             if m and "rolling_high_low" not in out:
                 out["rolling_high_low"] = {"window": int(m.group(1))}
+            m = _PARAM_NAME_PATTERNS["rsi"].match(name)
+            if m and "rsi" not in out:
+                out["rsi"] = {"window": int(m.group(1))}
+            m = _PARAM_NAME_PATTERNS["atr"].match(name)
+            if m and "atr" not in out:
+                out["atr"] = {"window": int(m.group(1))}
     return out
 
 
@@ -395,6 +401,8 @@ _PARAM_NAME_PATTERNS = {
     "vol_ratio": _re.compile(r"^vol_ratio_(\d+)$"),
     "period_return": _re.compile(r"^period_return_(\d+)$"),
     "rolling_high_low": _re.compile(r"^rolling_(?:high|low)_(\d+)$"),
+    "rsi": _re.compile(r"^rsi_(\d+)$"),
+    "atr": _re.compile(r"^atr_(\d+)$"),
 }
 
 
@@ -430,6 +438,10 @@ def _v2_resolve_indicator_keys(used_names: set[str]) -> set[str]:
             keys.add("period_return")
         elif name.startswith("rolling_high_") or name.startswith("rolling_low_"):
             keys.add("rolling_high_low")
+        elif name.startswith("rsi_"):
+            keys.add("rsi")
+        elif name.startswith("atr_"):
+            keys.add("atr")
     return keys
 
 

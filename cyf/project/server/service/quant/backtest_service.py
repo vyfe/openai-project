@@ -1,5 +1,4 @@
 import json
-import math
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
@@ -7,6 +6,12 @@ from typing import Optional
 from peewee import fn
 
 from quant.entities import QuantBacktestRun, QuantDailyBar, QuantStrategy
+from service.quant.backtest_curves import (
+    _benchmark_summary,
+    _build_benchmark_curve,
+    _build_equity_curve,
+    _compute_metrics,
+)
 from service.quant.common import normalize_symbol, parse_trade_date
 from service.quant.rule_engine import evaluate_series, get_required_history_size_v2
 from service.quant.rule_migration import migrate_v1_to_v2
@@ -71,53 +76,6 @@ def _load_bars_for_symbol(symbol: str, end_date) -> list[QuantDailyBar]:
         .order_by(QuantDailyBar.trade_date.asc())
     )
     return list(query)
-
-
-def _max_drawdown(curve: list[dict]) -> Optional[float]:
-    peak = None
-    max_drawdown = 0.0
-    for point in curve:
-        net_value = float(point["net_value"])
-        if peak is None or net_value > peak:
-            peak = net_value
-        if peak and peak > 0:
-            drawdown = (net_value - peak) / peak
-            max_drawdown = min(max_drawdown, drawdown)
-    return max_drawdown if curve else None
-
-
-def _sharpe_ratio(returns: list[float], hold_days: int) -> Optional[float]:
-    if len(returns) < 2:
-        return None
-    avg_value = sum(returns) / len(returns)
-    variance = sum((item - avg_value) ** 2 for item in returns) / (len(returns) - 1)
-    std = math.sqrt(variance)
-    if std == 0:
-        return None
-    annual_factor = math.sqrt(252 / max(hold_days, 1))
-    return avg_value / std * annual_factor
-
-
-def _build_equity_curve(initial_capital: float, trades: list[dict], start_date_text: str) -> list[dict]:
-    grouped_returns = defaultdict(list)
-    for trade in trades:
-        grouped_returns[trade["exit_date"]].append(float(trade["net_return"]))
-
-    capital = float(initial_capital)
-    curve = [{"date": start_date_text, "capital": round(capital, 4), "net_value": 1.0}]
-    for exit_date in sorted(grouped_returns):
-        avg_return = sum(grouped_returns[exit_date]) / len(grouped_returns[exit_date])
-        capital *= 1 + avg_return
-        curve.append(
-            {
-                "date": exit_date,
-                "capital": round(capital, 4),
-                "net_value": round(capital / initial_capital, 6),
-                "avg_return": round(avg_return, 6),
-                "closed_trades": len(grouped_returns[exit_date]),
-            }
-        )
-    return curve
 
 
 def _latest_data_version(symbols: list[str], end_date) -> str:
@@ -219,6 +177,11 @@ def run_backtest(
             for result in series_results:
                 if not result.get("passed"):
                     continue
+                # signal_type 决定 long/short 分支（默认 watch 走 long）
+                signal_type = str(result.get("signal_type") or "watch").strip().lower() or "watch"
+                is_short = signal_type == "sell"
+                side = "short" if is_short else "long"
+
                 trade_date = result["metrics"]["trade_date"]
                 if trade_date is None:
                     continue
@@ -234,21 +197,37 @@ def run_backtest(
                 if idx is None:
                     continue
                 candidate_signals_total += 1
-                next_idx = idx + 1
+                entry_idx = idx + 1
                 exit_idx = idx + hold_days
-                if next_idx >= len(bars) or exit_idx >= len(bars):
+                if entry_idx >= len(bars) or exit_idx >= len(bars):
                     skipped_due_to_future += 1
                     continue
 
-                entry_bar = bars[next_idx]
+                entry_bar = bars[entry_idx]
                 exit_bar = bars[exit_idx]
-                entry_price = entry_bar.open_price or entry_bar.close_price
-                exit_price = exit_bar.close_price or exit_bar.open_price
-                if entry_price in (None, 0) or exit_price is None:
-                    skipped_due_to_future += 1
-                    continue
 
-                gross_return = (exit_price - entry_price) / entry_price
+                if is_short:
+                    # 做空：entry_idx 开盘价 = 卖出开仓价；exit_idx 开盘价 = 买回平仓价。
+                    # 价跌为正收益：open_price - cover_price
+                    open_price = entry_bar.open_price or entry_bar.close_price
+                    cover_price = exit_bar.open_price or exit_bar.close_price
+                    if open_price in (None, 0) or cover_price is None:
+                        skipped_due_to_future += 1
+                        continue
+                    gross_return = (open_price - cover_price) / open_price
+                    entry_price = open_price
+                    exit_price = cover_price
+                else:
+                    # 做多（buy / watch）：entry_idx 开盘买入；exit_idx 收盘卖出。
+                    # 价涨为正收益：exit_price - entry_price
+                    entry_price = entry_bar.open_price or entry_bar.close_price
+                    exit_price = exit_bar.close_price or exit_bar.open_price
+                    if entry_price in (None, 0) or exit_price is None:
+                        skipped_due_to_future += 1
+                        continue
+                    gross_return = (exit_price - entry_price) / entry_price
+
+                # 手续费 / 滑点双边：开 + 平（不论 long/short 都是 2 笔交易）
                 net_return = gross_return - (commission_rate + slippage_rate) * 2
                 trades.append(
                     {
@@ -262,6 +241,7 @@ def run_backtest(
                         "net_return": round(net_return, 6),
                         "score": round(float(result["score"]), 4),
                         "signal_type": result["signal_type"],
+                        "side": side,
                         "reasons": result["reasons"],
                         "metrics": result["metrics"],
                     }
@@ -278,38 +258,42 @@ def run_backtest(
             trades.extend(by_date[signal_date][:top_n])
 
         trades.sort(key=lambda item: (item["exit_date"], item["entry_date"], item["symbol"]))
-        returns = [float(item["net_return"]) for item in trades]
         curve = _build_equity_curve(initial_capital, trades, resolved_start_date.isoformat())
         final_capital = curve[-1]["capital"] if curve else initial_capital
-        total_return = (final_capital - initial_capital) / initial_capital if initial_capital else 0.0
+        # 基准 buy & hold 净值曲线（按用户配置的基准标的）
+        benchmark_bars = _load_bars_for_symbol(record.benchmark_symbol, resolved_end_date) if record.benchmark_symbol else []
+        benchmark_curve = (
+            _build_benchmark_curve(benchmark_bars, resolved_start_date.isoformat(), resolved_end_date.isoformat())
+            if benchmark_bars else []
+        )
+        bench_summary = _benchmark_summary(benchmark_curve, commission_rate + slippage_rate)
+        # alpha = 策略净收益 - 基准净收益
+        if bench_summary["benchmark_net_return"] is not None:
+            total_return = (final_capital - initial_capital) / initial_capital if initial_capital else 0.0
+            bench_summary["alpha"] = round(total_return - bench_summary["benchmark_net_return"], 6)
         duration_days = max((resolved_end_date - resolved_start_date).days, 1)
-        annualized_return = None
-        if total_return > -1:
-            annualized_return = (1 + total_return) ** (365 / duration_days) - 1
-        win_count = len([item for item in returns if item > 0])
-        loss_count = len([item for item in returns if item < 0])
-        win_rate = win_count / len(returns) if returns else None
-        avg_return = sum(returns) / len(returns) if returns else None
-        metrics = {
-            "signals_total": candidate_signals_total,
-            "trades_total": len(trades),
-            "win_count": win_count,
-            "loss_count": loss_count,
-            "win_rate": round(win_rate, 6) if win_rate is not None else None,
-            "avg_return": round(avg_return, 6) if avg_return is not None else None,
-            "total_return": round(total_return, 6),
-            "annualized_return": round(annualized_return, 6) if annualized_return is not None else None,
-            "max_drawdown": round(_max_drawdown(curve), 6) if curve else None,
-            "sharpe": round(_sharpe_ratio(returns, hold_days), 6) if returns else None,
-            "final_capital": round(final_capital, 4),
-            "skipped_due_to_future": skipped_due_to_future,
-        }
+        metrics = _compute_metrics(
+            initial_capital=initial_capital,
+            final_capital=final_capital,
+            duration_days=duration_days,
+            hold_days=hold_days,
+            trades=trades,
+            curve=curve,
+            bench_summary=bench_summary,
+        )
+        # 拼接 run 流程相关计数（不在 _compute_metrics 里，因为是 run 控制流数据）
+        metrics["signals_total"] = candidate_signals_total
+        metrics["trades_total"] = len(trades)
+        metrics["skipped_due_to_future"] = skipped_due_to_future
         summary = {
             "strategy_name": strategy.name,
             "mode": "event_study",
             "universe_size": len(resolved_symbols),
             "trade_window": f"{resolved_start_date.isoformat()} ~ {resolved_end_date.isoformat()}",
             "benchmark_symbol": record.benchmark_symbol,
+            "benchmark_gross_return": bench_summary["benchmark_gross_return"],
+            "benchmark_net_return": bench_summary["benchmark_net_return"],
+            "alpha": bench_summary["alpha"],
             "limitations": [
                 "当前回测为轻量事件回测，依赖策略已配置的明确股票池。",
                 "收益曲线按平仓日聚合，不等同于真实逐日持仓净值。",
@@ -323,6 +307,7 @@ def run_backtest(
         record.summary_json = json.dumps(summary, ensure_ascii=False)
         record.metrics_json = json.dumps(metrics, ensure_ascii=False)
         record.equity_curve_json = json.dumps(curve, ensure_ascii=False)
+        record.benchmark_curve_json = json.dumps(benchmark_curve, ensure_ascii=False)
         record.trades_json = json.dumps(trades, ensure_ascii=False)
         record.data_source_version = _latest_data_version(resolved_symbols, resolved_end_date)
         record.finished_at = datetime.now()

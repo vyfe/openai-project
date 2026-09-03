@@ -336,6 +336,142 @@ def compute_rolling_high_low(bars: list, window: int = 20) -> dict[str, list]:
     return {f"rolling_high_{window}": highs, f"rolling_low_{window}": lows}
 
 
+def compute_rsi(bars: list, window: int = 14) -> dict[str, list]:
+    """RSI 相对强弱指标（N 日，Wilder 平滑）。
+
+    返回 {f"rsi_{window}": list[float|None]}，长度 = len(bars)，顺序与 bars 对齐。
+    bars 数不足 window+1 → 全 None；窗口内 avg_loss == 0 → 100.0。
+    方向语义：bars[i] 与 bars[i+1] 的差；引擎统一按调用方传入的顺序消费。
+    第一个能算 RSI 的位置是 first_valid = n - window - 1（最旧先出窗口，
+    从该位置向最新方向递推：每次滑入更靠近 i=0 的"更新"数据）。
+    """
+    n = len(bars)
+    out: list[Optional[float]] = [None] * n
+    if n <= window:
+        return {f"rsi_{window}": out}
+
+    diffs: list[Optional[float]] = [None] * n
+    for i in range(n - 1):
+        cur = getattr(bars[i], "close_price", None)
+        prev = getattr(bars[i + 1], "close_price", None)
+        if cur is None or prev in (None, 0):
+            continue
+        diffs[i] = cur - prev
+
+    gains = [(d if d > 0 else 0.0) if d is not None else None for d in diffs]
+    losses = [(-d if d < 0 else 0.0) if d is not None else None for d in diffs]
+
+    # 第一个能算 RSI 的位置：i 位置需要 diffs[i..i+window-1] 全存在
+    first_valid = n - window - 1
+    if first_valid < 0:
+        return {f"rsi_{window}": out}
+
+    init_gains = [gains[j] for j in range(first_valid, first_valid + window) if gains[j] is not None]
+    init_losses = [losses[j] for j in range(first_valid, first_valid + window) if losses[j] is not None]
+    if not init_gains and not init_losses:
+        return {f"rsi_{window}": out}
+    # 首次均值按有效值数量作分母（兼容 None 边界）；
+    # 之后递推保持 window 不变（Wilder 标准语义）。
+    init_count = max(len(init_gains), len(init_losses), 1)
+    avg_gain = sum(init_gains) / init_count if init_gains else 0.0
+    avg_loss = sum(init_losses) / init_count if init_losses else 0.0
+
+    out[first_valid] = (
+        100.0 if avg_loss == 0 else round(100 - 100 / (1 + avg_gain / avg_loss), 6)
+    )
+
+    # 从 first_valid - 1 向 0 递推（Wilder 平滑：滑入 gains[i]）
+    for i in range(first_valid - 1, -1, -1):
+        g = gains[i] or 0.0
+        l = losses[i] or 0.0
+        avg_gain = (avg_gain * (window - 1) + g) / window
+        avg_loss = (avg_loss * (window - 1) + l) / window
+        out[i] = (
+            100.0 if avg_loss == 0 else round(100 - 100 / (1 + avg_gain / avg_loss), 6)
+        )
+    return {f"rsi_{window}": out}
+
+
+def compute_atr(bars: list, window: int = 14) -> dict[str, list]:
+    """ATR 平均真实波幅（N 日，Wilder 平滑）。
+
+    True Range = max(high-low, |high-prev_close|, |low-prev_close|)。
+    最后一根（最旧）没有 prev_close → 退化为 |high-low|。
+    返回 {f"atr_{window}": list[float|None]}，长度 = len(bars)。
+    第一个能算 ATR 的位置 first_valid = n - window - 1（最旧先出窗口，向最新递推）。
+    """
+    n = len(bars)
+    out: list[Optional[float]] = [None] * n
+    if n < window + 1:
+        return {f"atr_{window}": out}
+
+    tr: list[Optional[float]] = [None] * n
+    for i in range(n - 1):
+        high = getattr(bars[i], "high_price", None)
+        low = getattr(bars[i], "low_price", None)
+        prev_close = getattr(bars[i + 1], "close_price", None)
+        if high is None or low is None:
+            continue
+        hl = high - low
+        candidates: list[float] = [abs(hl)]
+        if prev_close is not None:
+            candidates.append(abs(high - prev_close))
+            candidates.append(abs(low - prev_close))
+        tr[i] = max(candidates)
+    # 最后一根（最旧）退化为 |high-low|
+    if n > 0:
+        last_high = getattr(bars[n - 1], "high_price", None)
+        last_low = getattr(bars[n - 1], "low_price", None)
+        if last_high is not None and last_low is not None:
+            tr[n - 1] = abs(last_high - last_low)
+
+    first_valid = n - window - 1
+    if first_valid < 0:
+        return {f"atr_{window}": out}
+    init_tr = [tr[j] for j in range(first_valid, first_valid + window) if tr[j] is not None]
+    if len(init_tr) < window:
+        return {f"atr_{window}": out}
+    avg = sum(init_tr) / window
+    out[first_valid] = round(avg, 6)
+
+    for i in range(first_valid - 1, -1, -1):
+        prev = tr[i]
+        if prev is None:
+            continue
+        avg = (avg * (window - 1) + prev) / window
+        out[i] = round(avg, 6)
+    return {f"atr_{window}": out}
+
+
+def compute_obv(bars: list) -> dict[str, list]:
+    """OBV 能量潮（无窗口参数）。
+
+    bars[i].close > bars[i+1].close → volume[i 全量累加；反之扣减；相等不加。
+    返回 {"obv": list[float|None]}，长度 = len(bars)；
+    第 0 根（最早）没有 prev_close → None。后续为滚动累计值。
+    """
+    n = len(bars)
+    out: list[Optional[float]] = [None] * n
+    if n < 2:
+        return {"obv": out}
+
+    running = 0.0
+    started = False
+    for i in range(n - 1):
+        cur_close = getattr(bars[i], "close_price", None)
+        prev_close = getattr(bars[i + 1], "close_price", None)
+        vol = getattr(bars[i], "volume", None)
+        if cur_close is None or prev_close is None or vol is None:
+            continue
+        if cur_close > prev_close:
+            running += vol
+        elif cur_close < prev_close:
+            running -= vol
+        out[i] = round(running, 6) if started or running != 0.0 else 0.0
+        started = True
+    return {"obv": out}
+
+
 def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = None, params: Optional[dict] = None) -> dict:
     """无状态纯计算：输入 bars 序列（duck type），返回 {date_str: {indicator_name: value}}。
 
@@ -857,6 +993,31 @@ def _bind_registry() -> None:
             ireg.OutputSpec("rolling_low_{window}", "前{window}日最低", "numeric"),
         ),
         compute=compute_rolling_high_low,
+    ))
+    # ----- 新增指标：RSI / ATR / OBV -----
+    ireg.register(ireg.IndicatorSpec(
+        key="rsi", label="RSI", category="momentum", base_lookback=14,
+        params=(ireg.ParamSpec(
+            "window", "周期(天)", "int", 14, min=2, max=120,
+            help="N 日相对强弱指标（Wilder 平滑）；>70 超买，<30 超卖"
+        ),),
+        outputs=(ireg.OutputSpec("rsi_{window}", "RSI{window}", "numeric"),),
+        compute=compute_rsi,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="atr", label="ATR", category="volatility", base_lookback=14,
+        params=(ireg.ParamSpec(
+            "window", "周期(天)", "int", 14, min=2, max=120,
+            help="N 日平均真实波幅（Wilder 平滑）；用于止损位/仓位规模"
+        ),),
+        outputs=(ireg.OutputSpec("atr_{window}", "ATR{window}", "numeric"),),
+        compute=compute_atr,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="obv", label="OBV", category="volume", base_lookback=2,
+        params=(),
+        outputs=(ireg.OutputSpec("obv", "OBV", "numeric"),),
+        compute=compute_obv,
     ))
 
 
