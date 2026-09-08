@@ -102,6 +102,7 @@
           :kdj-series="(workbench.kdjSeries as any)"
           :td-marks="(workbench.tdMarks as any)"
           :bottom-signals="(workbench.bottomSignals as any)"
+          :top-signals="(workbench.topSignals as any)"
           height="540px"
         />
         <el-empty v-else :description="emptyDescription" />

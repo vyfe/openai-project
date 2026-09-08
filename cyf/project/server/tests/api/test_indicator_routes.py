@@ -150,6 +150,18 @@ class TestComputeIndicatorsEndpoint:
         non_empty_rows = [row for row in data["data"]["results"].values() if row]
         assert any("td_buy_setup" in row or "td_sell_setup" in row for row in non_empty_rows)
 
+    def test_compute_top_structure_only(self, auth_client):
+        """indicator_names=["top_structure"] 时，results 只含 top_divergence 字段。"""
+        resp = auth_client.post(
+            "/never_guess_my_usage/quant/data/indicators/compute",
+            json={"bars": _build_bars(60), "indicator_names": ["top_structure"]},
+        )
+        data = resp.get_json()
+        assert data["success"] is True
+        non_empty_rows = [row for row in data["data"]["results"].values() if row]
+        for row in non_empty_rows:
+            assert set(row.keys()).issubset({"top_divergence", "td_signal"})
+
     def test_compute_custom_params(self, auth_client):
         resp = auth_client.post(
             "/never_guess_my_usage/quant/data/indicators/compute",

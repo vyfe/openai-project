@@ -432,6 +432,8 @@ def _v2_resolve_indicator_keys(used_names: set[str]) -> set[str]:
             keys.add("td_sequential")
         elif name == "bottom_divergence":
             keys.add("bottom_structure")
+        elif name == "top_divergence":
+            keys.add("top_structure")
         elif name.startswith("vol_ratio_"):
             keys.add("vol_ratio")
         elif name.startswith("period_return_"):

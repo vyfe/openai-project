@@ -147,11 +147,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Delete, MagicStick, Plus } from '@element-plus/icons-vue'
 import ExpressionInput from './ExpressionInput.vue'
-import { quantStrategyAPI } from '@/services/quantApi'
-import type { ExpressionMeta, RuleV2 } from '@/composables/quant/strategyIdeTypes'
+import { quantMetaAPI, quantStrategyAPI } from '@/services/quantApi'
+import type { ExpressionMeta, IndicatorSpec, RuleV2 } from '@/composables/quant/strategyIdeTypes'
 
 type DryRunRuleResult = { id: string; label: string; passed: boolean; value: any }
 
@@ -201,6 +201,18 @@ const thresholdValue = ref<number | undefined>(undefined)
 const aiPrompt = ref('')
 const aiLoading = ref(false)
 const aiError = ref('')
+// 缓存指标 catalog（来自 /quant/meta/indicators），用于动态把已启用的 output 名
+// 反推成 registry key 喂给 LLM。避免硬编码前缀白名单遗漏新指标（如 top_divergence）。
+const indicatorCatalog = ref<IndicatorSpec[]>([])
+
+onMounted(async () => {
+  try {
+    const res: any = await quantMetaAPI.indicators()
+    if (res?.data) indicatorCatalog.value = res.data as IndicatorSpec[]
+  } catch {
+    // catalog 拉取失败也不阻塞 AI 生成；onAiGenerate 会回退到宽松匹配
+  }
+})
 
 async function onAiGenerate() {
   const desc = aiPrompt.value.trim()
@@ -211,11 +223,28 @@ async function onAiGenerate() {
   aiError.value = ''
   aiLoading.value = true
   try {
-    const indicatorKeys = (props.indicatorOutputs || []).filter(k =>
-      // 把用户已启用的输出名映射回 key（粗略：保留 prefix 推断）
-      ['ma_', 'macd_', 'kdj_', 'boll_', 'td_', 'bottom_divergence',
-       'vol_ratio_', 'period_return_', 'rolling_high_', 'rolling_low_'].some(p => k.startsWith(p))
-    )
+    // 动态从 catalog 反推：把 indicatorOutputs（已展开的具体名，如 rsi_14 / top_divergence）
+    // 反向匹配到所属 registry key（rsi / top_structure），确保 LLM 拿到的指标列表
+    // 永远跟后端 schema 同步。
+    const indicatorKeys = new Set<string>()
+    const outputs = props.indicatorOutputs || []
+    if (indicatorCatalog.value.length > 0) {
+      for (const outName of outputs) {
+        for (const spec of indicatorCatalog.value) {
+          // output 名可能是字面量（top_divergence）或已被上层展开的具体名（rsi_14）。
+          // spec.outputs 里既含模板也含字面量，对字面量做 === 比对即可命中。
+          if (spec.outputs.some(o => !o.name.includes('{') && o.name === outName)) {
+            indicatorKeys.add(spec.key)
+            break
+          }
+        }
+      }
+    }
+    // catalog 缺失或输出名未被任何 spec 覆盖时，把 indicatorOutputs 原样回传
+    // —— 后端 _v2_resolve_indicator_keys 会按字面 / 前缀再次解析，最坏情况是空集合。
+    if (indicatorKeys.size === 0) {
+      for (const outName of outputs) indicatorKeys.add(outName)
+    }
     const res: any = await quantStrategyAPI.llmGenerateExpr({
       description: desc,
       indicator_keys: indicatorKeys,

@@ -31,7 +31,14 @@ BOTTOM_STRUCTURE_PARAMS = {
     "min_consecutive": 2,
 }
 
-SUPPORTED_INDICATOR_GROUPS = ("ma", "boll", "macd", "kdj", "td_sequential", "bottom_structure")
+TOP_STRUCTURE_PARAMS = {
+    "lookback": 30,
+    "min_consecutive": 2,
+}
+
+SUPPORTED_INDICATOR_GROUPS = (
+    "ma", "boll", "macd", "kdj", "td_sequential", "bottom_structure", "top_structure",
+)
 
 # 各指标在请求周期下的最少前置 K 线根数。
 # 调用方自行按 interval 换算成日历天 / 分钟数再去拉数据；这里只表达"算这个指标至少需要多少根 bar"。
@@ -42,6 +49,7 @@ INDICATOR_BASE_LOOKBACK = {
     "kdj": 9,              # n 默认 9
     "td_sequential": 9,    # max_setup=9
     "bottom_structure": 30,
+    "top_structure": 30,
 }
 
 
@@ -196,6 +204,8 @@ def _name_matches_group(name: str, groups: Iterable[str]) -> bool:
         if token == "td_sequential" and lowered.startswith("td_"):
             return True
         if token == "bottom_structure" and lowered == "bottom_divergence":
+            return True
+        if token == "top_structure" and lowered == "top_divergence":
             return True
         if token == lowered:
             return True
@@ -475,8 +485,8 @@ def compute_obv(bars: list) -> dict[str, list]:
 def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = None, params: Optional[dict] = None) -> dict:
     """无状态纯计算：输入 bars 序列（duck type），返回 {date_str: {indicator_name: value}}。
 
-    indicator_names: None 表示返回全部默认指标（MA/BOLL/MACD/KDJ/TD/底部结构）；
-                     可传组名（"ma"/"macd"/"kdj"/"boll"/"td_sequential"/"bottom_structure"）
+    indicator_names: None 表示返回全部默认指标（MA/BOLL/MACD/KDJ/TD/底部结构/顶部结构）；
+                     可传组名（"ma"/"macd"/"kdj"/"boll"/"td_sequential"/"bottom_structure"/"top_structure"）
                      或具体字段名（"ma_5"/"macd_dif"/...）混合过滤
     params: 可覆盖默认窗口（ma_windows / boll_window / macd / kdj）
     """
@@ -484,8 +494,12 @@ def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = No
         return {}
     bars = _ordered_bars(bars)
     snapshots = _compute_indicator_snapshot(bars, params=params)
+    # 复用 snapshots 已算出的 DIF 序列给底/顶结构函数，避免它们各自再跑一次
+    # _compute_indicator_snapshot 引起的 O(N²) 重复计算。
+    dif_series = [snap["value"].get("macd_dif") for snap in snapshots]
     td_snapshot = compute_td_sequential(bars)
-    bottom_snapshot = compute_bottom_structure(bars)
+    bottom_snapshot = compute_bottom_structure(bars, macd_dif_series=dif_series)
+    top_snapshot = compute_top_structure(bars, macd_dif_series=dif_series)
 
     name_filter = [str(n).lower() for n in indicator_names] if indicator_names else None
     result: dict = {}
@@ -511,6 +525,12 @@ def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = No
                 row["bottom_divergence"] = True
                 if not row.get("td_signal") and bot_row.get("td_signal"):
                     row["td_signal"] = bot_row["td_signal"]
+        top_row = top_snapshot.get(date_key, {})
+        if top_row.get("top_divergence"):
+            if name_filter is None or "top_structure" in name_filter or "top_divergence" in name_filter:
+                row["top_divergence"] = True
+                if not row.get("td_signal") and top_row.get("td_signal"):
+                    row["td_signal"] = top_row["td_signal"]
         result[date_key] = row
     return result
 
@@ -557,10 +577,10 @@ def compute_td_sequential(
         buy_setup_just_completed = False
         sell_setup_just_completed = False
 
-        # Buy setup：条件不满足时只重置当前 setup，已开始的 countdown 不回退。
+        # Buy setup：条件不满足时只重置当前 setup 计数；setup 一旦完成就锁定，
+        # 避免后续「条件不满足」的 bar 把已完成状态错误回退（countdown 会乱）。
         if i < lookback_setup or bar_close is None or ref_close is None or bar_close >= ref_close:
             buy_setup = 0
-            buy_setup_completed = False
         elif not buy_setup_completed:
             buy_setup = min(buy_setup + 1, max_setup)
             if buy_setup == max_setup:
@@ -584,14 +604,14 @@ def compute_td_sequential(
             if buy_countdown == max_countdown:
                 signal = signal or "buy_countdown_complete"
                 buy_countdown_active = False
+                buy_countdown = 0
 
         row["td_buy_setup"] = buy_setup if buy_setup > 0 and (not buy_setup_completed or buy_setup_just_completed) else None
         row["td_buy_countdown"] = buy_countdown if buy_countdown > 0 else None
 
-        # Sell setup：与 buy setup 对称。
+        # Sell setup：与 buy setup 对称（已完成则锁定，不被后续条件不满足的 bar 重置）。
         if i < lookback_setup or bar_close is None or ref_close is None or bar_close <= ref_close:
             sell_setup = 0
-            sell_setup_completed = False
         elif not sell_setup_completed:
             sell_setup = min(sell_setup + 1, max_setup)
             if sell_setup == max_setup:
@@ -615,6 +635,7 @@ def compute_td_sequential(
             if sell_countdown == max_countdown:
                 signal = signal or "sell_countdown_complete"
                 sell_countdown_active = False
+                sell_countdown = 0
 
         row["td_sell_setup"] = sell_setup if sell_setup > 0 and (not sell_setup_completed or sell_setup_just_completed) else None
         row["td_sell_countdown"] = sell_countdown if sell_countdown > 0 else None
@@ -667,9 +688,70 @@ def compute_bottom_structure(
                 dif_now = dif_map.get(_date_key(bar.trade_date))
                 if dif_now is not None and bar_low <= price_low and dif_now > dif_low:
                     consecutive += 1
+                    # 只在连续段的「第一根」标 True：上一根已标则跳过，避免前端画重复三角。
                     if consecutive >= min_consecutive:
-                        row["bottom_divergence"] = True
-                        row["td_signal"] = "bottom_divergence"
+                        prev_key = _date_key(bars[i - 1].trade_date) if i > 0 else None
+                        prev_flagged = bool(prev_key and result.get(prev_key, {}).get("bottom_divergence"))
+                        if not prev_flagged:
+                            row["bottom_divergence"] = True
+                            row["td_signal"] = "bottom_divergence"
+                else:
+                    consecutive = 0
+
+        result[_date_key(bar.trade_date)] = row
+
+    return result
+
+
+def compute_top_structure(
+    bars: list,
+    macd_dif_series: Optional[list] = None,
+    lookback: int = TOP_STRUCTURE_PARAMS["lookback"],
+    min_consecutive: int = TOP_STRUCTURE_PARAMS["min_consecutive"],
+) -> dict:
+    """顶部结构（最简实现：MACD 顶背离）。
+
+    与 compute_bottom_structure 对称：
+    - 价格创新高：bars[i].high_price 是 [i-lookback, i) 区间的最高
+    - DIF 未创新高：macd_dif_series[i] 低于该区间最高
+    - 连续 >= min_consecutive 根，**段首只标一次**
+
+    返回 {date_str: {top_divergence: bool, td_signal: "top_divergence" or None}}
+    """
+    if not bars:
+        return {}
+
+    bars = _ordered_bars(bars)
+    dif_map: dict = {}
+    if macd_dif_series is None:
+        snapshot = _compute_indicator_snapshot(bars, params={"ma_windows": [], "boll_window": 20})
+        dif_map = {_date_key(item["bar"].trade_date): item["value"].get("macd_dif") for item in snapshot}
+    else:
+        for bar, val in zip(bars, macd_dif_series):
+            dif_map[_date_key(bar.trade_date)] = val
+
+    result: dict = {}
+    consecutive = 0
+    for i, bar in enumerate(bars):
+        row = {"top_divergence": False, "td_signal": None}
+        bar_high = getattr(bar, "high_price", None)
+        if i >= lookback and bar_high is not None:
+            price_window = [bars[j].high_price for j in range(i - lookback, i) if bars[j].high_price is not None]
+            dif_window = [dif_map.get(_date_key(bars[j].trade_date)) for j in range(i - lookback, i)]
+            dif_window = [v for v in dif_window if v is not None]
+            if price_window and dif_window:
+                price_high = max(price_window)
+                dif_high = max(dif_window)
+                dif_now = dif_map.get(_date_key(bar.trade_date))
+                if dif_now is not None and bar_high >= price_high and dif_now < dif_high:
+                    consecutive += 1
+                    # 段首只标一次：上一根已标则跳过，避免前端画重复三角。
+                    if consecutive >= min_consecutive:
+                        prev_key = _date_key(bars[i - 1].trade_date) if i > 0 else None
+                        prev_flagged = bool(prev_key and result.get(prev_key, {}).get("top_divergence"))
+                        if not prev_flagged:
+                            row["top_divergence"] = True
+                            row["td_signal"] = "top_divergence"
                 else:
                     consecutive = 0
 
@@ -812,6 +894,38 @@ def _bottom_records_for_symbol(symbol: str, adjust_flag: str, bars: list[QuantDa
     return records
 
 
+def _top_records_for_symbol(symbol: str, adjust_flag: str, bars: list[QuantDailyBar]) -> list[dict]:
+    top_results = compute_top_structure(bars)
+    if not top_results:
+        return []
+    bar_index = {id(bar): idx + 1 for idx, bar in enumerate(bars)}
+    records = []
+    for bar in bars:
+        date_key = _date_key(bar.trade_date)
+        row = top_results.get(date_key)
+        if not row or not row.get("top_divergence"):
+            continue
+        records.append(
+            {
+                "symbol": bar.symbol,
+                "code": bar.code,
+                "exchange": bar.exchange,
+                "trade_date": bar.trade_date,
+                "adjust_flag": adjust_flag,
+                "indicator_name": "top_divergence",
+                "indicator_version": INDICATOR_SET_VERSION,
+                "params_json": json.dumps(TOP_STRUCTURE_PARAMS, ensure_ascii=False),
+                "value_json": json.dumps({"value": True}, ensure_ascii=False),
+                "source_bar_count": bar_index.get(id(bar), 0),
+                "source_run_id": bar.source_run_id or "",
+                "data_source_version": bar.data_source_version or "",
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+            }
+        )
+    return records
+
+
 def upsert_daily_indicators(
     symbols: list[str],
     adjust_flag: str = "qfq",
@@ -820,7 +934,7 @@ def upsert_daily_indicators(
 ) -> dict:
     """批量写入 QuantDailyIndicator 表。
 
-    indicator_names: 可选过滤（白名单）；None = 全部指标组（MA/BOLL/MACD/KDJ/TD/底部结构）
+    indicator_names: 可选过滤（白名单）；None = 全部指标组（MA/BOLL/MACD/KDJ/TD/底部结构/顶部结构）
     """
     if not symbols:
         return {"symbols": [], "records": 0}
@@ -829,6 +943,7 @@ def upsert_daily_indicators(
     wants_basic = group_filter is None or bool({"ma", "boll", "macd", "kdj"} & {g.lower() for g in group_filter})
     wants_td = group_filter is None or "td_sequential" in {g.lower() for g in group_filter}
     wants_bottom = group_filter is None or "bottom_structure" in {g.lower() for g in group_filter}
+    wants_top = group_filter is None or "top_structure" in {g.lower() for g in group_filter}
 
     all_records: list[dict] = []
     for symbol in symbols:
@@ -841,6 +956,8 @@ def upsert_daily_indicators(
             all_records.extend(_td_records_for_symbol(symbol, adjust_flag, bars))
         if wants_bottom:
             all_records.extend(_bottom_records_for_symbol(symbol, adjust_flag, bars))
+        if wants_top:
+            all_records.extend(_top_records_for_symbol(symbol, adjust_flag, bars))
 
     if not all_records:
         return {"symbols": symbols, "records": 0}
@@ -957,11 +1074,18 @@ def _bind_registry() -> None:
         compute=None,
     ))
     ireg.register(ireg.IndicatorSpec(
-        key="bottom_structure", label="底背离", category="structure",
+        key="bottom_structure", label="MACD 底背离", category="structure",
         base_lookback=30,
         params=(),
         outputs=(ireg.OutputSpec("bottom_divergence", "底背离信号", "bool"),),
         compute=None,
+    ))
+    ireg.register(ireg.IndicatorSpec(
+        key="top_structure", label="MACD 顶背离", category="structure",
+        base_lookback=30,
+        params=(),
+        outputs=(ireg.OutputSpec("top_divergence", "顶背离信号", "bool"),),
+        compute=compute_top_structure,
     ))
     # ----- 以下为策略 IDE 新增指标：从 rule_engine 私算的逻辑升格而来 -----
     ireg.register(ireg.IndicatorSpec(

@@ -12,7 +12,7 @@ def _all_concrete_output_names():
 
 def test_all_keys_registered():
     """registry 的 key 与 indicator_service 内部 hard-coded groups 一致。"""
-    expected = {"ma", "boll", "macd", "kdj", "td_sequential", "bottom_structure",
+    expected = {"ma", "boll", "macd", "kdj", "td_sequential", "bottom_structure", "top_structure",
                 "vol_ratio", "period_return", "rolling_high_low",
                 "rsi", "atr", "obv"}
     assert expected.issubset(set(ireg.all_keys()))
@@ -26,6 +26,7 @@ def test_base_lookback_matches_legacy():
     assert ireg.get_spec("kdj").base_lookback == 9
     assert ireg.get_spec("td_sequential").base_lookback == 9
     assert ireg.get_spec("bottom_structure").base_lookback == 30
+    assert ireg.get_spec("top_structure").base_lookback == 30
 
 
 def test_max_lookback_unchanged_for_known_groups():
@@ -52,8 +53,20 @@ def test_concrete_output_names_includes_legacy_set():
         "td_buy_setup", "td_buy_countdown",
         "td_sell_setup", "td_sell_countdown", "td_signal",
         "bottom_divergence",
+        "top_divergence",
     }
     assert legacy.issubset(_all_concrete_output_names())
+
+
+def test_top_structure_metadata():
+    """top_structure 元数据：key/label/category/base_lookback/compute 绑定齐全。"""
+    spec = ireg.get_spec("top_structure")
+    assert spec.key == "top_structure"
+    assert spec.category == "structure"
+    assert spec.base_lookback == 30
+    assert spec.compute is not None
+    out_names = {o.name for o in spec.outputs}
+    assert "top_divergence" in out_names
 
 
 def test_new_indicators_rsi_atr_obv_concrete_outputs():

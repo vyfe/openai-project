@@ -105,6 +105,8 @@ def compute_<name>(bars: list, **params) -> dict[str, list]:
 | `compute_rsi` | `indicator_service.py` | ~45 行 | `rsi_{window}` | Wilder 平滑；首期均值按有效值数作分母（兼容 None 边界） |
 | `compute_atr` | `indicator_service.py` | ~50 行 | `atr_{window}` | True Range；最旧 bar 退化为 `\|high-low\|` |
 | `compute_obv` | `indicator_service.py` | ~25 行 | `obv` | 累计能量潮；无参数 |
+| `compute_bottom_structure` | `indicator_service.py` | ~50 行 | `bottom_divergence` (bool) | MACD 底背离；连续段首根标一次（避免重复标记） |
+| `compute_top_structure` | `indicator_service.py` | ~50 行 | `top_divergence` (bool) | MACD 顶背离；与底背离对称（价格新高 + DIF 未新高）；连续段首根标一次 |
 
 ### 2.3 必须遵守的不变量
 

@@ -349,3 +349,36 @@ class TestObvExpression:
         """OBV 没有参数，history size 应取 base_lookback=2。"""
         cfg = {"version": 2, "rules": [{"id": "r1", "expr": "obv > 0", "weight": 1}]}
         assert get_required_history_size_v2(cfg) == 2
+
+
+class TestTopDivergenceExpression:
+    def _build_history(self, n: int):
+        """绕过 _make_history 的日期越界，自行构造 bars（新→旧）。"""
+        import datetime as _dt
+        from tests.unit.test_rule_engine import MockBar
+        bars = [
+            MockBar(
+                trade_date=_dt.date(2025, 6, 1) + _dt.timedelta(days=i),
+                close_price=12.0 + i * 0.1,
+                high_price=12.0 + i * 0.1 + 0.5,
+                low_price=12.0 + i * 0.1 - 0.5,
+            )
+            for i in range(n)
+        ]
+        bars.reverse()
+        return bars
+
+    def test_top_divergence_evaluates_through_registry(self):
+        bars = self._build_history(60)
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "top_divergence == true", "weight": 1}]}
+        # 不抛异常；每根 bar 都有 rule metrics
+        out = evaluate_series(cfg, bars)
+        assert len(out) == 60
+        for r in out:
+            m = r["metrics"]["rules"][0]["metrics"]
+            assert "value" in m or "error" in m
+
+    def test_top_divergence_history_size(self):
+        """top_structure base_lookback=30；引用 top_divergence 时应取 30。"""
+        cfg = {"version": 2, "rules": [{"id": "r1", "expr": "top_divergence == true", "weight": 1}]}
+        assert get_required_history_size_v2(cfg) == 30

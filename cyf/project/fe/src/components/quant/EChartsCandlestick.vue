@@ -72,6 +72,10 @@ export interface BottomSignal {
   date: string
   type: 'divergence'
 }
+export interface TopSignal {
+  date: string
+  type: 'divergence'
+}
 
 const props = withDefaults(
   defineProps<{
@@ -100,10 +104,12 @@ const props = withDefaults(
     tdMarks?: TdMark[]
     /** 底部结构信号（含底背离等） */
     bottomSignals?: BottomSignal[]
+    /** 顶部结构信号（含顶背离等） */
+    topSignals?: TopSignal[]
   }>(),
   { symbol: '', isDark: false, height: '540px', frequency: '1d', mainIndicator: 'ma', subIndicator: 'macd', displayLimit: Infinity,
     maSeries: () => [], bollSeries: () => [], macdSeries: () => [],
-    kdjSeries: () => [], tdMarks: () => [], bottomSignals: () => [] }
+    kdjSeries: () => [], tdMarks: () => [], bottomSignals: () => [], topSignals: () => [] }
 )
 
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -254,6 +260,32 @@ const bottomScatterData = computed(() => {
   return out
 })
 
+// 顶部结构 scatter 数据（绿色向下三角，叠加在主图高点上方）
+const topScatterData = computed(() => {
+  if (!props.topSignals || props.topSignals.length === 0) return []
+  const dateToIdx = new Map<string, number>()
+  sortedBars.value.forEach((b, i) => dateToIdx.set(_barKey(b), i))
+  const offset = sortedBars.value.length - displayBars.value.length
+  const out: any[] = []
+  for (const s of props.topSignals) {
+    const sortedIdx = dateToIdx.get(s.date)
+    if (sortedIdx === undefined) continue
+    const displayIdx = sortedIdx - offset
+    if (displayIdx < 0 || displayIdx >= displayBars.value.length) continue
+    const bar = displayBars.value[displayIdx]
+    if (!bar?.high_price) continue
+    out.push({
+      name: s.date,
+      value: [displayIdx, bar.high_price * 1.03],
+      symbol: 'triangle',
+      symbolRotate: 180,
+      symbolSize: 12,
+      itemStyle: { color: '#14b143' },
+    })
+  }
+  return out
+})
+
 const baseOption = computed(() => {
   const axis = props.isDark ? '#cbd5e1' : '#1f2937'
   const split = props.isDark ? '#334155' : '#e5e7eb'
@@ -353,6 +385,15 @@ const baseOption = computed(() => {
       itemStyle: { color: '#f59e0b' },
     })
   }
+  // 顶部结构 scatter（叠加在主图）
+  if (topScatterData.value.length > 0) {
+    series.push({
+      name: '顶部背离', type: 'scatter', data: topScatterData.value,
+      xAxisIndex: 0, yAxisIndex: 0,
+      symbol: 'triangle', symbolRotate: 180, symbolSize: 12,
+      itemStyle: { color: '#14b143' },
+    })
+  }
 
   return {
     backgroundColor: 'transparent',
@@ -404,8 +445,13 @@ const baseOption = computed(() => {
             lines.push(`KDJ ${name} <b>${typeof p.data === 'number' ? p.data.toFixed(2) : p.data}</b>`)
           } else if (name === '底部背离') {
             lines.push(`<span style="color:#f59e0b">▲ 底部背离</span>`)
-          } else if (p.seriesType === 'candlestick' && p.data && p.data.value && typeof p.data.value === 'object') {
-            // TD markPoint data has coord + value (the number)
+          } else if (name === '顶部背离') {
+            lines.push(`<span style="color:#14b143">▼ 顶部背离</span>`)
+          } else if (p.seriesType === 'candlestick' && p.data && typeof p.data.name === 'string' && /^\d+$/.test(p.data.name)) {
+            // TD markPoint 的 name 是数字串（1-9 setup / 13 countdown），输出可读 tooltip。
+            const n = Number(p.data.name)
+            const tag = n === 13 ? '九转 · 计数完成' : '九转 · 计数中'
+            lines.push(`<span style="color:#0f172a">【${tag}】${n}</span>`)
           }
         }
         return lines.join('<br/>')
@@ -452,6 +498,7 @@ watch(() => [
   props.kdjSeries,
   props.tdMarks,
   props.bottomSignals,
+  props.topSignals,
   props.mainIndicator,
   props.subIndicator,
   props.isDark,

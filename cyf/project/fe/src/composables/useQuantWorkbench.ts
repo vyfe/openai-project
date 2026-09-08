@@ -227,7 +227,7 @@ function createQuantWorkbench() {
           start_date,
           end_date,
           interval,
-          indicator_names: ['ma', 'boll', 'macd', 'kdj', 'td_sequential', 'bottom_structure'],
+          indicator_names: ['ma', 'boll', 'macd', 'kdj', 'td_sequential', 'bottom_structure', 'top_structure'],
         }
         if (interval === 'minute') {
           payload.start_datetime = minuteQuery.startDatetime || `${start_date} 00:00:00`
@@ -342,6 +342,20 @@ function createQuantWorkbench() {
       const date = _barDateKey(b)
       const row = map[date]
       if (row?.bottom_divergence) {
+        out.push({ date, type: 'divergence' })
+      }
+    }
+    return out
+  })
+
+  const topSignals = computed(() => {
+    const bars = currentBars.value || []
+    const map = indicatorState.result
+    const out: Array<{ date: string; type: 'divergence' }> = []
+    for (const b of bars) {
+      const date = _barDateKey(b)
+      const row = map[date]
+      if (row?.top_divergence) {
         out.push({ date, type: 'divergence' })
       }
     }
@@ -2210,6 +2224,7 @@ function createQuantWorkbench() {
     kdjSeries,
     tdMarks,
     bottomSignals,
+    topSignals,
     computeIndicatorsForCurrentBars,
     strategies,
     strategyRuns,
