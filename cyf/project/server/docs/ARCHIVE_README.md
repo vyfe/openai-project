@@ -15,12 +15,24 @@
 
 ## 数据恢复
 
-若需要从旧归档恢复，可使用 `sqlite3` 直接读取 `backup/logs-YYYYMMDD.db`：
+若需要从旧归档恢复，可使用 `sqlite3` 的 ATTACH 机制把 `backup/logs-YYYYMMDD.db` 挂到主库后写入：
 
 ```bash
-sqlite3 backup/logs-20240201.db ".dump" > backup_data.sql
-sqlite3 logs.db < backup_data.sql
+# 1. 干跑：只看有多少条会被恢复（不会写入）
+sqlite3 logs.db "ATTACH './backup/logs-YYYYMMDD.db' AS bak; \
+  SELECT 'log 待恢复:', COUNT(*) FROM bak.log WHERE id NOT IN (SELECT id FROM main.log); \
+  SELECT 'dialog 待恢复:', COUNT(*) FROM bak.dialog \
+    WHERE (username,chattype,dialog_name) NOT IN (SELECT username,chattype,dialog_name FROM main.dialog); \
+  DETACH bak;"
+
+# 2. 实际恢复。INSERT OR IGNORE 命中 dialog 唯一索引时静默跳过，避免重复。
+sqlite3 logs.db "ATTACH './backup/logs-YYYYMMDD.db' AS bak; \
+  INSERT OR IGNORE INTO log SELECT * FROM bak.log; \
+  INSERT OR IGNORE INTO dialog SELECT * FROM bak.dialog; \
+  DETACH bak;"
 ```
+
+> **不要用 `.dump` 路径**：`sqlite3 backup/logs-*.db ".dump" | sqlite3 logs.db` 会因主库已有同名表 / 唯一索引 `dialog_username_chattype_dialog_name` 而报 `Parse error near line N: index ... already exists`。ATTACH 方案绕开了 schema 重建，直接走 INSERT + 索引去重。
 
 ## 替换为新归档
 

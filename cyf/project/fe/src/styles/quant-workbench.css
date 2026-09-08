@@ -1,3 +1,8 @@
+/* 净值曲线 / 折线图专用样式（从 quant-workbench.css 拆出，2026-09-03 重构）
+ * @import 必须放在最前面，PostCSS 规范要求先于其他规则。
+ */
+@import './quant-sparkline.css';
+
 .quant-page {
   --q-bg: #eef2f3;
   --q-surface: #fbfcfc;
@@ -1275,7 +1280,4 @@
     grid-template-columns: 1fr;
   }
 }
-
-/* 净值曲线 / 折线图专用样式（从 quant-workbench.css 拆出，2026-09-03 重构） */
-@import './quant-sparkline.css';
 
