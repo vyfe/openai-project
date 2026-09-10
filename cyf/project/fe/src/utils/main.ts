@@ -14,6 +14,7 @@ export interface FormData {
     dialogTitle: string;
     dialogHistory: any[];
     loadingHistory: boolean;
+    historyDaysRange: number | null;
     isLoading: boolean;
     contextTotalTokens: number;
     models: Array<{ group: string, label: string, value: string, recommend?: boolean, allow_net?: boolean, model_desc?: string, model_type?: number }>;

@@ -181,7 +181,7 @@ export const chatAPI = {
     return api.post('/never_guess_my_usage/split_pic', data)
   },
 
-  getDialogHistory: () => api.post('/never_guess_my_usage/split_his', {}),
+  getDialogHistory: (days?: number | null) => api.post('/never_guess_my_usage/split_his', { days: days ?? null }),
 
   getDialogContent: (dialogId: number) => api.post('/never_guess_my_usage/split_his_content', { dialogId }),
 

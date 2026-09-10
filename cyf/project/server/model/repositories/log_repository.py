@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Optional
 
 from peewee import DoesNotExist
 
@@ -24,12 +25,13 @@ def set_dialog(user: str, model: str, chattype: str, dialog_name: str, context: 
     ).execute()
 
 
-def get_dialog_list(user: str, start_date: date):
-    query = (
-        Dialog.select(Dialog.id, Dialog.username, Dialog.chattype, Dialog.modelname, Dialog.dialog_name, Dialog.start_date)
-        .where(Dialog.username == user, Dialog.start_date >= start_date)
-        .order_by(Dialog.id.desc())
-    )
+def get_dialog_list(user: str, start_date: Optional[date] = None):
+    query = Dialog.select(
+        Dialog.id, Dialog.username, Dialog.chattype, Dialog.modelname, Dialog.dialog_name, Dialog.start_date
+    ).where(Dialog.username == user)
+    if start_date is not None:
+        query = query.where(Dialog.start_date >= start_date)
+    query = query.order_by(Dialog.id.desc())
     return [dialog for dialog in query.dicts().iterator()] if query.exists() else []
 
 

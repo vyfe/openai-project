@@ -275,6 +275,7 @@ const formData = reactive({
   dialogTitle: '',
   dialogHistory: [] as any[],
   loadingHistory: false,
+  historyDaysRange: 15 as number | null,
   isLoading: false,
   contextTotalTokens: 0,
   fontSize: localStorage.getItem('fontSize') || 'medium', // 字体大小控制
@@ -576,7 +577,7 @@ const loadDialogHistory = async () => {
 
   formData.loadingHistory = true
   try {
-    const response: any = await chatAPI.getDialogHistory()
+    const response: any = await chatAPI.getDialogHistory(formData.historyDaysRange)
     if (response && response.content) {
       formData.dialogHistory = response.content
       // ElMessage.success(`加载了 ${response.content.length} 条历史对话`)

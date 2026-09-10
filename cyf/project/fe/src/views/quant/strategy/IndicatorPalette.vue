@@ -29,8 +29,22 @@
         >
           <template #title>
             <span class="indicator-palette__item-title">
+              <el-switch
+                :model-value="isEnabled(spec.key)"
+                size="small"
+                class="indicator-palette__enable"
+                :title="isEnabled(spec.key) ? '点击停用此指标' : '点击启用此指标'"
+                @click.stop.prevent="onToggle(spec.key)"
+              />
               <span class="indicator-palette__item-label">{{ spec.label }}</span>
               <code class="indicator-palette__item-key">{{ spec.key }}</code>
+              <el-tag
+                v-if="isEnabled(spec.key)"
+                size="small"
+                type="success"
+                effect="plain"
+                class="indicator-palette__item-enabled"
+              >已启用</el-tag>
             </span>
           </template>
           <div v-if="!spec.params.length" class="indicator-palette__no-params">无参数</div>
@@ -172,6 +186,14 @@ function formatRange(min: number | null | undefined, max: number | null | undefi
 
 function hasDynamicOutputs(spec: IndicatorSpec): boolean {
   return spec.outputs.some(output => output.name.includes('{'))
+}
+
+function isEnabled(key: string): boolean {
+  return props.ide.isIndicatorEnabled(key)
+}
+
+function onToggle(key: string) {
+  props.ide.toggleIndicator(key)
 }
 
 function getParam(key: string, paramName: string) {
@@ -347,6 +369,14 @@ function parseIntList(text: string): number[] {
   flex: 1;
   align-items: center;
   gap: 7px;
+}
+.indicator-palette__enable {
+  flex: 0 0 auto;
+  margin-right: 2px;
+}
+.indicator-palette__item-enabled {
+  margin-left: auto;
+  font-size: 10px;
 }
 .indicator-palette__item-label {
   overflow: hidden;

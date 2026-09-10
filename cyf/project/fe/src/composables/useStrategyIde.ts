@@ -171,6 +171,28 @@ export function useStrategyIde() {
     }
   }
 
+  function toggleIndicator(key: string) {
+    const list = [...form.rule_config.indicators]
+    const idx = list.findIndex(i => i.key === key)
+    if (idx >= 0) {
+      list.splice(idx, 1)
+    } else {
+      // 启用时把 spec.params 的 default 一并写入，避免后端 _v2_resolve
+      // 时按 spec 重新算 window 列表与 UI 看到的不一致。
+      const spec = indicators.value.find(i => i.key === key)
+      const params: Record<string, any> = {}
+      if (spec) {
+        for (const p of spec.params) params[p.name] = p.default
+      }
+      list.push({ key, params })
+    }
+    form.rule_config = { ...form.rule_config, indicators: list }
+  }
+
+  function isIndicatorEnabled(key: string): boolean {
+    return form.rule_config.indicators.some(i => i.key === key)
+  }
+
   function setSignalType(v: 'buy' | 'sell' | 'watch') {
     form.rule_config = { ...form.rule_config, signal_type: v }
   }
@@ -292,6 +314,8 @@ export function useStrategyIde() {
     removeRule,
     setIndicatorParam,
     removeIndicator,
+    toggleIndicator,
+    isIndicatorEnabled,
     setSignalType,
     setMinScore,
     setGate,

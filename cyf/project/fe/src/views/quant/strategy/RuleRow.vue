@@ -44,6 +44,19 @@
         class="rule-row__ai-input"
       />
       <div class="rule-row__ai-actions">
+        <el-select
+          v-model="aiModel"
+          size="small"
+          class="rule-row__ai-model"
+          title="选择生成表达式所用模型"
+        >
+          <el-option
+            v-for="opt in aiModelOptions"
+            :key="opt.value"
+            :label="opt.label"
+            :value="opt.value"
+          />
+        </el-select>
         <el-button
           type="primary"
           plain
@@ -201,6 +214,14 @@ const thresholdValue = ref<number | undefined>(undefined)
 const aiPrompt = ref('')
 const aiLoading = ref(false)
 const aiError = ref('')
+// 模型下拉项：luna 是历史默认；terra / sol 是新增可选模型。
+// 后端 /strategy/llm_generate_expr 不做 allowlist，前端传啥就透传给 OpenAI client。
+const aiModelOptions = [
+  { value: 'gpt-5.6-luna', label: 'gpt-5.6-luna（默认）' },
+  { value: 'gpt-5.6-terra', label: 'gpt-5.6-terra' },
+  { value: 'gpt-5.6-sol', label: 'gpt-5.6-sol' }
+] as const
+const aiModel = ref<string>('gpt-5.6-luna')
 // 缓存指标 catalog（来自 /quant/meta/indicators），用于动态把已启用的 output 名
 // 反推成 registry key 喂给 LLM。避免硬编码前缀白名单遗漏新指标（如 top_divergence）。
 const indicatorCatalog = ref<IndicatorSpec[]>([])
@@ -230,13 +251,27 @@ async function onAiGenerate() {
     const outputs = props.indicatorOutputs || []
     if (indicatorCatalog.value.length > 0) {
       for (const outName of outputs) {
+        let matched = false
         for (const spec of indicatorCatalog.value) {
-          // output 名可能是字面量（top_divergence）或已被上层展开的具体名（rsi_14）。
-          // spec.outputs 里既含模板也含字面量，对字面量做 === 比对即可命中。
-          if (spec.outputs.some(o => !o.name.includes('{') && o.name === outName)) {
-            indicatorKeys.add(spec.key)
-            break
+          for (const o of spec.outputs) {
+            if (!o.name.includes('{')) {
+              // 字面量：直接 === 比对（top_divergence 等）
+              if (o.name === outName) {
+                indicatorKeys.add(spec.key)
+                matched = true
+                break
+              }
+            } else {
+              // 模板（ma_{window}）：把 {xxx} 换成 .* 后正则匹配 ma_5 / rsi_14 等。
+              const re = new RegExp('^' + o.name.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{[a-zA-Z_]+\\\}/g, '.*') + '$')
+              if (re.test(outName)) {
+                indicatorKeys.add(spec.key)
+                matched = true
+                break
+              }
+            }
           }
+          if (matched) break
         }
       }
     }
@@ -248,7 +283,7 @@ async function onAiGenerate() {
     const res: any = await quantStrategyAPI.llmGenerateExpr({
       description: desc,
       indicator_keys: indicatorKeys,
-      model: 'gpt-5.6-luna'
+      model: aiModel.value
     })
     const data = res.data || {}
     if (data.error) {
@@ -363,6 +398,9 @@ function clearExpr() {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+.rule-row__ai-model {
+  width: 180px;
 }
 .rule-row__ai-error {
   color: var(--q-red);

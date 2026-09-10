@@ -77,6 +77,20 @@
         <div class="sidebar-section-heading">{{ t('chat.history') }}</div>
         <div class="history-section-header">
           <div class="history-actions">
+            <el-select
+              v-model="formData.historyDaysRange"
+              size="small"
+              class="history-range-select"
+              :teleported="false"
+              @change="loadDialogHistory"
+            >
+              <el-option
+                v-for="opt in historyRangeOptions"
+                :key="opt.value"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
             <el-button type="default" size="small" text @click="loadDialogHistory" :loading="formData.loadingHistory" class="text-gray-700 dark:text-gray-300 hover:bg-transparent">
               {{ t('chat.refreshHistory') }}
             </el-button>
@@ -869,6 +883,12 @@ watch(
 
 // Component-specific reactive state that isn't shared through formData and needs initialization
 const loadingEnhancedRoles = ref(false)
+const historyRangeOptions = [
+  { label: '最近 15 天', value: 15 },
+  { label: '最近 30 天', value: 30 },
+  { label: '最近 90 天', value: 90 },
+  { label: '全部', value: null },
+]
 const enhancedGroupNames = computed(() => Object.keys(formData.enhancedRoleGroups || {}))
 const currentEnhancedRoles = computed(() => {
   if (!formData.activeEnhancedGroup) {
@@ -911,7 +931,7 @@ const loadDialogHistory = async () => {
 
   formData.loadingHistory = true
   try {
-    const response: any = await chatAPI.getDialogHistory()
+    const response: any = await chatAPI.getDialogHistory(formData.historyDaysRange)
     if (response && response.content) {
       formData.dialogHistory = response.content
       // 设置最新的对话ID为当前对话ID

@@ -18,3 +18,4 @@ cyf/project/fe/node_*/*
 **/__pycache__/
 cyf/project/server/.pip_cache_timestamp
 **/logs.db
+**/.venv/

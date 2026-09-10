@@ -190,7 +190,15 @@ def dialog_handoff(user, password):
 @require_auth
 def dialog_his(user, password):
     llm_logger.info("dialog_history requested")
-    return {"content": get_recent_dialogs(user)}, 200
+    data = get_request_data() or {}
+    raw_days = data.get("days")
+    days: Optional[int] = 15
+    if raw_days is not None:
+        try:
+            days = int(raw_days)
+        except (TypeError, ValueError):
+            days = 15
+    return {"content": get_recent_dialogs(user, days=days)}, 200
 
 
 @public_bp.route("/split_his_content", methods=["POST"])
