@@ -48,6 +48,12 @@ export const quantDataAPI = {
     quantApi.delete('/never_guess_my_usage/quant/symbols', { params: { symbol } }),
   batchDeleteSymbols: (symbols: string[]) =>
     quantApi.post('/never_guess_my_usage/quant/symbols/batch_delete', { symbols }),
+  listInstruments: (params?: { keyword?: string; exchange?: string; only_with_custom?: boolean; limit?: number }) =>
+    quantApi.get('/never_guess_my_usage/quant/instruments', { params }),
+  setInstrumentCustomName: (data: { symbol: string; custom_name: string | null }) =>
+    quantApi.post('/never_guess_my_usage/quant/instruments/custom_name', data),
+  clearInstrumentCustomName: (symbol: string) =>
+    quantApi.post('/never_guess_my_usage/quant/instruments/custom_name/clear', { symbol }),
   computeIndicators: (data: {
     symbol: string
     start_date: string

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -16,6 +17,41 @@ DEFAULT_REPORT_TEMPLATE = """你是量化研究助理。基于结构化 Analysis
 
 # 兜底默认模型：当 Prompt 模板未指定 model_name 时使用。命中 [claude]/[api] 配置。
 DEFAULT_REPORT_MODEL_NAME = "gpt-5.6-luna"
+
+# extra_sections 段数上限：与 DRAFT_SCHEMA_INSTRUCTION 里的 custom_sections 上限保持一致。
+MAX_EXTRA_SECTIONS = 3
+
+
+def normalize_extra_sections(value) -> list[dict]:
+    """把多种入参形态规整成 list[{title:str, instruction:str}, ...]。
+
+    接受：
+    - list[dict]（前端提交）
+    - JSON 字符串（DB 存储 / 兼容历史）
+    - None / 空 / 非法 → []
+    每项必须含非空 title；instruction 缺省视为 ""。最多保留 MAX_EXTRA_SECTIONS 段。
+    """
+    if value is None or value == "":
+        return []
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(value, list):
+        return []
+    normalized: list[dict] = []
+    seen_titles: set[str] = set()
+    for item in value[:MAX_EXTRA_SECTIONS]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+        instruction = str(item.get("instruction") or "").strip()
+        normalized.append({"title": title, "instruction": instruction})
+    return normalized
 
 
 def normalize_report_type(report_type: str) -> str:
@@ -69,9 +105,11 @@ def create_prompt_template(
     report_type: str = "test_report",
     model_name: str = "",
     change_note: str = "",
+    extra_sections: Optional[list] = None,
 ) -> dict:
     if not str(prompt_version or "").strip():
         raise ValueError("prompt_version 不能为空")
+    normalized_extra = normalize_extra_sections(extra_sections)
     record = QuantPromptTemplate.create(
         strategy_id=int(strategy_id) if strategy_id not in (None, "") else None,
         template_name=str(template_name or "default").strip() or "default",
@@ -79,6 +117,7 @@ def create_prompt_template(
         status=str(status or "active").strip() or "active",
         report_type=normalize_report_type(report_type),
         prompt_template=str(prompt_template or "").strip() or DEFAULT_REPORT_TEMPLATE,
+        extra_sections=json.dumps(normalized_extra, ensure_ascii=False),
         model_name=str(model_name or "").strip(),
         change_note=str(change_note or "").strip(),
         created_at=datetime.now(),
@@ -101,6 +140,11 @@ def update_prompt_template(template_id: int, **updates) -> dict:
         record.report_type = normalize_report_type(updates["report_type"])
     if "prompt_template" in updates:
         record.prompt_template = str(updates["prompt_template"] or "").strip() or DEFAULT_REPORT_TEMPLATE
+    if "extra_sections" in updates:
+        record.extra_sections = json.dumps(
+            normalize_extra_sections(updates["extra_sections"]),
+            ensure_ascii=False,
+        )
     if "model_name" in updates:
         record.model_name = str(updates["model_name"] or "").strip()
     if "change_note" in updates:

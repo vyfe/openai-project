@@ -129,31 +129,80 @@ def _to_symbol(code: str, market: str) -> str:
 
 
 def search_symbols_fallback(keyword: str, limit: int = 20) -> list[dict]:
-    """带本地 fallback 的搜索（当东财不可达时使用 quant_instrument 表查询）"""
+    """带本地 fallback 的搜索（当东财不可达时使用 quant_instrument 表查询）。
+
+    两条路径都会在结果里补上 custom_name + display_name（custom_name 优先，回退 name），
+    供前端"策略池"el-select 展示用。
+    """
     try:
-        return search_symbols(keyword, limit=limit)
+        remote = search_symbols(keyword, limit=limit)
     except Exception:
         # Fallback: 从本地 quant_instrument 表模糊匹配
         return _local_search(keyword, limit)
+    return _attach_custom_name(remote)
+
+
+def _attach_custom_name(items: list[dict]) -> list[dict]:
+    """对远端搜索结果批量补 custom_name + display_name（基于 quant_instrument 表反查）。
+
+    单次 select + dedup，避免逐条 .get() 触发 N 次 IO。
+    """
+    if not items:
+        return items
+    from quant.entities import QuantInstrument
+    from service.quant.instrument_display_service import resolve_display_name
+    symbols = [str(it.get("symbol") or "").strip() for it in items if it.get("symbol")]
+    if not symbols:
+        return items
+    rows = QuantInstrument.select(
+        QuantInstrument.symbol,
+        QuantInstrument.name,
+        QuantInstrument.custom_name,
+    ).where(QuantInstrument.symbol.in_(list(set(symbols))))
+    lookup = {r.symbol: r for r in rows.iterator()}
+    for it in items:
+        symbol = str(it.get("symbol") or "").strip()
+        if not symbol:
+            continue
+        row = lookup.get(symbol)
+        if row is None:
+            # 远端有，quant_instrument 没注册过 → custom_name 视为空
+            it["custom_name"] = ""
+            it["display_name"] = it.get("name") or ""
+            continue
+        custom_name = row.custom_name or ""
+        original_name = it.get("name") or row.name or ""
+        it["custom_name"] = custom_name
+        it["display_name"] = resolve_display_name(symbol, custom_name, original_name)
+    return items
 
 
 def _local_search(keyword: str, limit: int = 20) -> list[dict]:
     from quant.entities import QuantInstrument
+    from service.quant.instrument_display_service import resolve_display_name
 
     keyword_lower = keyword.lower().strip()
     if not keyword_lower:
         return []
 
     query = QuantInstrument.select().where(
-        (QuantInstrument.code.contains(keyword_lower)) | (QuantInstrument.name.contains(keyword_lower))
+        (QuantInstrument.code.contains(keyword_lower))
+        | (QuantInstrument.name.contains(keyword_lower))
+        | (QuantInstrument.custom_name.contains(keyword_lower))
     ).limit(limit)
 
     results = []
     for item in query.iterator():
+        name = item.name or ""
+        custom_name = item.custom_name or ""
         results.append(
             {
                 "code": item.code,
-                "name": item.name or "",
+                "name": name,
+                "custom_name": custom_name,
+                # display_name 优先 custom_name，空时回退到 name。
+                # 策略池下拉展示用 display_name，与报告渲染逻辑保持一致。
+                "display_name": resolve_display_name(item.symbol, custom_name, name),
                 "market": item.exchange,
                 "symbol": item.symbol,
                 "type": "",

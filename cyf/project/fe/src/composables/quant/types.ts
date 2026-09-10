@@ -107,6 +107,11 @@ export type ScheduleRunRecord = {
   log_tail?: string
 }
 
+export type PromptTemplateExtraSection = {
+  title: string
+  instruction?: string
+}
+
 export type PromptTemplateRecord = {
   id: number
   strategy_id?: number | null
@@ -115,6 +120,7 @@ export type PromptTemplateRecord = {
   status: string
   report_type: string
   prompt_template: string
+  extra_sections?: PromptTemplateExtraSection[]
   model_name?: string
   change_note?: string
   updated_at?: string
@@ -224,4 +230,17 @@ export type SymbolOption = {
   name?: string
   source?: string
   type?: string
+}
+
+/** 数据中心股票池管理 UI 用的标的行（含自定义显示名）。 */
+export type InstrumentRow = {
+  symbol: string
+  code: string
+  exchange: string
+  market?: string
+  name: string
+  custom_name: string
+  display_name: string
+  status?: string
+  updated_at?: string | null
 }

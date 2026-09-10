@@ -23,24 +23,41 @@ def _today_text() -> str:
 
 
 def _bulk_lookup_names(symbols: list[str]) -> dict[str, str]:
-    """批量查 quant_instrument.name；空字符串表示该 symbol 在股票池里没有 name。"""
-    cleaned = [s for s in {s for s in symbols if s}]
-    if not cleaned:
-        return {}
-    rows = QuantInstrument.select(QuantInstrument.symbol, QuantInstrument.name).where(
-        QuantInstrument.symbol.in_(cleaned)
-    )
-    return {row.symbol: (row.name or "") for row in rows}
+    """批量查 quant_instrument 的显示名：custom_name 优先，回退 name。
+
+    委托给 instrument_display_service.bulk_lookup_display_names 统一处理。
+    """
+    from service.quant.instrument_display_service import bulk_lookup_display_names
+    return bulk_lookup_display_names(symbols)
 
 
-def _attach_names(records: list[dict], name_map: dict[str, str]) -> list[dict]:
-    """把批量查出的 name 挂到 records 的每条上（不修改原 dict）。"""
+def _bulk_lookup_records(symbols: list[str]) -> dict[str, dict]:
+    """批量查 quant_instrument 三件套 {name, custom_name, display_name}。
+
+    委托给 instrument_display_service.bulk_lookup_instrument_records。
+    """
+    from service.quant.instrument_display_service import bulk_lookup_instrument_records
+    return bulk_lookup_instrument_records(symbols)
+
+
+def _attach_names(records: list[dict], record_map: dict[str, dict]) -> list[dict]:
+    """把批量查出的 name / custom_name / display_name 三件套挂到 records 的每条上。
+
+    仅当字段未设置时才写入（不覆盖已有值，避免与子模块自带字段冲突）。
+    """
     if not records:
         return records
     for item in records:
         sym = item.get("symbol")
-        if sym and "name" not in item:
-            item["name"] = name_map.get(sym, "")
+        if not sym:
+            continue
+        info = record_map.get(sym) or {"name": "", "custom_name": "", "display_name": ""}
+        if "name" not in item:
+            item["name"] = info["name"]
+        if "custom_name" not in item:
+            item["custom_name"] = info["custom_name"]
+        if "display_name" not in item:
+            item["display_name"] = info["display_name"]
     return records
 
 
@@ -102,16 +119,16 @@ def get_dashboard_overview() -> dict:
     success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success").count()
     memory_files = list_memory_files(limit=6)
 
-    # 批量补 name：一次 in_ 查询覆盖 signals / operations / memory 三个数据源
+    # 批量补 name / custom_name / display_name 三件套：一次 in_ 查询覆盖 signals / operations / memory
     all_symbols = (
         [s.get("symbol") for s in latest_signals if s.get("symbol")]
         + [op.get("symbol") for op in operations if op.get("symbol")]
         + [m.get("symbol") for m in memory_files if m.get("symbol")]
     )
-    name_map = _bulk_lookup_names(all_symbols)
-    _attach_names(latest_signals, name_map)
-    _attach_names(operations, name_map)
-    _attach_names(memory_files, name_map)
+    record_map = _bulk_lookup_records(all_symbols)
+    _attach_names(latest_signals, record_map)
+    _attach_names(operations, record_map)
+    _attach_names(memory_files, record_map)
 
     return {
         "snapshot": {

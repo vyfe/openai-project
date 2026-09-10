@@ -270,41 +270,55 @@ def list_strategy_signals(
 
 
 def list_available_symbols(limit: int = 500, offset: int = 0, keyword: Optional[str] = None) -> List[dict]:
-    """股票池列表（active）。支持 keyword 模糊匹配（symbol/code/name）和 offset 分页。"""
+    """股票池列表（active）。支持 keyword 模糊匹配（symbol/code/name/custom_name）和 offset 分页。
+
+    每条返回里都带 display_name（custom_name 优先，空时回退到 name），
+    供前端 el-select / 列表展示用。
+    """
+    from service.quant.instrument_display_service import resolve_display_name
     query = QuantInstrument.select().where(QuantInstrument.status == "active")
     if keyword:
         kw = f"%{keyword.strip()}%"
         query = query.where(
             (QuantInstrument.symbol ** kw) |
             (QuantInstrument.code ** kw) |
-            (QuantInstrument.name ** kw)
+            (QuantInstrument.name ** kw) |
+            (QuantInstrument.custom_name ** kw)
         )
     query = query.order_by(QuantInstrument.symbol.asc()).limit(limit).offset(offset)
-    return [
-        {
+    results = []
+    for item in query.iterator():
+        name = item.name or ""
+        custom_name = item.custom_name or ""
+        results.append({
             "symbol": item.symbol,
             "code": item.code,
             "exchange": item.exchange,
             "market": item.market,
-            "name": item.name,
+            "name": name,
+            "custom_name": custom_name,
+            "display_name": resolve_display_name(item.symbol, custom_name, name),
             "source": item.source,
             "status": item.status,
             "created_at": item.created_at.isoformat() if item.created_at else None,
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
-        }
-        for item in query.iterator()
-    ]
+        })
+    return results
 
 
 def count_available_symbols(keyword: Optional[str] = None) -> int:
-    """股票池总数，配合 list_available_symbols 做分页。"""
+    """股票池总数，配合 list_available_symbols 做分页。
+
+    keyword 搜索条件必须与 list_available_symbols 保持完全一致（否则 count 与 list 不一致）。
+    """
     query = QuantInstrument.select().where(QuantInstrument.status == "active")
     if keyword:
         kw = f"%{keyword.strip()}%"
         query = query.where(
             (QuantInstrument.symbol ** kw) |
             (QuantInstrument.code ** kw) |
-            (QuantInstrument.name ** kw)
+            (QuantInstrument.name ** kw) |
+            (QuantInstrument.custom_name ** kw)
         )
     return query.count()
 

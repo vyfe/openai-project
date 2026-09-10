@@ -14,6 +14,7 @@ from service.quant.report_llm_service import (
 )
 from service.quant.report_prompt_service import (
     DEFAULT_REPORT_MODEL_NAME,
+    normalize_extra_sections,
     resolve_model_name,
 )
 
@@ -32,14 +33,41 @@ def _validate_analysis_bundle(bundle: dict):
             raise ValueError(f"AnalysisBundle 缺少字段: {key}")
 
 
-def _validate_report_draft(report_draft: dict):
-    """检查 ReportDraft 关键字段齐备。"""
+def _validate_report_draft(report_draft: dict, allowed_extra_titles: Optional[set] = None):
+    """检查 ReportDraft 关键字段齐备。
+
+    custom_sections 是可选扩展段：缺省视为空列表；非 list 抛错；
+    每项必须是 dict 且含 title / body_md 两个字符串字段。
+
+    allowed_extra_titles：模板声明的 extra_sections 段标题集合（None 或空集合 = 不限制）；
+    传入时，LLM 返回的 custom_sections[*].title 必须落在集合内，否则 raise。
+    """
     for key in (
         "title", "summary", "market_view", "signal_highlights",
         "risk_warnings", "action_watchlist", "memory_references", "footer_notes",
     ):
         if key not in report_draft:
             raise ValueError(f"ReportDraft 缺少字段: {key}")
+    custom_sections = report_draft.get("custom_sections", [])
+    if not isinstance(custom_sections, list):
+        raise ValueError("ReportDraft.custom_sections 必须是 list")
+    if len(custom_sections) > 3:
+        raise ValueError("ReportDraft.custom_sections 最多 3 段")
+    if allowed_extra_titles is not None and not isinstance(allowed_extra_titles, set):
+        allowed_extra_titles = set(allowed_extra_titles)
+    for idx, section in enumerate(custom_sections):
+        if not isinstance(section, dict):
+            raise ValueError(f"ReportDraft.custom_sections[{idx}] 必须是 dict")
+        title = section.get("title")
+        if not isinstance(title, str):
+            raise ValueError(f"ReportDraft.custom_sections[{idx}].title 必须是 str")
+        if not isinstance(section.get("body_md"), str):
+            raise ValueError(f"ReportDraft.custom_sections[{idx}].body_md 必须是 str")
+        if allowed_extra_titles is not None and title.strip() not in allowed_extra_titles:
+            raise ValueError(
+                f"ReportDraft.custom_sections[{idx}].title={title!r} "
+                f"不在模板声明的 extra_sections 集合 {sorted(allowed_extra_titles)!r} 内"
+            )
 
 
 def _top_signal_lines(bundle: dict) -> list[str]:
@@ -101,6 +129,7 @@ def _build_template_draft(
             "如需形成长期经验，请在执行后及时回填结果，以便记忆梳理任务吸收。",
         ],
         "memory_references": memory_refs,
+        "custom_sections": [],
         "footer_notes": footer_notes,
         "prompt_version": (bundle.get("prompt_version") or "template-v1"),
         "disclaimer": "数值字段禁止由 LLM 自由生成；当前为模板化测试报告。",
@@ -135,6 +164,12 @@ def generate_report_draft(
     resolved_model = (
         resolve_model_name(prompt_template) if prompt_template else (model_name or DEFAULT_REPORT_MODEL_NAME)
     )
+    # 模板声明的额外段落（标题集合）—— LLM 改写成功后用于校验 custom_sections 标题。
+    allowed_extra_titles: Optional[set] = None
+    if prompt_template:
+        extra = normalize_extra_sections(prompt_template.get("extra_sections"))
+        if extra:
+            allowed_extra_titles = {item["title"] for item in extra}
 
     if llm_enabled and prompt_template:
         try:
@@ -143,6 +178,7 @@ def generate_report_draft(
                 prompt_template=prompt_template,
                 model_name=model_name,
                 username=username,
+                allowed_extra_titles=allowed_extra_titles,
             )
             llm_draft["llm_status"] = "success"
             llm_draft["model_name"] = resolved_model

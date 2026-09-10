@@ -22,6 +22,12 @@ class QuantInstrument(QuantBaseModel):
     exchange = CharField(index=True)
     market = CharField(default="A_SHARE", index=True)
     name = CharField(default="")
+    # 用户自定义显示名（数据中心维护）。非空时优先于 name 用于：
+    # - 报告渲染（_bulk_lookup_instrument_names）
+    # - dashboard 渲染（_bulk_lookup_names）
+    # - 前端策略池 / 信号列表展示
+    # 不参与东财 / 腾讯等数据源；不影响 quant_instrument.name 权威值。
+    custom_name = CharField(null=True)
     source = CharField(default="")
     status = CharField(default="active")
     created_at = DateTimeField(default=datetime.now)

@@ -475,6 +475,76 @@
 
         <div class="quant-mini-section">
           <div class="quant-mini-section__title">
+            <span>自定义显示名（数据中心股票池）</span>
+            <div class="quant-toolbar quant-toolbar--compact">
+              <el-checkbox v-model="workbench.instrumentOnlyWithCustom" size="small" @change="workbench.loadInstruments">仅看已自定义</el-checkbox>
+              <el-button text :icon="RefreshRight" @click="workbench.loadInstruments" :loading="workbench.loading.stockPool">刷新</el-button>
+            </div>
+          </div>
+
+          <div class="quant-pool-toolbar">
+            <el-input
+              v-model="workbench.instrumentKeyword"
+              size="small"
+              clearable
+              placeholder="搜索 symbol / code / 原名 / 自定义名"
+              style="flex:1;min-width:0"
+              @keyup.enter="workbench.loadInstruments"
+              @clear="workbench.loadInstruments"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button size="small" type="primary" plain @click="workbench.loadInstruments">搜索</el-button>
+          </div>
+
+          <div class="quant-pool-list" v-loading="workbench.loading.stockPool">
+            <el-empty
+              v-if="!workbench.instrumentRows.length"
+              :description="workbench.instrumentKeyword ? '无匹配标的' : '暂无数据'"
+              :image-size="60"
+            />
+            <div v-else class="quant-pool-row" v-for="row in workbench.instrumentRows" :key="row.symbol">
+              <div class="quant-pool-row__main">
+                <div class="quant-pool-row__head">
+                  <span class="quant-pool-row__symbol">{{ row.symbol }}</span>
+                  <span class="quant-pool-row__name">{{ row.display_name || '—' }}</span>
+                  <el-tag v-if="row.custom_name" size="small" type="success" effect="plain">已自定义</el-tag>
+                </div>
+                <div class="quant-pool-row__meta">
+                  <el-tag size="small" type="info" effect="plain">{{ row.exchange }}</el-tag>
+                  <span class="quant-pool-row__source">原名：{{ row.name || '—' }}</span>
+                </div>
+              </div>
+              <el-input
+                :model-value="getDraft(row.symbol) ?? row.custom_name"
+                size="small"
+                placeholder="自定义显示名（留空 = 用原名）"
+                class="quant-pool-row__custom-input"
+                @update:model-value="(v: string) => setDraft(row.symbol, v)"
+              />
+              <div class="quant-pool-row__actions">
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  :disabled="!isDirty(row)"
+                  @click="saveCustomName(row.symbol)"
+                >保存</el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :disabled="!row.custom_name"
+                  @click="resetCustomName(row.symbol)"
+                >重置</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="quant-mini-section">
+          <div class="quant-mini-section__title">
             <span>最近任务</span>
             <el-button text :icon="RefreshRight" @click="workbench.loadTasks" :loading="workbench.loading.tasks">刷新</el-button>
           </div>
@@ -666,6 +736,51 @@ function formatPoolTime(value: string | null | undefined): string {
   const text = String(value)
   return text.length > 16 ? text.slice(0, 16).replace('T', ' ') : text
 }
+
+// 自定义显示名：本地草稿只在"保存"按钮触发时才下发。
+// 这样可以明确"已自定义"标签的变化时机，也避免之前 blur / Enter 静默保存的歧义。
+const _customNameDraft = new Map<string, string>()
+
+function getDraft(symbol: string): string | undefined {
+  // undefined 表示没有本地草稿，UI 回退到 row.custom_name
+  return _customNameDraft.has(symbol) ? _customNameDraft.get(symbol)! : undefined
+}
+
+function setDraft(symbol: string, value: string) {
+  _customNameDraft.set(symbol, value)
+  // 触发响应式（_customNameDraft 是普通 Map）
+  // 局部刷新 row 的"本地展示态"（不影响 row.custom_name 持久值）
+  const idx = workbench.instrumentRows.findIndex(r => r.symbol === symbol)
+  if (idx >= 0) {
+    workbench.instrumentRows[idx] = { ...workbench.instrumentRows[idx] }
+  }
+}
+
+function isDirty(row: { symbol: string; custom_name: string }): boolean {
+  const draft = _customNameDraft.get(row.symbol)
+  if (draft === undefined) return false
+  return draft.trim() !== (row.custom_name || '').trim()
+}
+
+async function saveCustomName(symbol: string) {
+  const draft = _customNameDraft.get(symbol)
+  if (draft === undefined) return
+  await workbench.setInstrumentCustomName(symbol, draft)
+  _customNameDraft.delete(symbol)
+  const idx = workbench.instrumentRows.findIndex(r => r.symbol === symbol)
+  if (idx >= 0) {
+    workbench.instrumentRows[idx] = { ...workbench.instrumentRows[idx] }
+  }
+}
+
+async function resetCustomName(symbol: string) {
+  await workbench.setInstrumentCustomName(symbol, '')
+  _customNameDraft.delete(symbol)
+  const idx = workbench.instrumentRows.findIndex(r => r.symbol === symbol)
+  if (idx >= 0) {
+    workbench.instrumentRows[idx] = { ...workbench.instrumentRows[idx] }
+  }
+}
 </script>
 
 
@@ -699,5 +814,25 @@ function formatPoolTime(value: string | null | undefined): string {
   color: var(--quant-text-secondary, #6b7280);
   font-size: 12px;
   padding: 4px 0;
+}
+/* 自定义显示名管理面板的行布局：name + input + 保存/重置按钮 */
+.quant-pool-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px dashed var(--q-line);
+}
+.quant-pool-row:last-child { border-bottom: 0; }
+.quant-pool-row__custom-input { width: 100%; }
+.quant-pool-row__actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+@media (max-width: 768px) {
+  .quant-pool-row { grid-template-columns: 1fr; }
+  .quant-pool-row__actions { justify-content: flex-end; }
 }
 </style>

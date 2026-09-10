@@ -56,6 +56,50 @@
             <el-input v-model="workbench.promptForm.promptTemplate" type="textarea" :rows="8" class="quant-code-input" />
           </el-form-item>
         </el-form>
+        <details class="quant-extra-sections">
+          <summary class="quant-extra-sections__title">
+            <span>额外段落声明（extra_sections）</span>
+            <span class="quant-muted">{{ workbench.promptForm.extraSections.length }} / 3 段</span>
+          </summary>
+          <div v-if="!workbench.promptForm.extraSections.length" class="quant-extra-sections__empty">
+            没有声明额外段落时，报告只输出固定的 7 个章节。
+          </div>
+          <div
+            v-for="(section, idx) in workbench.promptForm.extraSections"
+            :key="idx"
+            class="quant-extra-sections__row"
+          >
+            <el-input
+              v-model="section.title"
+              size="small"
+              placeholder="段标题（例：风险矩阵）"
+              class="quant-extra-sections__title-input"
+            />
+            <el-input
+              v-model="section.instruction"
+              size="small"
+              type="textarea"
+              :rows="2"
+              placeholder="给 LLM 的指令（例：以表格列出前 3 个标的的强度/概率/影响）"
+              class="quant-extra-sections__instruction"
+            />
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :icon="Delete"
+              @click="workbench.removeExtraSection(idx)"
+            >删除</el-button>
+          </div>
+          <el-button
+            size="small"
+            type="primary"
+            plain
+            :icon="Plus"
+            :disabled="workbench.promptForm.extraSections.length >= 3"
+            @click="workbench.addExtraSection"
+          >添加一段</el-button>
+        </details>
         <el-form label-position="top">
           <el-form-item label="变更说明">
             <el-input v-model="workbench.promptForm.changeNote" placeholder="说明这次口径调整了什么。" />
@@ -227,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshRight, Setting } from '@element-plus/icons-vue'
+import { Delete, Plus, RefreshRight, Setting } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import ReportPreviewIde from './ReportPreviewIde.vue'
 
@@ -241,3 +285,56 @@ const openMemory = async (row: { symbol: string }) => {
   await workbench.loadMemoryDetail(row.symbol)
 }
 </script>
+
+<style scoped>
+.quant-extra-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--q-line);
+  border-radius: 6px;
+  background: var(--q-surface-2);
+}
+.quant-extra-sections__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--q-ink);
+  cursor: pointer;
+  list-style: none;
+}
+.quant-extra-sections__title::-webkit-details-marker { display: none; }
+.quant-extra-sections__empty {
+  padding: 8px 10px;
+  border: 1px dashed var(--q-line);
+  border-radius: 4px;
+  color: var(--q-muted);
+  font-size: 12px;
+  background: var(--q-surface);
+}
+.quant-extra-sections__row {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid var(--q-line);
+  border-radius: 4px;
+  background: var(--q-surface);
+}
+.quant-extra-sections__title-input { width: 100%; }
+.quant-extra-sections__instruction :deep(.el-textarea__inner) {
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--q-surface);
+}
+@media (max-width: 768px) {
+  .quant-extra-sections__row {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

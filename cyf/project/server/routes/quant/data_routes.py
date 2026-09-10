@@ -29,6 +29,11 @@ from service.quant.common import (
     parse_trade_datetime,
 )
 from service.quant.symbol_search_service import search_symbols_fallback
+from service.quant.instrument_display_service import (
+    clear_custom_name as clear_instrument_custom_name,
+    list_instruments_with_display_name,
+    set_custom_name as set_instrument_custom_name,
+)
 from service.auth_service import require_admin_auth, require_auth
 
 
@@ -151,13 +156,19 @@ def quant_symbol_upsert():
             },
         ).execute()
         saved = QuantInstrument.get(QuantInstrument.symbol == symbol)
+        # 返回 dict 同步带 custom_name + display_name，前端保存后无需再查一遍
+        from service.quant.instrument_display_service import resolve_display_name
+        saved_name = saved.name or ""
+        saved_custom = saved.custom_name or ""
         return success_response(
             data={
                 "symbol": saved.symbol,
                 "code": saved.code,
                 "exchange": saved.exchange,
                 "market": saved.market,
-                "name": saved.name,
+                "name": saved_name,
+                "custom_name": saved_custom,
+                "display_name": resolve_display_name(saved.symbol, saved_custom, saved_name),
                 "source": saved.source,
                 "status": saved.status,
             },
@@ -279,6 +290,75 @@ def quant_symbols_refresh_names():
         return success_response(data=result, msg=f"扫描 {result['scanned']} 条，更新 {result['updated']} 条")
     except Exception as exc:
         return error_response(f"刷新股票名称失败: {exc}")
+
+
+@bp.route("/instruments", methods=["GET"])
+@require_auth
+def quant_instruments_list(user, password):
+    """列出量化标的（带显示名），供前端"数据中心股票池"管理 UI 用。
+
+    query params:
+    - keyword: 模糊匹配 symbol/code/name/custom_name
+    - exchange: SH/SZ/BJ
+    - only_with_custom: true/false，是否只列出自定义名非空的
+    - limit: 1..500，默认 200
+    """
+    del password
+    try:
+        keyword = str(request.args.get("keyword") or "").strip()
+        exchange = str(request.args.get("exchange") or "").strip().upper()
+        only_with_custom = str(request.args.get("only_with_custom") or "").strip().lower() in ("true", "1", "yes", "on")
+        try:
+            limit = int(request.args.get("limit") or 200)
+        except (TypeError, ValueError):
+            limit = 200
+        limit = max(1, min(limit, 500))
+        items = list_instruments_with_display_name(
+            keyword=keyword,
+            exchange=exchange,
+            only_with_custom=only_with_custom,
+            limit=limit,
+        )
+        return success_response(data={"items": items, "count": len(items)}, msg="OK")
+    except Exception as exc:
+        return error_response(f"查询股票池失败: {exc}")
+
+
+@bp.route("/instruments/custom_name", methods=["POST"])
+@require_admin_auth
+def quant_instrument_set_custom_name():
+    """设置 / 覆盖 / 清空（custom_name 传空串）单个标的的自定义显示名。"""
+    try:
+        data = get_request_data() or {}
+        symbol = str(data.get("symbol") or "").strip()
+        if not symbol:
+            return error_response("symbol 不能为空")
+        custom_name = data.get("custom_name")
+        if custom_name is not None:
+            custom_name = str(custom_name).strip()
+        result = set_instrument_custom_name(symbol, custom_name)
+        return success_response(data=result, msg="已更新自定义显示名")
+    except ValueError as exc:
+        return error_response(str(exc))
+    except Exception as exc:
+        return error_response(f"更新自定义显示名失败: {exc}")
+
+
+@bp.route("/instruments/custom_name/clear", methods=["POST"])
+@require_admin_auth
+def quant_instrument_clear_custom_name():
+    """清空单个标的的 custom_name（恢复使用 name）。"""
+    try:
+        data = get_request_data() or {}
+        symbol = str(data.get("symbol") or "").strip()
+        if not symbol:
+            return error_response("symbol 不能为空")
+        result = clear_instrument_custom_name(symbol)
+        return success_response(data=result, msg="已重置为官方名称")
+    except ValueError as exc:
+        return error_response(str(exc))
+    except Exception as exc:
+        return error_response(f"清除自定义显示名失败: {exc}")
 
 
 _MAX_COMPUTE_BARS = 5000

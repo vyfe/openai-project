@@ -39,7 +39,8 @@ import type {
   ImInboundEventRecord,
   PositionJournalRecord,
   PositionSummaryRecord,
-  SymbolOption
+  SymbolOption,
+  InstrumentRow
 } from './quant/types'
 
 
@@ -54,6 +55,10 @@ function createQuantWorkbench() {
   const visibleSymbolOptions = computed(() => (symbolSearchKeyword.value ? symbolSearchOptions.value : symbolOptions.value))
   const importBatches = ref<any[]>([])
   const stockPoolItems = ref<SymbolOption[]>([])
+  // 数据中心股票池"自定义显示名"管理 UI 用的列表（含 display_name）。
+  const instrumentRows = ref<InstrumentRow[]>([])
+  const instrumentKeyword = ref('')
+  const instrumentOnlyWithCustom = ref(false)
   const stockPoolTotal = ref(0)
   const stockPoolPage = reactive({ limit: 20, offset: 0, keyword: '' })
   const stockPoolSelected = ref<string[]>([])
@@ -479,8 +484,18 @@ function createQuantWorkbench() {
     status: 'active',
     reportType: 'test_report',
     promptTemplate: `你是量化研究助理。基于结构化 AnalysisBundle 输出受约束的 ReportDraft。\n规则：\n1. 不得虚构 bundle 中不存在的数值。\n2. 数值必须引用 bundle 中已有字段。\n3. 记忆仅用于解释增强，不得替代当天信号。\n4. 输出应包含摘要、信号概览、风险、动作建议、记忆引用。`,
+    extraSections: [] as Array<{ title: string; instruction: string }>,
     changeNote: ''
   })
+
+  // 额外段落增删：上限 3 段，标题去空。
+  const addExtraSection = () => {
+    if (promptForm.extraSections.length >= 3) return
+    promptForm.extraSections.push({ title: '', instruction: '' })
+  }
+  const removeExtraSection = (idx: number) => {
+    promptForm.extraSections.splice(idx, 1)
+  }
 
   const imChannelForm = reactive({
     id: null as number | null,
@@ -819,6 +834,7 @@ function createQuantWorkbench() {
       status: 'active',
       reportType: 'test_report',
       promptTemplate: `你是量化研究助理。基于结构化 AnalysisBundle 输出受约束的 ReportDraft。\n规则：\n1. 不得虚构 bundle 中不存在的数值。\n2. 数值必须引用 bundle 中已有字段。\n3. 记忆仅用于解释增强，不得替代当天信号。\n4. 输出应包含摘要、信号概览、风险、动作建议、记忆引用。`,
+      extraSections: [],
       changeNote: ''
     })
   }
@@ -832,6 +848,15 @@ function createQuantWorkbench() {
     promptForm.status = record.status
     promptForm.reportType = record.report_type
     promptForm.promptTemplate = record.prompt_template
+    // extra_sections 兼容：缺省空 list；后端 to_dict 已规整
+    const extra = Array.isArray(record.extra_sections) ? record.extra_sections : []
+    promptForm.extraSections = extra
+      .map(s => ({
+        title: String(s?.title || '').trim(),
+        instruction: String(s?.instruction || '')
+      }))
+      .filter(s => s.title)
+      .slice(0, 3)
     promptForm.changeNote = record.change_note || ''
   }
 
@@ -1089,6 +1114,52 @@ function createQuantWorkbench() {
     } finally {
       loading.stockPool = false
     }
+  }
+
+  // 加载"数据中心股票池"管理 UI 用的标的列表（带自定义显示名）。
+  const loadInstruments = async () => {
+    loading.stockPool = true
+    try {
+      const response: any = await quantDataAPI.listInstruments({
+        keyword: instrumentKeyword.value || undefined,
+        only_with_custom: instrumentOnlyWithCustom.value || undefined,
+        limit: 200
+      })
+      const payload = response.data || {}
+      instrumentRows.value = (payload.items || []) as InstrumentRow[]
+    } catch (error: any) {
+      ElMessage.error(error?.message || '加载股票池失败')
+    } finally {
+      loading.stockPool = false
+    }
+  }
+
+  // 设置 / 覆盖 custom_name。custom_name 空串视为清除。
+  const setInstrumentCustomName = async (symbol: string, customName: string) => {
+    const trimmed = String(customName || '').trim()
+    const cleared = !trimmed
+    const response: any = cleared
+      ? await quantDataAPI.clearInstrumentCustomName(symbol)
+      : await quantDataAPI.setInstrumentCustomName({ symbol, custom_name: trimmed })
+    const data = response.data || {}
+    // 本地更新行，避免重新拉列表
+    const idx = instrumentRows.value.findIndex(r => r.symbol === symbol)
+    if (idx >= 0) {
+      instrumentRows.value[idx] = {
+        ...instrumentRows.value[idx],
+        custom_name: data.custom_name || '',
+        display_name: data.display_name || instrumentRows.value[idx].name,
+        updated_at: data.updated_at || instrumentRows.value[idx].updated_at
+      }
+    }
+    // 全局 symbolOptions / symbolSearchOptions 同步（策略池展示）
+    for (const opt of symbolOptions.value) {
+      if (opt.symbol === symbol) opt.name = data.display_name
+    }
+    for (const opt of symbolSearchOptions.value) {
+      if (opt.symbol === symbol) opt.name = data.display_name
+    }
+    ElMessage.success(response?.msg || (cleared ? '已重置为官方名称' : '已更新自定义显示名'))
   }
 
   const deletePoolSymbol = async (symbol: string) => {
@@ -1951,6 +2022,12 @@ function createQuantWorkbench() {
   const savePromptTemplate = async () => {
     if (!promptForm.promptVersion.trim()) return ElMessage.warning('Prompt 版本不能为空')
     if (!promptForm.promptTemplate.trim()) return ElMessage.warning('Prompt 模板不能为空')
+    // extra_sections 落库前规整：去空标题、去重、最多 3 段
+    const extraSections = (promptForm.extraSections || [])
+      .map(s => ({ title: String(s.title || '').trim(), instruction: String(s.instruction || '').trim() }))
+      .filter(s => s.title)
+      .filter((s, i, arr) => arr.findIndex(t => t.title === s.title) === i)
+      .slice(0, 3)
     loading.savingPrompt = true
     try {
       const payload = {
@@ -1961,6 +2038,7 @@ function createQuantWorkbench() {
         status: promptForm.status,
         report_type: promptForm.reportType,
         prompt_template: promptForm.promptTemplate,
+        extra_sections: extraSections,
         change_note: promptForm.changeNote
       }
       if (promptForm.id) {
@@ -2204,6 +2282,11 @@ function createQuantWorkbench() {
     symbolSearchOptions,
     visibleSymbolOptions,
     stockPoolItems,
+    instrumentRows,
+    instrumentKeyword,
+    instrumentOnlyWithCustom,
+    loadInstruments,
+    setInstrumentCustomName,
     stockPoolTotal,
     stockPoolPage,
     stockPoolSelected,
@@ -2383,6 +2466,8 @@ function createQuantWorkbench() {
     deleteSelectedPositionEntry,
     savePromptTemplate,
     deleteSelectedPrompt,
+    addExtraSection,
+    removeExtraSection,
     generateReportFromRun,
     previewReportDraft,
     reportPreview,

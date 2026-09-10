@@ -106,6 +106,10 @@ class QuantPromptTemplate(QuantBaseModel):
     status = CharField(default="active", index=True)
     report_type = CharField(default="test_report", index=True)
     prompt_template = TextField(default="")
+    # 额外段落声明：JSON 字符串，list[{title:str, instruction:str}, ...]，
+    # 最多 3 段。后端 rewrite_report_with_llm 会把它注入 system prompt，
+    # _validate_report_draft 会校验 LLM 返回的 custom_sections 标题必须落在集合内。
+    extra_sections = TextField(default="[]")
     model_name = CharField(default="")
     change_note = TextField(default="")
     created_at = DateTimeField(default=datetime.now)
@@ -116,6 +120,12 @@ class QuantPromptTemplate(QuantBaseModel):
         indexes = ((("strategy_id", "prompt_version"), True),)
 
     def to_dict(self):
+        try:
+            extra_sections = json.loads(self.extra_sections or "[]")
+        except (TypeError, ValueError):
+            extra_sections = []
+        if not isinstance(extra_sections, list):
+            extra_sections = []
         return {
             "id": self.id,
             "strategy_id": self.strategy_id,
@@ -124,6 +134,7 @@ class QuantPromptTemplate(QuantBaseModel):
             "status": self.status,
             "report_type": self.report_type,
             "prompt_template": self.prompt_template,
+            "extra_sections": extra_sections,
             "model_name": self.model_name,
             "change_note": self.change_note,
             "created_at": self.created_at.isoformat() if self.created_at else None,

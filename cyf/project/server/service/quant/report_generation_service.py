@@ -51,14 +51,17 @@ def _load_run_signals(run_id: int, limit: int = 20) -> list[dict]:
 
 
 def _bulk_lookup_instrument_names(symbols: list) -> dict:
-    """批量查 quant_instrument.name；空字符串表示该 symbol 在股票池里没有 name。"""
-    cleaned = sorted({str(s).strip() for s in symbols if str(s or "").strip()})
-    if not cleaned:
-        return {}
-    rows = QuantInstrument.select(QuantInstrument.symbol, QuantInstrument.name).where(
-        QuantInstrument.symbol.in_(cleaned)
-    )
-    return {row.symbol: (row.name or "") for row in rows}
+    """批量查 quant_instrument 三件套 {name, custom_name, display_name}。
+
+    返回 dict[symbol, dict]，供 _build_top_signals 用——top_signals 需要同时暴露
+    原名 / 自定义名 / 显示名三个字段。空 symbol 在结果 dict 中不存在；
+    调用方用 .get(symbol, {...默认空...}) 容错。
+
+    空字典表示该 symbol 在股票池里没有 name / custom_name。
+    委托给 instrument_display_service.bulk_lookup_instrument_records 统一处理。
+    """
+    from service.quant.instrument_display_service import bulk_lookup_instrument_records
+    return bulk_lookup_instrument_records(symbols)
 
 
 def _load_recent_operations(strategy_id: int, trade_date, limit: int = 10) -> list[dict]:
@@ -78,15 +81,24 @@ def _strategy_version(strategy: QuantStrategy) -> str:
 
 
 def _build_top_signals(signals: list[dict], limit: int = 5, name_map: Optional[dict] = None) -> list[dict]:
+    """把 signals 转成 top_signals 列表。
+
+    name_map：来自 _bulk_lookup_instrument_records 的 dict[symbol, dict] 三件套
+    （包含 name / custom_name / display_name 三个字段）。
+    """
     items = []
     name_map = name_map or {}
+    empty_info = {"name": "", "custom_name": "", "display_name": ""}
     for signal in signals[:limit]:
         metrics = signal.get("metrics") or {}
         symbol = signal.get("symbol")
+        info = name_map.get(symbol) or empty_info
         items.append(
             {
                 "symbol": symbol,
-                "name": name_map.get(symbol, ""),
+                "name": info["name"],
+                "custom_name": info["custom_name"],
+                "display_name": info["display_name"],
                 "score": signal.get("score"),
                 "signal_type": signal.get("signal_type"),
                 "passed": signal.get("passed"),
@@ -152,7 +164,7 @@ def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_
     strategy_dict = strategy.to_dict()
     # top_signals 涉及的 symbol 批量查股票中文名（供报告渲染与 LLM 改写使用）
     top_symbols = [s.get("symbol") for s in signals[:5] if s.get("symbol")]
-    name_map = _bulk_lookup_instrument_names(top_symbols)
+    name_map = _bulk_lookup_instrument_names(top_symbols)  # 返回 dict[symbol, dict] 三件套
     risk_flags = _build_risk_flags(run_dict, operations_snapshot, signals)
     bundle = {
         "bundle_version": ANALYSIS_BUNDLE_VERSION,
@@ -229,13 +241,27 @@ def render_report_markdown(bundle: dict, report_draft: dict) -> str:
         "## 记忆引用",
         *([f"- {symbol}" for symbol in report_draft["memory_references"]] or ["- 本次没有命中可用的长期记忆。"]),
         "",
+    ]
+    # 用户提示词引导的"自由发挥段"——由 LLM 根据 prompt_template 意图生成，
+    # 插在 ## 契约说明 之前。空列表就跳过。
+    for section in report_draft.get("custom_sections") or []:
+        if not isinstance(section, dict):
+            continue
+        title = str(section.get("title") or "").strip()
+        body = str(section.get("body_md") or "").rstrip()
+        if not title or not body:
+            continue
+        sections.append(f"## {title}")
+        sections.append(body)
+        sections.append("")
+    sections.extend([
         "## 契约说明",
         f"- Bundle 版本: `{bundle.get('bundle_version')}`",
         f"- Prompt 版本: `{report_draft.get('prompt_version')}`",
         f"- 免责声明: {report_draft.get('disclaimer')}",
         *[f"- {line}" for line in report_draft.get("footer_notes", [])],
         "",
-    ]
+    ])
     return "\n".join(sections)
 
 

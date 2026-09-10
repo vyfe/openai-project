@@ -56,14 +56,28 @@ DRAFT_SCHEMA_INSTRUCTION = """
   "risk_warnings": [str, ...],             # 0-5 行风险提示 bullet
   "action_watchlist": [str, ...],           # 0-3 行动作建议 bullet
   "memory_references": [str, ...],          # 命中的长期记忆标的列表
+  "custom_sections": [                     # 0-3 段"用户提示词引导的"自由发挥段
+    {
+      "title": str,                         # 段标题（不要带 ## 前缀）
+      "body_md": str                        # 该段 markdown 正文，可以是多行
+    }
+  ],
   "footer_notes": [str, ...]                # 2-4 行元信息 bullet
 }
+
+## custom_sections 的语义
+这是**模板作者在 prompt_template 里特别要求的章节**，由 LLM 根据那段提示词自由发挥。
+- 如果 prompt_template 没有点名额外章节，**返回空列表 []**（最常见）。
+- 如果 prompt_template 明确写了"输出 X / Y 段"或"补充 Z 分析"，你可以按其意图填入对应段落。
+- 每段 body_md 内部可以自由写 markdown（列表、表格、加粗、引用皆可），但同样遵守数值契约。
+- 段数控制在 0-3 之间，标题简洁，body_md 总长 ≤ 800 字符。
 
 ## 数值契约（最关键）
 - 报告中的所有数值（价格、涨跌幅、换手、信号总数、命中率等）必须来自下方 AnalysisBundle 中已有字段
 - 不得编造任何 AnalysisBundle 中不存在的数值（编造一个就 reject）
 - 文本里出现的"日期 / 版本号 / 序号"等不是数值，可以自由写
 - 命中信号的描述应当引用 bundle.top_signals[] 里的 symbol 与 name（如果有）
+- custom_sections[*].body_md 里的数值同样遵守本契约
 
 ## 风格
 - 用中文，简洁、量化、研究助理口吻
@@ -203,6 +217,20 @@ def _validate_number_contract(report_draft: dict, bundle: dict) -> list[str]:
                 if num in allowed or normalized in allowed:
                     continue
                 invented.append(num)
+    # custom_sections[*].body_md 也参与数值契约；body_md 是多行字符串，按行扫。
+    for section in report_draft.get("custom_sections") or []:
+        if not isinstance(section, dict):
+            continue
+        body = section.get("body_md") or ""
+        for line in body.splitlines():
+            cleaned_line = _strip_non_numeric_tokens(line)
+            for num in _extract_numbers_from_text(cleaned_line):
+                normalized = num.rstrip("%")
+                if num in always_allowed:
+                    continue
+                if num in allowed or normalized in allowed:
+                    continue
+                invented.append(num)
     return invented
 
 
@@ -233,11 +261,15 @@ def rewrite_report_with_llm(
     username: str = "system",
     temperature: float = 0.3,
     max_tokens: int = 1500,
+    allowed_extra_titles: Optional[set] = None,
 ) -> dict:
     """调 LLM 把 AnalysisBundle 改写成 ReportDraft dict（与 deterministic schema 完全一致）。
 
+    allowed_extra_titles：prompt 模板声明的 extra_sections 段标题集合（None = 不限制）。
+    传入时，LLM 返回的 custom_sections[*].title 必须落在集合内，否则 raise LLMContractError。
+
     抛出：
-    - LLMContractError：数值契约不满足（上层应当 fallback 到模板）
+    - LLMContractError：数值契约 / 段标题不满足（上层应当 fallback 到模板）
     - LLMCallError：LLM 调用 / JSON 解析失败（上层应当 fallback）
     """
     if not bundle:
@@ -246,11 +278,26 @@ def rewrite_report_with_llm(
     resolved_model = model_name.strip() or (prompt_template.get("model_name", "").strip() if prompt_template else "") or DEFAULT_REPORT_MODEL_NAME
     custom_prompt = (prompt_template or {}).get("prompt_template") or DEFAULT_REPORT_TEMPLATE
 
+    # 解析模板声明的额外段落，并拼进 system prompt。
+    # 延迟 import 避免循环依赖（report_prompt_service 已引入本模块）。
+    from service.quant.report_prompt_service import normalize_extra_sections
+    extra_sections = normalize_extra_sections((prompt_template or {}).get("extra_sections")) if prompt_template else []
+    extra_directive = ""
+    if extra_sections:
+        lines = ["## 模板声明的额外段落（custom_sections 必须按此声明）"]
+        for item in extra_sections:
+            lines.append(f"- {item['title']}: {item['instruction'] or '(无具体指令，按段标题语义自由发挥)'}")
+        lines.append("请为每个声明的段填充 body_md；段数 = 声明数；标题必须严格一致。")
+        extra_directive = "\n\n" + "\n".join(lines)
+    if allowed_extra_titles is None and extra_sections:
+        allowed_extra_titles = {item["title"] for item in extra_sections}
+
     logger.info(
-        "LLM rewrite start user=%s model=%s temperature=%s max_tokens=%d bundle_size=%d prompt_chars=%d",
+        "LLM rewrite start user=%s model=%s temperature=%s max_tokens=%d bundle_size=%d prompt_chars=%d extra_sections=%d",
         username, resolved_model, temperature, max_tokens,
         len(json.dumps(bundle, ensure_ascii=False)),
         len(custom_prompt),
+        len(extra_sections),
     )
 
     try:
@@ -259,7 +306,7 @@ def rewrite_report_with_llm(
         logger.warning("get_client_for_user failed: %s", exc)
         raise LLMCallError(f"无法获取 API client: {exc}") from exc
 
-    system_prompt = f"{custom_prompt}\n\n{DRAFT_SCHEMA_INSTRUCTION}"
+    system_prompt = f"{custom_prompt}\n\n{DRAFT_SCHEMA_INSTRUCTION}{extra_directive}"
     user_prompt = USER_PROMPT_TEMPLATE.format(
         custom_prompt=custom_prompt,
         bundle_json=json.dumps(_compact_bundle(bundle), ensure_ascii=False),
@@ -303,10 +350,22 @@ def rewrite_report_with_llm(
             f"LLM 编造了 bundle 不存在的数值: {invented[:5]}; raw[:500]={raw[:500]}"
         )
 
+    # 段标题契约校验：custom_sections[*].title 必须落在 extra_sections 声明集合内。
+    if allowed_extra_titles is not None:
+        custom_sections = parsed.get("custom_sections") or []
+        declared_titles = [str(s.get("title") or "").strip() for s in custom_sections if isinstance(s, dict)]
+        unexpected = [t for t in declared_titles if t and t not in allowed_extra_titles]
+        if unexpected:
+            raise LLMContractError(
+                f"LLM 返回了未声明的 custom_sections 标题: {unexpected}; "
+                f"声明集合={sorted(allowed_extra_titles)}; raw[:500]={raw[:500]}"
+            )
+
     # 兜底补字段（防止 LLM 漏字段让上层 render_markdown 崩）
     parsed.setdefault("draft_version", "report-draft-v1")
     parsed.setdefault("prompt_version", (prompt_template or {}).get("prompt_version", "template-v1"))
     parsed.setdefault("disclaimer", "由 LLM 改写，数值严格基于 AnalysisBundle。")
+    parsed.setdefault("custom_sections", [])
     parsed["signal_overview"] = parsed.get("signal_highlights") or []
     parsed["risk_alerts"] = parsed.get("risk_warnings") or []
     parsed["suggested_actions"] = parsed.get("action_watchlist") or []

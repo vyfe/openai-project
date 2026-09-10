@@ -28,10 +28,17 @@ export const strategyStatusTag = (status: string): 'success' | 'info' =>
  * - 没有 name 时回退到 symbol（保证下拉永远可读）
  * - name 与 symbol 重复时去重（例如 name="002837 英维克" 不会变成 "英维克 · 002837 英维克"）
  */
-export const symbolLabel = (item: { symbol?: string; code?: string; name?: string } | null | undefined): string => {
+export const symbolLabel = (item: {
+  symbol?: string
+  code?: string
+  name?: string
+  custom_name?: string
+  display_name?: string
+} | null | undefined): string => {
   if (!item) return ''
   const code = String(item.symbol || item.code || '').trim()
-  const name = String(item.name || '').trim()
+  // display_name 优先（custom_name 已经合并进 display_name）；空时回退到 name。
+  const name = String(item.display_name || item.name || '').trim()
   if (!name) return code
   if (name === code) return code
   if (name.includes(code)) return name
