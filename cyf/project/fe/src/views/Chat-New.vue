@@ -8,6 +8,8 @@
           :icon="formData.sidebarCollapsed ? Expand : Fold"
           circle
           size="default"
+          :aria-label="formData.sidebarCollapsed ? t('chat.expandSidebar') : t('chat.collapseSidebar')"
+          :title="formData.sidebarCollapsed ? t('chat.expandSidebar') : t('chat.collapseSidebar')"
           @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
         />
         <h2>{{ t('chat.title') }}</h2>
@@ -22,7 +24,7 @@
           v-model:visible="showUsagePopover"
         >
           <template #reference>
-            <el-button class="header-icon-btn" :icon="Coin" circle @click="fetchUsage" />
+            <el-button class="header-icon-btn" :icon="Coin" circle :aria-label="t('chat.usageQuery')" :title="t('chat.usageQuery')" @click="fetchUsage" />
           </template>
           <div class="usage-content">
             <div v-if="loadingUsage" class="loading">
@@ -49,10 +51,10 @@
           </div>
         </el-popover>
 
-        <el-button :icon="Document" circle @click="showLatexHelp = true" class="header-icon-btn" />
+        <el-button :icon="Document" circle :aria-label="t('chat.latexHelp')" :title="t('chat.latexHelp')" @click="showLatexHelp = true" class="header-icon-btn" />
 
         <div class="notification-button-wrapper">
-          <el-button :icon="Bell" circle @click="openNotifications" class="header-icon-btn" />
+          <el-button :icon="Bell" circle :aria-label="t('chat.notifications')" :title="t('chat.notifications')" @click="openNotifications" class="header-icon-btn" />
           <span v-if="hasNewNotifications" class="notification-dot" />
         </div>
       </div>
@@ -929,6 +931,7 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   overflow: hidden;

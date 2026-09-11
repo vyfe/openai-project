@@ -33,8 +33,8 @@
           <el-form label-position="top" class="strategy-ide__status">
             <el-form-item label="状态">
               <el-select v-model="ide.form.status">
-                <el-option label="active" value="active" />
-                <el-option label="inactive" value="inactive" />
+                <el-option label="启用" value="active" />
+                <el-option label="停用" value="inactive" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -200,7 +200,7 @@
           :data="workbench.strategies"
           stripe
           :height="listHeight"
-          class="quant-table strategy-ide__list-table"
+          class="quant-table quant-table--interactive strategy-ide__list-table"
           @row-click="onSelect"
           :row-class-name="({ row }: { row: any }) => row.id === workbench.selectedStrategyId ? 'quant-row--active' : ''"
         >
@@ -214,7 +214,7 @@
           </el-table-column>
           <el-table-column label="状态" width="80">
             <template #default="{ row }: { row: any }">
-              <el-tag size="small" :type="workbench.strategyStatusTag(row.status)">{{ row.status }}</el-tag>
+              <el-tag size="small" :type="workbench.strategyStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="池/规则" width="84">
@@ -359,8 +359,9 @@ function templateUsedOutputs(t: any): string[] {
     // 抓出所有标识符（简单正则：字母数字下划线），过滤掉 bar 字段 / 函数名 / 关键字
     const candidates = expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) || []
     for (const tok of candidates) {
-      if (['close', 'open', 'high', 'low', 'vol', 'amt', 'pct', 'turnover',
-           'True', 'False', 'and', 'or', 'not', 'prev', 'ref', 'avg',
+      // 只列后端真正兼容的名字（BAR_FIELD_NAMES + _SAFE_FUNCTIONS + Python 关键字）。
+      // 短别名（open/close/...）已不再使用，前端插入一律走 canonical 名。
+      if (['True', 'False', 'and', 'or', 'not', 'prev', 'ref', 'avg',
            'abs', 'min', 'max', 'cross_up', 'cross_down', 'any_', 'all_',
            'close_price', 'open_price', 'high_price', 'low_price',
            'volume', 'amount', 'pct_change', 'turnover_rate'].includes(tok)) continue

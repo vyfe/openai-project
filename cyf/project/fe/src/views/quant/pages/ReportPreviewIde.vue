@@ -43,7 +43,7 @@ const previewStatusTagType = computed<'success' | 'warning' | 'info' | 'danger'>
 const ideRunLabel = (run: any) => {
   const strategy = run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) || '未知策略'
   const ratio = `${run.signals_total}/${run.symbols_total}`
-  return `#${run.id} · ${run.trade_date} · ${strategy} · ${ratio} · ${run.status}`
+  return `#${run.id} · ${run.trade_date} · ${strategy} · ${ratio} · ${workbench.statusLabel(run.status)}`
 }
 
 const runReportPreview = async () => {
@@ -84,7 +84,7 @@ const clearReportPreview = () => {
               <span class="quant-run-option__id">#{{ run.id }}</span>
               <span class="quant-run-option__date">{{ run.trade_date }}</span>
               <span class="quant-run-option__strategy">{{ run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) }}</span>
-              <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ run.status }}</el-tag>
+              <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ workbench.statusLabel(run.status) }}</el-tag>
               <span class="quant-run-option__ratio">{{ run.signals_total }}/{{ run.symbols_total }}</span>
             </div>
           </el-option>

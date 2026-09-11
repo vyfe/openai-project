@@ -25,6 +25,7 @@ from service.quant.schedule_query_service import (
     TASK_TYPE_MEMORY_DIGEST,
     SUPPORTED_SCHEDULE_TYPES,
     acquire_runnable_runs,
+    cancel_schedule_run,
     create_schedule_config,
     delete_schedule_config,
     enqueue_due_runs,

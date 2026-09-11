@@ -31,7 +31,7 @@
           :data="workbench.scheduleConfigs"
           stripe
           height="420"
-          class="quant-table"
+          class="quant-table quant-table--interactive"
           @row-click="workbench.handleScheduleSelect"
           :row-class-name="({ row }) => row.id === workbench.selectedScheduleId ? 'quant-row--active' : ''"
         >
@@ -40,7 +40,7 @@
           <el-table-column prop="cron_expr" label="Cron" min-width="140" />
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
-              <el-tag size="small" :type="workbench.strategyStatusTag(row.status)">{{ row.status }}</el-tag>
+              <el-tag size="small" :type="workbench.strategyStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="110">
@@ -89,8 +89,8 @@
           <el-form label-position="top">
             <el-form-item label="状态">
               <el-select v-model="workbench.scheduleForm.status">
-                <el-option label="active" value="active" />
-                <el-option label="inactive" value="inactive" />
+                <el-option label="启用" value="active" />
+                <el-option label="停用" value="inactive" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -399,7 +399,7 @@
           :data="workbench.scheduleRuns"
           stripe
           height="360"
-          class="quant-table"
+          class="quant-table quant-table--interactive"
           @row-click="selectScheduleRun"
           :row-class-name="({ row }) => row.id === workbench.selectedScheduleRunId ? 'quant-row--active' : ''"
         >
@@ -409,12 +409,12 @@
         <el-table-column prop="trigger_source" label="来源" width="100" />
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <el-tag size="small" :type="workbench.taskStatusTag(row.status)">{{ row.status }}</el-tag>
+            <el-tag size="small" :type="workbench.taskStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="attempts" label="次数" width="76" />
         <el-table-column prop="message" label="说明" min-width="220" />
-          <el-table-column label="操作" width="96">
+          <el-table-column label="操作" width="160">
             <template #default="{ row }">
               <el-button
                 v-if="['pending', 'retry_wait'].includes(row.status)"
@@ -424,11 +424,19 @@
                 执行
               </el-button>
               <el-button
-                v-else-if="['failed', 'success', 'skipped'].includes(row.status)"
+                v-else-if="['failed', 'success', 'skipped', 'cancelled'].includes(row.status)"
                 text
                 @click.stop="workbench.resetScheduleRunNow(row.id, row.status === 'success')"
               >
                 重试
+              </el-button>
+              <el-button
+                v-if="['pending', 'running', 'awaiting_data', 'retry_wait'].includes(row.status)"
+                type="danger"
+                text
+                @click.stop="workbench.cancelScheduleRunNow(row.id)"
+              >
+                停止
               </el-button>
             </template>
           </el-table-column>
@@ -438,7 +446,7 @@
         <div class="quant-mini-section__title">
           <span>结果详情</span>
           <div class="quant-toolbar">
-            <span class="quant-muted">{{ workbench.selectedScheduleRun.schedule_name }} · {{ workbench.selectedScheduleRun.status }}</span>
+            <span class="quant-muted">{{ workbench.selectedScheduleRun.schedule_name }} · {{ workbench.statusLabel(workbench.selectedScheduleRun.status) }}</span>
             <el-button text @click="workbench.loadScheduleRunLog(workbench.selectedScheduleRun.id)">刷新日志</el-button>
           </div>
         </div>

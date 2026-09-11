@@ -168,6 +168,7 @@ onMounted(() => {
       stripe
       border
       style="width: 100%"
+      empty-text="暂无访问限制"
     >
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="user_ip" :label="t('admin.userIp')" min-width="150" />

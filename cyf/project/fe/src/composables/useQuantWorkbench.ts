@@ -20,7 +20,7 @@ import {
   quantStrategyAPI,
   quantTaskAPI
 } from '@/services/quantApi'
-import { formatRate, formatNumber, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl, displaySymbolWithName } from './quant/format'
+import { formatRate, formatNumber, statusLabel, strategyStatusTag, buildSchedulePayload as buildSchedulePayloadImpl, displaySymbolWithName } from './quant/format'
 import { buildSparklinePaths } from './quant/sparkline'
 
 // 类型定义已抽到 composables/quant/types.ts
@@ -658,6 +658,8 @@ function createQuantWorkbench() {
     if (status === 'success') return 'success'
     if (status === 'failed') return 'danger'
     if (status === 'leased') return 'warning'
+    if (status === 'cancelled') return 'info'
+    if (status === 'awaiting_data') return 'warning'
     return 'info'
   }
 
@@ -1908,6 +1910,33 @@ function createQuantWorkbench() {
     }
   }
 
+  const cancelScheduleRunNow = async (runId?: number | null) => {
+    const finalId = runId || selectedScheduleRunId.value
+    if (!finalId) {
+      ElMessage.info('先选中一条执行记录')
+      return
+    }
+    try {
+      let confirmed = true
+      try {
+        await ElMessageBox.confirm(
+          '停止该调度执行记录？将一并取消其下未完成的数据采集任务，agent 后续上报会被忽略。',
+          '停止调度执行',
+          { type: 'warning', confirmButtonText: '停止', cancelButtonText: '取消' },
+        )
+      } catch {
+        confirmed = false
+      }
+      if (!confirmed) return
+      await quantScheduleAPI.cancelRun(finalId)
+      ElMessage.success('执行记录已取消，量化执行器不再扫描')
+      await Promise.all([loadScheduleRuns(), loadSchedulerMeta(), loadOverview(), loadTasks(), loadRuns()])
+      if (finalId) await loadScheduleRunLog(finalId)
+    } catch (error: any) {
+      ElMessage.error(error?.message || '停止执行记录失败')
+    }
+  }
+
   const saveImChannel = async () => {
     if (!imChannelForm.name.trim()) return ElMessage.warning('IM 通道名称不能为空')
     if (!imChannelForm.receiveId.trim()) return ElMessage.warning('飞书通道 receive_id 不能为空')
@@ -2406,6 +2435,7 @@ function createQuantWorkbench() {
     backtestCurvePath,
     backtestCurvePaths,
     strategyStatusTag,
+    statusLabel,
     taskStatusTag,
     operationStatusTag,
     operationResultTag,
@@ -2481,6 +2511,7 @@ function createQuantWorkbench() {
     rebuildDueScheduleRuns,
     executeScheduleRunNow,
     resetScheduleRunNow,
+    cancelScheduleRunNow,
     saveImChannel,
     deleteSelectedImChannel,
     sendReportNow,

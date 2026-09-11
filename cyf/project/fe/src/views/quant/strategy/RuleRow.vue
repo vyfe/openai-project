@@ -168,12 +168,15 @@ import type { ExpressionMeta, IndicatorSpec, RuleV2 } from '@/composables/quant/
 
 type DryRunRuleResult = { id: string; label: string; passed: boolean; value: any }
 
-// bar 字段中文对照（点击插入英文变量名）
+// bar 字段中文对照（点击插入英文变量名）。
+// 注意：插入的 name 必须与后端 expression_engine 兼容（_FORBIDDEN_NAMES 黑名单会拦
+// `open/close/...` 这种 Python 内建名同名的字段别名）。前端一律用后端 canonical 名
+// (`open_price/close_price/...`)，保持与 BAR_FIELD_NAMES 一致。
 const barFieldsWithLabel = [
-  { label: '收盘价', name: 'close' },
-  { label: '开盘价', name: 'open' },
-  { label: '最高价', name: 'high' },
-  { label: '最低价', name: 'low' },
+  { label: '收盘价', name: 'close_price' },
+  { label: '开盘价', name: 'open_price' },
+  { label: '最高价', name: 'high_price' },
+  { label: '最低价', name: 'low_price' },
   { label: '成交量', name: 'volume' },
   { label: '成交额', name: 'amount' },
   { label: '涨跌幅(%)', name: 'pct_change' },

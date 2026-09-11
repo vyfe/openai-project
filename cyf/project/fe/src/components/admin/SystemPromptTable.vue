@@ -127,6 +127,7 @@ onMounted(() => {
       stripe
       border
       style="width: 100%"
+      empty-text="暂无提示词"
     >
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="role_name" :label="t('admin.roleName')" min-width="120" />
@@ -140,7 +141,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column class-name="action-column" :label="t('admin.actions')" width="150" fixed="right">
+      <el-table-column class-name="action-column" :label="t('admin.actions')" width="180" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="openEditDialog(row)">
             {{ t('admin.edit') }}

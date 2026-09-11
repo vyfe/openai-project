@@ -16,7 +16,8 @@
         :data="workbench.promptTemplates"
         stripe
         height="280"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="暂无 Prompt 模板，点击“新建模板”开始"
         @row-click="workbench.hydratePromptForm"
         :row-class-name="({ row }) => row.id === workbench.selectedPromptId ? 'quant-row--active' : ''"
       >
@@ -25,7 +26,9 @@
           <template #default="{ row }">{{ workbench.resolveStrategyName(row.strategy_id) }}</template>
         </el-table-column>
         <el-table-column prop="report_type" label="报告类型" width="120" />
-        <el-table-column prop="status" label="状态" width="90" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">{{ workbench.statusLabel(row.status) }}</template>
+        </el-table-column>
       </el-table>
 
       <div class="quant-form-stack quant-section-gap">
@@ -45,8 +48,8 @@
           <el-form label-position="top">
             <el-form-item label="状态">
               <el-select v-model="workbench.promptForm.status">
-                <el-option label="active" value="active" />
-                <el-option label="inactive" value="inactive" />
+                <el-option label="启用" value="active" />
+                <el-option label="停用" value="inactive" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -131,7 +134,8 @@
         :data="workbench.reports"
         stripe
         height="240"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="暂无报告记录，请先生成一份报告"
         @row-click="openReport"
         :row-class-name="({ row }) => row.id === workbench.selectedReportId ? 'quant-row--active' : ''"
       >
@@ -222,7 +226,8 @@
             :data="workbench.memoryFiles"
             stripe
             height="320"
-            class="quant-table"
+            class="quant-table quant-table--interactive"
+            empty-text="暂无股票记忆，先选择标的并梳理记忆"
             @row-click="openMemory"
             :row-class-name="({ row }) => row.symbol === workbench.selectedMemorySymbol ? 'quant-row--active' : ''"
           >

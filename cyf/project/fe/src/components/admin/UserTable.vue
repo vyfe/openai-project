@@ -190,6 +190,7 @@ onMounted(() => {
       stripe
       border
       style="width: 100%"
+      empty-text="暂无用户"
     >
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="username" :label="t('admin.username')" min-width="120" />

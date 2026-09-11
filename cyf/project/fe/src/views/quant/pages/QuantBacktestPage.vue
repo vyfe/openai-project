@@ -14,14 +14,15 @@
         :data="workbench.backtestRuns"
         stripe
         height="700"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="暂无回测记录，请在右侧执行回测"
         @row-click="workbench.handleBacktestSelect"
         :row-class-name="({ row }) => row.id === workbench.selectedBacktestId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="strategy_name" label="策略" min-width="160" />
         <el-table-column label="状态" width="96">
           <template #default="{ row }">
-            <el-tag size="small" :type="workbench.backtestStatusTag(row.status)">{{ row.status }}</el-tag>
+            <el-tag size="small" :type="workbench.backtestStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="区间" min-width="200">
@@ -221,7 +222,7 @@
           <div class="quant-mini-section__title">
             <span>样本交易</span>
           </div>
-          <el-table :data="workbench.backtestTradePreview" stripe height="280" class="quant-table">
+          <el-table :data="workbench.backtestTradePreview" stripe height="280" class="quant-table" empty-text="当前回测没有可展示的样本交易">
             <el-table-column label="标的" min-width="180">
               <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
             </el-table-column>

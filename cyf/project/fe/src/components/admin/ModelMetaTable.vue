@@ -190,12 +190,13 @@ onMounted(() => {
       stripe
       border
       style="width: 100%"
+      empty-text="暂无模型数据"
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="model_name" :label="t('admin.modelName')" min-width="150" />
-      <el-table-column prop="model_desc" :label="t('admin.modelDesc')" min-width="200" />
+      <el-table-column prop="model_desc" :label="t('admin.modelDesc')" min-width="200" show-overflow-tooltip />
       <el-table-column prop="model_type" :label="t('admin.modelType')" width="100">
         <template #default="{ row }">
           <el-tag :type="row.model_type === 1 ? 'primary' : row.model_type === 2 ? 'success' : 'warning'" size="small">
@@ -225,7 +226,7 @@ onMounted(() => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column class-name="action-column" :label="t('admin.actions')" width="150" fixed="right">
+      <el-table-column class-name="action-column" :label="t('admin.actions')" width="180" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" size="small" @click="openEditDialog(row)">
             {{ t('admin.edit') }}

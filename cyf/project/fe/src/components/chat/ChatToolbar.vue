@@ -73,7 +73,7 @@
         </el-button>
 
         <el-tooltip :content="t('chat.exportHint')" placement="top">
-          <el-button class="export-hint-btn" circle text size="small">
+          <el-button class="export-hint-btn" circle text size="small" :aria-label="t('chat.exportHint')" :title="t('chat.exportHint')">
             <el-icon><InfoFilled /></el-icon>
           </el-button>
         </el-tooltip>
@@ -90,10 +90,10 @@
           <component :is="showMobileInput ? View : ChatDotSquare" />
         </el-icon>
       </div>
-      <el-button type="warning" size="default" @click="$emit('clear-session')" class="back-to-top-btn new-session-btn">
+      <el-button type="warning" size="default" :aria-label="t('chat.openAnotherSession')" :title="t('chat.openAnotherSession')" @click="$emit('clear-session')" class="back-to-top-btn new-session-btn">
         <el-icon><CirclePlus /></el-icon>
       </el-button>
-      <el-button :icon="Menu" size="default" circle @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
+      <el-button :icon="Menu" size="default" circle :aria-label="t('chat.openToolbar')" :title="t('chat.openToolbar')" @click="showToolbarDrawer = true" class="mobile-toolbar-btn" />
     </div>
 
     <!-- 移动端抽屉菜单 -->

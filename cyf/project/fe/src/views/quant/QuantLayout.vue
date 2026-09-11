@@ -1,5 +1,5 @@
 <template>
-  <div class="quant-page min-h-screen" :class="{ dark: isDarkTheme, 'quant-dark': isDarkTheme }">
+  <div class="quant-page min-h-screen" :class="{ dark: isDarkTheme, 'quant-dark': isDarkTheme, 'quant-page--overview': isOverview }">
     <div class="quant-shell">
       <header class="quant-header">
         <div class="quant-header__left">
@@ -25,7 +25,7 @@
         </div>
       </header>
 
-      <section class="quant-summary-grid">
+      <section v-if="isOverview" class="quant-summary-grid" aria-label="量化工作台摘要">
         <article v-for="card in summaryCards" :key="card.title" class="quant-summary-card">
           <div class="quant-summary-card__icon">
             <el-icon><component :is="card.icon" /></el-icon>
@@ -92,6 +92,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const { isDarkTheme, initThemeManager } = useThemeManager()
 const workbench = useQuantWorkbench()
+const isOverview = computed(() => route.path === '/quant/overview')
 const summaryCards = computed(() => (unref(workbench.dashboardCards) || []).filter((card): card is NonNullable<typeof card> => Boolean(card)))
 
 const allNavItems = [

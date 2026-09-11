@@ -21,7 +21,7 @@
         <div v-for="task in workbench.dashboardOverview?.today_tasks || workbench.clientTasks" :key="task.task_id" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ task.payload?.symbols?.slice(0, 2)?.join(', ') || task.task_id }}</span>
-            <el-tag size="small" :type="workbench.taskStatusTag(task.status)">{{ task.status }}</el-tag>
+            <el-tag size="small" :type="workbench.taskStatusTag(task.status)">{{ workbench.statusLabel(task.status) }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ task.payload?.start_date }} 至 {{ task.payload?.end_date }}</div>
           <div class="quant-mini-item__actions">
@@ -39,7 +39,7 @@
         <div v-for="signal in workbench.dashboardOverview?.latest_signals || []" :key="`${signal.run_id}-${signal.symbol}`" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ symbolLabel(signal) }}</span>
-            <el-tag size="small" type="success">{{ signal.signal_type || 'watch' }}</el-tag>
+            <el-tag size="small" type="success">{{ workbench.statusLabel(signal.signal_type || 'watch') }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ signal.trade_date }} · 得分 {{ workbench.formatNumber(signal.score, 1) }}</div>
           <div class="quant-mini-item__actions">
@@ -58,7 +58,7 @@
         <div v-for="record in workbench.dashboardOverview?.recent_operations || workbench.operationRecords.slice(0, 6)" :key="record.id" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ symbolLabel(record) }}</span>
-            <el-tag size="small" :type="workbench.operationStatusTag(record.status)">{{ record.status }}</el-tag>
+            <el-tag size="small" :type="workbench.operationStatusTag(record.status)">{{ workbench.statusLabel(record.status) }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ workbench.resolveStrategyName(record.strategy_id) }} · {{ record.trade_date }}</div>
           <div class="quant-mini-item__actions">
@@ -77,7 +77,7 @@
         <div v-for="record in workbench.dashboardOverview?.recent_backtests || workbench.backtestRuns.slice(0, 6)" :key="record.id" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ record.strategy_name }}</span>
-            <el-tag size="small" :type="workbench.backtestStatusTag(record.status)">{{ record.status }}</el-tag>
+            <el-tag size="small" :type="workbench.backtestStatusTag(record.status)">{{ workbench.statusLabel(record.status) }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ record.start_date }} ~ {{ record.end_date }}</div>
           <div class="quant-mini-item__actions">
@@ -96,7 +96,7 @@
         <div v-for="run in workbench.dashboardOverview?.recent_runs || workbench.strategyRuns.slice(0, 6)" :key="run.id" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ run.summary?.strategy_name || `策略 #${run.strategy_id}` }}</span>
-            <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ run.status }}</el-tag>
+            <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ workbench.statusLabel(run.status) }}</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ run.trade_date }} · 通过 {{ run.signals_total }}/{{ run.symbols_total }}</div>
           <div class="quant-mini-item__actions">
@@ -134,7 +134,7 @@
         <div v-for="record in workbench.dashboardOverview?.recent_memory_files || workbench.memoryFiles.slice(0, 6)" :key="record.symbol" class="quant-mini-item">
           <div class="quant-mini-item__head">
             <span class="quant-mini-item__title">{{ symbolLabel(record) }}</span>
-            <el-tag size="small" type="info">memory</el-tag>
+            <el-tag size="small" type="info">记忆</el-tag>
           </div>
           <div class="quant-mini-item__meta">{{ record.updated_at }}</div>
           <div class="quant-mini-item__actions">

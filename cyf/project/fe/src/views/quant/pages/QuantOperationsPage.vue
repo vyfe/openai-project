@@ -16,7 +16,8 @@
         :data="workbench.operationRecords"
         stripe
         height="700"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="暂无操作记录，点击“新建登记”开始"
         @row-click="workbench.handleOperationSelect"
         :row-class-name="({ row }) => row.id === workbench.selectedOperationId ? 'quant-row--active' : ''"
       >
@@ -27,13 +28,13 @@
         <el-table-column prop="action" label="动作" width="92" />
         <el-table-column label="状态" width="96">
           <template #default="{ row }">
-            <el-tag size="small" :type="workbench.operationStatusTag(row.status)">{{ row.status }}</el-tag>
+            <el-tag size="small" :type="workbench.operationStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="结果" width="96">
           <template #default="{ row }">
             <el-tag size="small" :type="workbench.operationResultTag(row.result_status || '')">
-              {{ row.result_status || '--' }}
+              {{ workbench.statusLabel(row.result_status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -98,10 +99,10 @@
           <el-form label-position="top">
             <el-form-item label="执行状态">
               <el-select v-model="workbench.operationForm.status">
-                <el-option label="draft" value="draft" />
-                <el-option label="executed" value="executed" />
-                <el-option label="closed" value="closed" />
-                <el-option label="cancelled" value="cancelled" />
+                <el-option label="草稿" value="draft" />
+                <el-option label="已执行" value="executed" />
+                <el-option label="已结束" value="closed" />
+                <el-option label="已取消" value="cancelled" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -141,10 +142,10 @@
           <el-form label-position="top">
             <el-form-item label="结果状态">
               <el-select v-model="workbench.operationForm.resultStatus" clearable placeholder="可选">
-                <el-option label="pending" value="pending" />
-                <el-option label="win" value="win" />
-                <el-option label="loss" value="loss" />
-                <el-option label="flat" value="flat" />
+                <el-option label="待复盘" value="pending" />
+                <el-option label="盈利" value="win" />
+                <el-option label="亏损" value="loss" />
+                <el-option label="持平" value="flat" />
               </el-select>
             </el-form-item>
           </el-form>

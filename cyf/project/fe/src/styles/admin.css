@@ -114,6 +114,322 @@ body.dark-theme .admin-tabs :deep(.el-tabs__item:not(.is-active)) {
   }
 }
 
+/* =========================
+   Admin console refinement
+   ========================= */
+.admin-page {
+  min-width: 0;
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  background: var(--bg-0) !important;
+  color: var(--text-1);
+}
+
+.admin-page.admin-dark {
+  background:
+    radial-gradient(900px 420px at 96% -12%, color-mix(in srgb, var(--accent-1) 12%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--bg-0) 0%, color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)) 100%);
+}
+
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--line-1) !important;
+  background: color-mix(in srgb, var(--bg-1) 94%, transparent) !important;
+  backdrop-filter: blur(16px);
+}
+
+.admin-header::after {
+  content: '';
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-1), color-mix(in srgb, var(--accent-2) 62%, transparent), transparent 72%);
+  opacity: 0.82;
+}
+
+.admin-header__inner {
+  min-height: 54px;
+}
+
+.admin-page.admin-dark .admin-header__inner,
+.admin-page.admin-dark .admin-header__user {
+  color: var(--text-2);
+}
+
+.admin-header__user {
+  padding: 6px 12px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.admin-back-button {
+  color: var(--text-1);
+  border: 1px solid transparent;
+}
+
+.admin-back-button:hover {
+  color: var(--accent-1);
+  border-color: var(--line-1);
+  background: var(--bg-2) !important;
+}
+
+.admin-main {
+  min-width: 0;
+  padding-top: clamp(16px, 3vw, 30px) !important;
+  padding-bottom: 36px !important;
+}
+
+.admin-shell {
+  min-width: 0;
+}
+
+.admin-page .admin-tabs {
+  min-width: 0;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__nav-wrap),
+.admin-page .admin-tabs :deep(.el-tabs__nav-scroll) {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__nav-wrap::-webkit-scrollbar),
+.admin-page .admin-tabs :deep(.el-tabs__nav-scroll::-webkit-scrollbar) {
+  display: none;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__nav) {
+  min-width: max-content;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__item) {
+  height: 46px;
+  line-height: 46px;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-2) !important;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--accent-1) !important;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__active-bar) {
+  height: 2px;
+  background: var(--accent-1) !important;
+}
+
+.admin-page .admin-tabs :deep(.el-tabs__content) {
+  min-width: 0;
+  padding-top: 20px;
+}
+
+/* 标签已经说明当前模块，内容标题降为轻量分区标识，减少重复层级。 */
+.admin-page .admin-tabs :deep(.el-tabs__content h2.text-lg) {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+}
+
+.admin-page .admin-tabs :deep(.mb-4.flex.justify-between.items-center) {
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px !important;
+}
+
+.admin-page .admin-tabs :deep(.mb-4.flex.justify-between.items-center > .flex.items-center.gap-2) {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-page .admin-tabs :deep(.mb-4.flex.justify-between.items-center > .flex.items-center.gap-2 .el-input) {
+  max-width: 100%;
+}
+
+.admin-page .model-meta-table > .mb-3.flex.flex-wrap {
+  padding: 10px;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-2) 52%, transparent);
+}
+
+.admin-page .el-table {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--line-1);
+  border-radius: 10px;
+  background: var(--bg-1);
+}
+
+.admin-page .el-table__inner-wrapper {
+  min-width: max-content;
+}
+
+.admin-page .el-table__header-wrapper,
+.admin-page .el-table__body-wrapper {
+  min-width: 100%;
+}
+
+.admin-page .el-table th.el-table__cell {
+  height: 42px;
+  padding: 9px 12px;
+  color: var(--text-2);
+  background: var(--bg-2) !important;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+.admin-page .el-table td.el-table__cell {
+  padding: 10px 12px;
+  color: var(--text-1);
+  border-color: var(--line-1) !important;
+  vertical-align: middle;
+}
+
+.admin-page .el-table .cell {
+  line-height: 1.5;
+}
+
+.admin-page .el-table__body tr:hover > td {
+  background: color-mix(in srgb, var(--accent-1-soft) 35%, var(--bg-2)) !important;
+}
+
+.admin-page .el-card {
+  border: 1px solid var(--line-1) !important;
+  border-radius: 10px;
+  background: var(--bg-1) !important;
+  color: var(--text-1);
+  box-shadow: none !important;
+}
+
+.admin-page .el-card__header {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line-1) !important;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.admin-page .el-card__body {
+  color: var(--text-1);
+}
+
+.admin-page .admin-runtime-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .admin-page .admin-runtime-metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-page.admin-dark .el-card,
+.admin-page.admin-dark .sql-executor > div[class*="bg-white"] {
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+}
+
+.admin-page.admin-dark .sql-executor > div[class*="bg-white"] {
+  border-color: var(--line-1) !important;
+}
+
+.admin-page.admin-dark .sql-executor .text-gray-800,
+.admin-page.admin-dark .sql-executor .dark\:text-gray-200 {
+  color: var(--text-1) !important;
+}
+
+.admin-page.admin-dark .sql-executor .text-gray-500,
+.admin-page.admin-dark .sql-executor .text-gray-400,
+.admin-page.admin-dark .sql-executor .dark\:text-gray-400 {
+  color: var(--text-3) !important;
+}
+
+.admin-page.admin-dark .el-input__wrapper,
+.admin-page.admin-dark .el-textarea__inner,
+.admin-page.admin-dark .el-select__wrapper {
+  background: var(--bg-2) !important;
+  border-color: var(--line-1) !important;
+  box-shadow: none !important;
+  color: var(--text-1) !important;
+}
+
+.admin-page.admin-dark .el-input__inner,
+.admin-page.admin-dark .el-textarea__inner {
+  color: var(--text-1) !important;
+}
+
+.admin-page.admin-dark .el-input__inner::placeholder,
+.admin-page.admin-dark .el-textarea__inner::placeholder {
+  color: var(--text-3) !important;
+}
+
+.admin-page .el-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+.admin-page.admin-dark .el-pagination {
+  --el-pagination-bg-color: var(--bg-1);
+  --el-pagination-button-bg-color: var(--bg-1);
+  --el-pagination-hover-color: var(--accent-1);
+  --el-pagination-text-color: var(--text-2);
+}
+
+.admin-page .el-empty {
+  padding: 36px 0;
+}
+
+.admin-page .el-empty__description {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .admin-main {
+    padding: 12px 10px 24px !important;
+  }
+
+  .admin-page .admin-tabs :deep(.el-tabs__content) {
+    padding-top: 14px;
+  }
+
+  .admin-page .admin-tabs :deep(.mb-4.flex.justify-between.items-center > .flex.items-center.gap-2) {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .admin-page .admin-tabs :deep(.mb-4.flex.justify-between.items-center > .flex.items-center.gap-2 .el-input) {
+    flex: 1 1 180px;
+    width: auto !important;
+  }
+
+  .admin-page .model-meta-table > .mb-3.flex.flex-wrap {
+    align-items: stretch;
+  }
+}
+
 /* 表格样式优化 */
 :deep(.el-table) {
   border-radius: 8px;

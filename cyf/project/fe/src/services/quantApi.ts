@@ -210,7 +210,9 @@ export const quantScheduleAPI = {
   resetRun: (run_id: number, allow_success = false) =>
     quantApi.post('/never_guess_my_usage/quant/scheduler/reset_run', { run_id, allow_success }),
   executeRun: (run_id: number) =>
-    quantApi.post('/never_guess_my_usage/quant/scheduler/execute_run', { run_id })
+    quantApi.post('/never_guess_my_usage/quant/scheduler/execute_run', { run_id }),
+  cancelRun: (run_id: number, reason = '') =>
+    quantApi.post(`/never_guess_my_usage/quant/scheduler/run/${run_id}/cancel`, { reason })
 }
 
 export const quantPromptAPI = {

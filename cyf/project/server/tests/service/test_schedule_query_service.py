@@ -14,10 +14,12 @@ from service.quant.schedule_query_service import (
     manual_trigger_schedule,
     reset_schedule_run,
     enqueue_schedule_run,
+    cancel_schedule_run,
     RUN_STATUS_PENDING,
     RUN_STATUS_FAILED,
     RUN_STATUS_SUCCESS,
     RUN_STATUS_AWAITING_DATA,
+    RUN_STATUS_CANCELLED,
     get_scheduler_overview,
 )
 from datetime import datetime
@@ -231,6 +233,120 @@ class TestResetScheduleRun:
         result = reset_schedule_run(run["id"])
         assert result["status"] == RUN_STATUS_PENDING
         assert "已重置" in result["message"]
+
+
+class TestCancelScheduleRun:
+    """测试强制取消调度执行记录。"""
+
+    def _make_run_in_status(self, status: str) -> int:
+        from quant.entities import QuantScheduleRun
+        config = create_schedule_config(
+            name="取消测试",
+            task_type="data_sync",
+            cron_expr="20 15 * * 1-5",
+            payload={"symbols": ["000001.SZ"]},
+        )
+        with patch("service.quant.schedule_query_service.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2025, 1, 15, 15, 0)
+            run = manual_trigger_schedule(config["id"])
+        record = QuantScheduleRun.get_by_id(run["id"])
+        record.status = status
+        record.save()
+        return record.id
+
+    def test_cancel_awaiting_data_run(self):
+        """awaiting_data 状态的 run 可以被取消——这是核心场景（agent 卡住不报）。"""
+        from quant.entities import QuantScheduleRun
+        run_id = self._make_run_in_status(RUN_STATUS_AWAITING_DATA)
+        result = cancel_schedule_run(run_id, reason="agent 上报超时")
+        assert result["status"] == RUN_STATUS_CANCELLED
+        assert "agent 上报超时" in result["message"]
+        record = QuantScheduleRun.get_by_id(run_id)
+        assert record.status == RUN_STATUS_CANCELLED
+        assert record.finished_at is not None
+        assert record.next_retry_at is None
+
+    def test_cancel_pending_run(self):
+        run_id = self._make_run_in_status(RUN_STATUS_PENDING)
+        result = cancel_schedule_run(run_id)
+        assert result["status"] == RUN_STATUS_CANCELLED
+
+    def test_cancel_running_run(self):
+        run_id = self._make_run_in_status("running")
+        result = cancel_schedule_run(run_id)
+        assert result["status"] == RUN_STATUS_CANCELLED
+
+    def test_cancel_retry_run(self):
+        run_id = self._make_run_in_status("retry_wait")
+        result = cancel_schedule_run(run_id)
+        assert result["status"] == RUN_STATUS_CANCELLED
+
+    def test_cancel_success_run_raises(self):
+        """终态不能取消——避免误操作覆盖已成功的记录。"""
+        from quant.entities import QuantScheduleRun
+        run_id = self._make_run_in_status(RUN_STATUS_SUCCESS)
+        with pytest.raises(ValueError, match="不支持取消"):
+            cancel_schedule_run(run_id)
+        # 状态保持不变
+        record = QuantScheduleRun.get_by_id(run_id)
+        assert record.status == RUN_STATUS_SUCCESS
+
+    def test_cancel_failed_run_raises(self):
+        run_id = self._make_run_in_status(RUN_STATUS_FAILED)
+        with pytest.raises(ValueError, match="不支持取消"):
+            cancel_schedule_run(run_id)
+
+    def test_cancel_cancelled_run_is_idempotent(self):
+        """已 cancelled 的 run 再 cancel 不报错，直接返回。"""
+        from quant.entities import QuantScheduleRun
+        run_id = self._make_run_in_status(RUN_STATUS_CANCELLED)
+        result = cancel_schedule_run(run_id)
+        assert result["status"] == RUN_STATUS_CANCELLED
+
+    def test_cancel_also_marks_linked_client_tasks(self):
+        """run 下所有 leased/pending 的 QuantClientTask 应一并标记为 cancelled。"""
+        import uuid as _uuid
+        from quant.entities import QuantClientTask, QuantScheduleRun
+
+        run_id = self._make_run_in_status(RUN_STATUS_AWAITING_DATA)
+        # 模拟 execute_data_sync 下发的 client_task：leased / pending / finished 三种
+        task_leased = QuantClientTask.create(
+            task_id=_uuid.uuid4().hex,
+            task_type="fetch_a_share_daily_bars",
+            status="leased",
+            payload_json="{}",
+            client_id="prod-local-client",
+            schedule_run_id=run_id,
+            attempts=1,
+        )
+        task_pending = QuantClientTask.create(
+            task_id=_uuid.uuid4().hex,
+            task_type="fetch_a_share_minute_bars",
+            status="pending",
+            payload_json="{}",
+            schedule_run_id=run_id,
+            attempts=0,
+        )
+        task_success = QuantClientTask.create(
+            task_id=_uuid.uuid4().hex,
+            task_type="fetch_a_share_daily_bars",
+            status="success",
+            payload_json="{}",
+            schedule_run_id=run_id,
+            attempts=1,
+        )
+
+        cancel_schedule_run(run_id, reason="测试清理")
+
+        # leased/pending → cancelled
+        assert QuantClientTask.get_by_id(task_leased.id).status == "cancelled"
+        assert QuantClientTask.get_by_id(task_pending.id).status == "cancelled"
+        # 已 success 的不动（保留成功记录）
+        assert QuantClientTask.get_by_id(task_success.id).status == "success"
+
+    def test_cancel_unknown_run_raises(self):
+        with pytest.raises(Exception):  # peewee DoesNotExist
+            cancel_schedule_run(999999)
 
 
 class TestSchedulerOverview:

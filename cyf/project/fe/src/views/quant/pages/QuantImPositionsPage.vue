@@ -16,12 +16,15 @@
         :data="workbench.imChannels"
         stripe
         height="240"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="暂无 IM 通道，点击“新建通道”开始"
         @row-click="workbench.hydrateImChannelForm"
         :row-class-name="({ row }) => row.id === workbench.selectedChannelId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="name" label="名称" min-width="140" />
-        <el-table-column prop="status" label="状态" width="90" />
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">{{ workbench.statusLabel(row.status) }}</template>
+        </el-table-column>
         <el-table-column prop="updated_at" label="更新时间" min-width="170" />
       </el-table>
 
@@ -35,8 +38,8 @@
           <el-form label-position="top">
             <el-form-item label="状态">
               <el-select v-model="workbench.imChannelForm.status">
-                <el-option label="active" value="active" />
-                <el-option label="inactive" value="inactive" />
+                <el-option label="启用" value="active" />
+                <el-option label="停用" value="inactive" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -130,9 +133,11 @@
           <span>发送记录</span>
           <el-button text :icon="RefreshRight" @click="workbench.loadDeliveryRecords" :loading="workbench.loading.deliveryRecords">刷新</el-button>
         </div>
-        <el-table :data="workbench.deliveryRecords" stripe height="240" class="quant-table">
+        <el-table :data="workbench.deliveryRecords" stripe height="240" class="quant-table" empty-text="暂无发送记录">
           <el-table-column prop="channel_target" label="目标" min-width="200" />
-          <el-table-column prop="status" label="状态" width="90" />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">{{ workbench.statusLabel(row.status) }}</template>
+          </el-table-column>
           <el-table-column prop="report_id" label="报告" width="90" />
           <el-table-column prop="sent_at" label="发送时间" min-width="170" />
           <el-table-column prop="error_message" label="错误" min-width="220" />
@@ -144,9 +149,11 @@
           <span>飞书入站事件</span>
           <el-button text :icon="RefreshRight" @click="workbench.loadImInboundEvents" :loading="workbench.loading.imInboundEvents">刷新</el-button>
         </div>
-        <el-table :data="workbench.imInboundEvents" stripe height="220" class="quant-table">
+        <el-table :data="workbench.imInboundEvents" stripe height="220" class="quant-table" empty-text="暂无入站事件">
           <el-table-column prop="received_at" label="接收时间" min-width="170" />
-          <el-table-column prop="status" label="状态" width="96" />
+          <el-table-column label="状态" width="96">
+            <template #default="{ row }">{{ workbench.statusLabel(row.status) }}</template>
+          </el-table-column>
           <el-table-column prop="command" label="命令" width="120" />
           <el-table-column prop="chat_id" label="chat_id" min-width="160" />
           <el-table-column label="内容" min-width="220">
@@ -180,7 +187,7 @@
         <div class="quant-mini-section__title">
           <span>当前持仓</span>
         </div>
-        <el-table :data="workbench.positionSummary" stripe height="220" class="quant-table">
+        <el-table :data="workbench.positionSummary" stripe height="220" class="quant-table" empty-text="暂无持仓记录">
           <el-table-column label="标的" min-width="180">
             <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
           </el-table-column>

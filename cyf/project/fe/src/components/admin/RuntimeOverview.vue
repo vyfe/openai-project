@@ -54,7 +54,7 @@ onMounted(() => {
     <el-skeleton v-if="loading" :rows="6" animated />
 
     <template v-else>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+      <div class="admin-runtime-metrics grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         <el-card>
           <template #header>{{ t('admin.uptime') }}</template>
           <div class="text-xl font-semibold">{{ formatSeconds(runtime?.uptime_seconds || 0) }}</div>
@@ -80,7 +80,7 @@ onMounted(() => {
 
       <el-card>
         <template #header>{{ t('admin.apiHostStatus') }}</template>
-        <el-table :data="runtime?.api_hosts || []" border stripe>
+        <el-table :data="runtime?.api_hosts || []" border stripe empty-text="暂无 Host 数据">
           <el-table-column prop="index" label="#" width="60" />
           <el-table-column prop="host" :label="t('admin.host')" min-width="220" />
           <el-table-column :label="t('admin.status')" width="120">

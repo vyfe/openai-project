@@ -22,6 +22,35 @@ export function formatNumber(value: any, digits = 2): string {
 export const strategyStatusTag = (status: string): 'success' | 'info' =>
   status === 'active' ? 'success' : 'info'
 
+/** 把后端状态码转换为工作台可读的中文标签，未知值保留原值便于排查。 */
+export const statusLabel = (status: string | null | undefined): string => {
+  const value = String(status || '').trim()
+  const labels: Record<string, string> = {
+    active: '启用',
+    inactive: '停用',
+    pending: '待处理',
+    running: '执行中',
+    leased: '已领取',
+    awaiting_data: '等待数据',
+    retry_wait: '等待重试',
+    success: '成功',
+    failed: '失败',
+    cancelled: '已取消',
+    skipped: '已跳过',
+    draft: '草稿',
+    executed: '已执行',
+    closed: '已结束',
+    win: '盈利',
+    loss: '亏损',
+    flat: '持平',
+    manual: '手工',
+    cron: '定时',
+    watch: '观察',
+    disabled: '未启用'
+  }
+  return labels[value] || value || '--'
+}
+
 /**
  * 把 symbol 选项（{symbol, name, ...}）渲染成"展示名称，但传代码参数"的下拉 label。
  * - 优先用中文/英文 name

@@ -30,7 +30,7 @@
               <span class="quant-run-option__id">#{{ run.id }}</span>
               <span class="quant-run-option__date">{{ run.trade_date }}</span>
               <span class="quant-run-option__strategy">{{ run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) }}</span>
-              <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ run.status }}</el-tag>
+              <el-tag size="small" :type="workbench.taskStatusTag(run.status)">{{ workbench.statusLabel(run.status) }}</el-tag>
               <span class="quant-run-option__ratio">{{ run.signals_total }}/{{ run.symbols_total }}</span>
             </div>
           </el-option>
@@ -41,7 +41,8 @@
         :data="workbench.strategyRuns"
         stripe
         height="560"
-        class="quant-table"
+        class="quant-table quant-table--interactive"
+        empty-text="先选择一条运行记录查看信号"
         @row-click="(row) => workbench.handleRunSelect(row)"
         :row-class-name="({ row }) => row.id === workbench.selectedRunId ? 'quant-row--active' : ''"
       >
@@ -51,7 +52,7 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
-            <el-tag size="small" :type="workbench.taskStatusTag(row.status)">{{ row.status }}</el-tag>
+            <el-tag size="small" :type="workbench.taskStatusTag(row.status)">{{ workbench.statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="通过" width="96">
@@ -87,7 +88,7 @@
         </div>
       </div>
 
-      <el-table :data="workbench.strategySignals" stripe height="580" class="quant-table" v-loading="workbench.loading.signals">
+      <el-table :data="workbench.strategySignals" stripe height="580" class="quant-table" empty-text="先选择一条运行记录查看信号" v-loading="workbench.loading.signals">
         <el-table-column label="标的" min-width="200">
           <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
         </el-table-column>
@@ -150,6 +151,6 @@ const onSelectRun = (runId: number | null) => {
 const runLabel = (run: any) => {
   const strategy = run.summary?.strategy_name || workbench.resolveStrategyName(run.strategy_id) || '未知策略'
   const ratio = `${run.signals_total}/${run.symbols_total}`
-  return `#${run.id} · ${run.trade_date} · ${strategy} · ${ratio} · ${run.status}`
+  return `#${run.id} · ${run.trade_date} · ${strategy} · ${ratio} · ${workbench.statusLabel(run.status)}`
 }
 </script>

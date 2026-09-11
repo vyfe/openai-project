@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -12,6 +13,8 @@ from quant.entities import QuantDailyBar, QuantScheduleConfig, QuantScheduleRun
 from service.quant.cron_utils import CronExpression
 from service.quant.schedule_log_service import build_schedule_log_path
 from service.quant.trade_calendar_service import resolve_trade_date_for_schedule
+
+logger = logging.getLogger("quant.schedule_query")
 
 TASK_TYPE_DATA_SYNC = "data_sync"
 TASK_TYPE_ANALYSIS = "analysis_report"
@@ -26,6 +29,7 @@ RUN_STATUS_SUCCESS = "success"
 RUN_STATUS_FAILED = "failed"
 RUN_STATUS_SKIPPED = "skipped"
 RUN_STATUS_RETRY = "retry_wait"
+RUN_STATUS_CANCELLED = "cancelled"
 
 
 def normalize_payload(payload) -> dict:
@@ -281,6 +285,79 @@ def reset_schedule_run(run_id: int, *, allow_success: bool = False) -> dict:
     run.started_at = None
     run.finished_at = None
     run.save()
+    return run.to_dict()
+
+
+# 处于这些状态的 run 仍可被 cancel_schedule_run 终止。
+# SUCCESS / FAILED / CANCELLED 是终态——再 cancel 没意义。
+_CANCELLABLE_RUN_STATUSES = {
+    RUN_STATUS_PENDING,
+    RUN_STATUS_RUNNING,
+    RUN_STATUS_AWAITING_DATA,
+    RUN_STATUS_RETRY,
+}
+
+
+def cancel_schedule_run(run_id: int, *, reason: str = "") -> dict:
+    """强制取消一条仍在进行的调度执行记录。
+
+    用途：处理 agent 长时间不上报导致 awaiting_data 一直挂着的"僵尸" run，
+    或临时中断某条不想再跑下去的 run。语义上等价于把 run 标记为终止态——
+    后续行为：
+    - acquire_runnable_runs 不会再拉起（状态不在 PENDING/RETRY_WAIT）
+    - enqueue_due_runs 同 run_key 会返回已 cancelled 的 run，不会重新创建
+    - 即便 agent 后补上报成功，_complete_linked_schedule_run 因 status != awaiting_data 而 no-op
+
+    同时把 run 下所有未完成的 QuantClientTask（pending/leased）也标记为 cancelled，
+    避免 agent 进程继续持有 lease 浪费时间。
+    """
+    from service.quant.task_dispatch_service import cancel_client_tasks_for_run
+
+    run = QuantScheduleRun.get_by_id(run_id)
+    if run.status == RUN_STATUS_CANCELLED:
+        return run.to_dict()  # idempotent: 已取消的 run 再 cancel 直接返回
+    if run.status not in _CANCELLABLE_RUN_STATUSES:
+        raise ValueError(f"当前 run 状态不支持取消: {run.status}")
+
+    with quant_db.atomic():
+        cancelled_tasks = cancel_client_tasks_for_run(run_id, reason=reason or "schedule_run cancelled")
+        run.status = RUN_STATUS_CANCELLED
+        run.message = (reason or "已手动取消调度执行记录").strip()
+        run.finished_at = datetime.now()
+        run.next_retry_at = None
+        run.save()
+
+    logger.warning(
+        "schedule_run_cancelled run_id=%s task_type=%s schedule_id=%s cancelled_tasks=%s reason=%s",
+        run.id, run.task_type, run.schedule_id, cancelled_tasks, reason,
+    )
+    # 走与 _append_schedule_run_log 同款 handler 直接构造 LogRecord，
+    # 这样 cancel 不依赖 execute_schedule_run 当前的 context（handler 可能已关闭）。
+    try:
+        from conf.runtime_logging import build_plain_file_handler, run_id_var, task_type_var
+        scheduler_logger = logging.getLogger("quant.scheduler")
+        handler = build_plain_file_handler(run.log_file, service="quant", level=logging.WARNING)
+        run_token = run_id_var.set(str(run.id or ""))
+        task_token = task_type_var.set(str(run.task_type or ""))
+        try:
+            record = scheduler_logger.makeRecord(
+                name=scheduler_logger.name,
+                level=logging.WARNING,
+                fn="",
+                lno=0,
+                msg=f"schedule_run_cancelled run_id={run.id} cancelled_tasks={cancelled_tasks} reason={reason or ''}",
+                args=(),
+                exc_info=None,
+            )
+            handler.handle(record)
+        finally:
+            run_id_var.reset(run_token)
+            task_type_var.reset(task_token)
+            handler.close()
+    except Exception as exc:
+        logger.warning("schedule_run_cancel_log_failed run_id=%s err=%s", run.id, exc)
+
+    return run.to_dict()
     return run.to_dict()
 
 

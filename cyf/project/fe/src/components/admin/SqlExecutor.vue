@@ -123,6 +123,7 @@ onMounted(() => {
         size="small"
         border
         max-height="220"
+        empty-text="暂无表信息"
       >
         <el-table-column prop="table_name" :label="t('admin.tableName')" min-width="160" />
         <el-table-column prop="row_count" :label="t('admin.rowCount')" width="120" />
@@ -143,6 +144,7 @@ onMounted(() => {
           size="small"
           border
           max-height="220"
+          empty-text="暂无字段信息"
         >
           <el-table-column prop="name" :label="t('admin.columnName')" min-width="180" />
           <el-table-column prop="data_type" :label="t('admin.columnType')" min-width="120" />

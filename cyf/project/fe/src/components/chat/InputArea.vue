@@ -13,7 +13,7 @@
           <!-- 文件名 -->
           <span class="file-preview-name">{{ file.name }}</span>
           <!-- 删除按钮 -->
-          <el-button class="file-delete-btn" :icon="Close" size="small" circle @click="removeFile(file)" />
+          <el-button class="file-delete-btn" :icon="Close" size="small" circle :aria-label="t('chat.removeFile')" :title="t('chat.removeFile')" @click="removeFile(file)" />
         </div>
       </div>
 
@@ -49,7 +49,7 @@
             <!-- 文件上传按钮移到输入框上方，右侧 -->
             <el-popover v-if="canUploadAttachment" placement="top-start" :width="280" trigger="click" v-model:visible="showUploadPopover">
               <template #reference>
-                <el-button class="upload-trigger-btn" :icon="Plus" size="large" />
+                <el-button class="upload-trigger-btn" :icon="Plus" size="large" :aria-label="t('chat.uploadFile')" :title="t('chat.uploadFile')" />
               </template>
               <div class="upload-popover-content">
                 <div class="upload-popover-header">

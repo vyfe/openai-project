@@ -11,6 +11,7 @@ from service.quant.schedule_service import (
     TASK_TYPE_INDUSTRY_REPORT,
     TASK_TYPE_MEMORY_DIGEST,
     available_strategy_options,
+    cancel_schedule_run,
     create_schedule_config,
     delete_schedule_config,
     enqueue_due_runs,
@@ -218,3 +219,24 @@ def quant_scheduler_reset_run():
         return success_response(data=result, msg="调度执行记录已重置")
     except Exception as exc:
         return error_response(f"重置调度执行记录失败: {exc}")
+
+
+@bp.route("/scheduler/run/<int:run_id>/cancel", methods=["POST"])
+@require_admin_auth
+def quant_scheduler_cancel_run(run_id):
+    """强制取消一条仍在进行的调度执行记录（pending/running/awaiting_data/retry_wait）。
+
+    主要用于：
+    - 终止因 agent 长时间不上报而卡在 awaiting_data 的"僵尸" run
+    - 紧急中断不想继续执行的 run
+
+    同时把 run 下所有未完成的 QuantClientTask（pending/leased）标记为 cancelled，
+    避免 agent 进程继续持有 lease。
+    """
+    try:
+        data = get_request_data() or {}
+        reason = str(data.get("reason", "")).strip()
+        result = cancel_schedule_run(run_id, reason=reason or "已手动取消调度执行记录")
+        return success_response(data=result, msg="调度执行记录已取消")
+    except Exception as exc:
+        return error_response(f"取消调度执行记录失败: {exc}")

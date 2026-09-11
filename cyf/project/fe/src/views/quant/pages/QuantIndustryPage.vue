@@ -101,7 +101,7 @@
           <p>行情、估值、资金和主题热度。</p>
         </div>
       </div>
-      <el-table :data="dashboard?.indicators || []" stripe height="360" class="quant-table">
+      <el-table :data="dashboard?.indicators || []" stripe height="360" class="quant-table" empty-text="暂无指标快照，请先采集行情">
         <el-table-column prop="indicator_group" label="分组" width="120" />
         <el-table-column prop="indicator_name" label="指标" min-width="140" />
         <el-table-column label="对象" min-width="160">
@@ -122,7 +122,7 @@
           <p>按采集时间和发布时间排序。</p>
         </div>
       </div>
-      <el-table :data="dashboard?.news || []" stripe height="420" class="quant-table">
+      <el-table :data="dashboard?.news || []" stripe height="420" class="quant-table" empty-text="暂无公告或新闻">
         <el-table-column prop="published_at" label="日期" width="120" />
         <el-table-column prop="source" label="来源" width="130" />
         <el-table-column prop="title" label="标题" min-width="320">
@@ -141,7 +141,7 @@
           <p>仅沉淀元数据、摘要和原文链接。</p>
         </div>
       </div>
-      <el-table :data="dashboard?.research_reports || []" stripe height="420" class="quant-table">
+      <el-table :data="dashboard?.research_reports || []" stripe height="420" class="quant-table" empty-text="暂无研报数据">
         <el-table-column prop="published_at" label="日期" width="120" />
         <el-table-column prop="org_name" label="机构" width="140" />
         <el-table-column prop="rating" label="评级" width="100" />

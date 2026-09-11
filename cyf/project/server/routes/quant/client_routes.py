@@ -1,4 +1,5 @@
 import json
+import logging
 
 from flask import Blueprint, request
 
@@ -84,6 +85,7 @@ def quant_client_task_claim(user, password):
 @require_auth
 def quant_client_task_report(user, password):
     del user, password
+    import_result = None
     try:
         data = get_request_data()
         client_id = str(data.get("client_id", "")).strip()
@@ -97,7 +99,10 @@ def quant_client_task_report(user, password):
             task = mark_task_failed(task_id=task_id, client_id=client_id, message=message or "客户端上报失败")
             return success_response(data=task, msg="失败状态已记录")
 
-        import_result = None
+        # 先 import_bundle，成功后再 mark_task_success。
+        # 万一 import_bundle 抛异常（解析失败 / SQLite 损坏 / UNIQUE 冲突 / 磁盘满等），
+        # 不能让 task 永远卡 leased——否则 _recycle_expired_leases 会回收成 pending，
+        # 下个 agent 又 claim 同一个 task_id，无限循环。
         if "bundle" in request.files:
             upload = request.files["bundle"]
             file_bytes = upload.read()
@@ -114,4 +119,17 @@ def quant_client_task_report(user, password):
         task = mark_task_success(task_id=task_id, client_id=client_id, import_batch=import_result, message=message or "客户端上报成功")
         return success_response(data=task, msg="任务上报成功")
     except Exception as exc:
+        # 把 task 状态从 leased/pending → failed，避免被 recycle 反复执行。
+        # 注意：此时任务可能仍处于 leased（import_bundle 失败时），必须显式标 failed。
+        try:
+            mark_task_failed(
+                task_id=task_id,
+                client_id=client_id,
+                message=f"服务端处理失败（{type(exc).__name__}）：{exc}",
+            )
+        except Exception as inner:
+            logging.getLogger("quant.client_report").warning(
+                "mark_task_failed_after_import_failed_failed task_id=%s err=%s",
+                task_id, inner,
+            )
         return error_response(f"上报任务结果失败: {exc}")

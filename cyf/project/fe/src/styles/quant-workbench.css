@@ -16,9 +16,12 @@
   --q-red: #b64238;
   --q-green: #197a4c;
   --q-blue: #315fba;
+  --q-amber: #d69554;
   --q-shadow: 0 10px 28px rgba(23, 32, 34, 0.08);
   --q-mono: "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
-  --q-body: Inter, "DIN Alternate", "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --q-text-muted: var(--q-muted);
+  --q-display: "Avenir Next", "DIN Alternate", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --q-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   min-height: 100vh;
   background:
     linear-gradient(90deg, rgba(23, 32, 34, 0.035) 1px, transparent 1px),
@@ -98,7 +101,7 @@
 .quant-shell {
   max-width: 1560px;
   margin: 0 auto;
-  padding: 18px 18px 36px;
+  padding: 14px 16px 32px;
 }
 
 .quant-header {
@@ -106,10 +109,12 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 20px;
   align-items: start;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--q-line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--q-surface) 96%, transparent);
+  border-radius: 10px;
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--q-cyan) 6%, transparent), transparent 34%),
+    color-mix(in srgb, var(--q-surface) 96%, transparent);
   box-shadow: var(--q-shadow);
 }
 
@@ -202,10 +207,10 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
-  margin-top: 12px;
+  margin-top: 10px;
   overflow: hidden;
   border: 1px solid var(--q-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--q-line);
   box-shadow: var(--q-shadow);
 }
@@ -216,8 +221,8 @@
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  min-height: 88px;
-  padding: 14px;
+  min-height: 78px;
+  padding: 12px 14px;
   background: var(--q-surface);
 }
 
@@ -252,10 +257,10 @@
 }
 
 .quant-summary-card__value {
-  margin: 4px 0;
+  margin: 3px 0;
   color: var(--q-ink);
   font-family: var(--q-mono);
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 780;
   line-height: 1;
 }
@@ -265,13 +270,13 @@
 }
 
 .quant-main-panel {
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 .quant-workspace {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 
@@ -279,9 +284,9 @@
   position: sticky;
   top: 14px;
   height: fit-content;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--q-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--q-surface) 98%, transparent);
   box-shadow: var(--q-shadow);
 }
@@ -303,7 +308,7 @@
 .quant-nav-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .quant-nav-link {
@@ -311,8 +316,8 @@
   grid-template-columns: 22px minmax(0, 1fr) 10px;
   gap: 8px;
   align-items: center;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 7px 9px;
   border: 1px solid transparent;
   border-radius: 6px;
   color: var(--q-muted);
@@ -353,9 +358,13 @@
   min-width: 0;
 }
 
+.quant-content-panel > * {
+  min-width: 0;
+}
+
 .quant-grid {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .quant-grid--overview {
@@ -363,7 +372,8 @@
 }
 
 .quant-grid--overview .quant-panel {
-  min-height: 250px;
+  min-height: 0;
+  align-self: start;
 }
 
 .quant-grid--overview .quant-panel:first-child {
@@ -383,7 +393,7 @@
 .quant-grid--operations,
 .quant-grid--backtest,
 .quant-grid--scheduler {
-  grid-template-columns: minmax(340px, 0.86fr) minmax(0, 1.14fr);
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
 }
 
 .quant-grid--industry {
@@ -408,15 +418,15 @@
 
 .quant-panel {
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid var(--q-line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--q-surface);
   box-shadow: 0 6px 20px rgba(23, 32, 34, 0.055);
 }
 
 .quant-panel--editor {
-  min-height: 720px;
+  min-height: 0;
 }
 
 .quant-panel--full {
@@ -429,8 +439,8 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 11px;
   border-bottom: 1px solid var(--q-line);
 }
 
@@ -1064,7 +1074,27 @@
   --el-table-header-text-color: var(--q-muted);
   border: 1px solid var(--q-line);
   border-radius: 6px;
-  overflow: hidden;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 列的业务最小宽度不能在窄面板里被硬裁掉；保留横向滚动，确保时间、来源和理由可读。 */
+.quant-table .el-table__inner-wrapper {
+  min-width: max-content;
+}
+
+.quant-table .el-table__header-wrapper,
+.quant-table .el-table__body-wrapper {
+  min-width: 100%;
+}
+
+.quant-table--interactive .el-table__body tr {
+  cursor: pointer;
+}
+
+.quant-table--interactive .el-table__row.quant-row--active > td {
+  box-shadow: inset 3px 0 0 var(--q-cyan);
 }
 
 .quant-table a {
@@ -1168,6 +1198,21 @@
   box-shadow: 0 0 0 1px var(--q-line) inset;
 }
 
+.quant-form-grid > .el-form,
+.quant-form-grid .el-form-item,
+.quant-data-toolbar__row--filters > .el-form {
+  min-width: 0;
+}
+
+.quant-form-grid .el-select,
+.quant-form-grid .el-date-editor,
+.quant-form-grid .el-input-number,
+.quant-data-toolbar__row--filters .el-select,
+.quant-data-toolbar__row--filters .el-date-editor,
+.quant-data-toolbar__row--filters .el-input-number {
+  width: 100%;
+}
+
 .quant-page .el-form-item {
   margin-bottom: 10px;
 }
@@ -1180,6 +1225,30 @@
 
 .quant-page .el-tag {
   border-radius: 999px;
+}
+
+.quant-page .el-empty {
+  padding: 22px 0 28px;
+}
+
+.quant-page .el-empty__description {
+  color: var(--q-muted);
+  font-size: 12px;
+}
+
+.quant-chart-wrap {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+  border-top: 1px solid var(--q-line);
+}
+
+.quant-grid--data > .quant-panel {
+  align-self: start;
+}
+
+.quant-pool-list .el-empty {
+  min-height: 120px;
 }
 
 .quant-page .el-alert {
@@ -1230,6 +1299,11 @@
   .quant-grid--industry .quant-panel:nth-child(4) {
     grid-column: auto;
   }
+
+  .quant-nav-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -1248,7 +1322,9 @@
   }
 
   .quant-nav-panel {
-    position: static;
+    position: sticky;
+    top: 8px;
+    z-index: 5;
   }
 }
 
@@ -1267,6 +1343,10 @@
     padding: 12px;
   }
 
+  .quant-nav-list {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .quant-panel__header {
     flex-direction: column;
   }
@@ -1280,4 +1360,3 @@
     grid-template-columns: 1fr;
   }
 }
-

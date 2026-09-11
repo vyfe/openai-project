@@ -306,3 +306,41 @@ def reset_task(task_id: str) -> dict:
         task.save()
         logger.info("task_reset task_id=%s", task.task_id)
         return _serialize_task(task)
+
+
+def cancel_client_tasks_for_run(schedule_run_id: int, *, reason: str = "") -> int:
+    """把某条 schedule_run 下所有未完成的 QuantClientTask 标记为 cancelled。
+
+    - 只动 pending/leased 两个状态——已 success / failed / cancelled 的不动
+    - 同一事务内原子提交，避免 run 取消后还有 leased 任务被 agent 拿来跑
+    - 返回被取消的任务数
+
+    cancel 不会回滚 schedule_run；调用方负责同时把 run 状态置为 cancelled。
+    """
+    pending_ids = list(
+        QuantClientTask.select(QuantClientTask.id)
+        .where(
+            (QuantClientTask.schedule_run_id == schedule_run_id)
+            & (QuantClientTask.status.in_(["pending", "leased"]))
+        )
+        .iterator()
+    )
+    if not pending_ids:
+        return 0
+    rows = (
+        QuantClientTask.update(
+            {
+                QuantClientTask.status: "cancelled",
+                QuantClientTask.message: (reason or "schedule_run cancelled").strip(),
+                QuantClientTask.finished_at: _now(),
+                QuantClientTask.lease_expires_at: None,
+            }
+        )
+        .where(QuantClientTask.id.in_([row.id for row in pending_ids]))
+        .execute()
+    )
+    logger.warning(
+        "client_tasks_cancelled schedule_run_id=%s rows=%s reason=%s",
+        schedule_run_id, rows, reason,
+    )
+    return int(rows or 0)

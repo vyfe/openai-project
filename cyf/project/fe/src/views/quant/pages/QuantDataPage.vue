@@ -536,7 +536,7 @@
             <div v-for="task in workbench.clientTasks" :key="task.task_id" class="quant-mini-item">
               <div class="quant-mini-item__head">
                 <span class="quant-mini-item__title">{{ task.payload?.symbols?.slice(0, 2)?.join(', ') || task.task_id }}</span>
-                <el-tag size="small" :type="workbench.taskStatusTag(task.status)">{{ task.status }}</el-tag>
+                <el-tag size="small" :type="workbench.taskStatusTag(task.status)">{{ workbench.statusLabel(task.status) }}</el-tag>
               </div>
               <div class="quant-mini-item__meta">{{ task.payload?.start_date }} 至 {{ task.payload?.end_date }}</div>
               <div class="quant-mini-item__actions">
@@ -556,7 +556,7 @@
             <div v-for="batch in workbench.importBatches" :key="batch.batch_id" class="quant-mini-item">
               <div class="quant-mini-item__head">
                 <span class="quant-mini-item__title">{{ batch.source }}</span>
-                <el-tag size="small" :type="workbench.taskStatusTag(batch.status)">{{ batch.status }}</el-tag>
+                <el-tag size="small" :type="workbench.taskStatusTag(batch.status)">{{ workbench.statusLabel(batch.status) }}</el-tag>
               </div>
               <div class="quant-mini-item__meta">{{ batch.records_imported }}/{{ batch.records_total }} 条</div>
               <div class="quant-mini-item__actions">
