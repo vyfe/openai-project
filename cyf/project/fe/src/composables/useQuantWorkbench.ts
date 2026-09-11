@@ -39,6 +39,7 @@ import type {
   ImInboundEventRecord,
   PositionJournalRecord,
   PositionSummaryRecord,
+  PromptTemplateExtraSection,
   SymbolOption,
   InstrumentRow
 } from './quant/types'
@@ -373,6 +374,7 @@ function createQuantWorkbench() {
 
   const taskForm = reactive({
     symbols: [] as string[],
+    allActive: false,
     startDate: '',
     endDate: '',
     dateRange: ['', ''] as [string, string],
@@ -394,6 +396,7 @@ function createQuantWorkbench() {
 
   const backfillForm = reactive({
     symbols: [] as string[],
+    allActive: false,
     startDate: '',
     endDate: '',
     dateRange: ['', ''] as [string, string],
@@ -455,6 +458,7 @@ function createQuantWorkbench() {
     allowManualRun: true,
     description: '',
     dataSymbols: [] as string[],
+    dataAllActive: false,
     dataProvider: 'auto',
     dataAdjustFlag: 'qfq',
     dataFrequencies: ['1d'] as ('1d' | '5m')[],
@@ -484,17 +488,43 @@ function createQuantWorkbench() {
     status: 'active',
     reportType: 'test_report',
     promptTemplate: `你是量化研究助理。基于结构化 AnalysisBundle 输出受约束的 ReportDraft。\n规则：\n1. 不得虚构 bundle 中不存在的数值。\n2. 数值必须引用 bundle 中已有字段。\n3. 记忆仅用于解释增强，不得替代当天信号。\n4. 输出应包含摘要、信号概览、风险、动作建议、记忆引用。`,
-    extraSections: [] as Array<{ title: string; instruction: string }>,
     changeNote: ''
   })
 
-  // 额外段落增删：上限 3 段，标题去空。
+  type PromptExtraSectionForm = Required<PromptTemplateExtraSection>
+  const promptExtraSections = reactive<PromptExtraSectionForm[]>([])
+
+  const normalizePromptExtraSections = (sections: unknown): PromptExtraSectionForm[] => {
+    if (!Array.isArray(sections)) return []
+
+    const normalized: PromptExtraSectionForm[] = []
+    const titles = new Set<string>()
+    for (const section of sections) {
+      if (!section || typeof section !== 'object') continue
+      const { title, instruction } = section as PromptTemplateExtraSection
+      const normalizedTitle = String(title || '').trim()
+      if (!normalizedTitle || titles.has(normalizedTitle)) continue
+
+      normalized.push({
+        title: normalizedTitle,
+        instruction: String(instruction || '').trim()
+      })
+      titles.add(normalizedTitle)
+      if (normalized.length === 3) break
+    }
+    return normalized
+  }
+
+  const replacePromptExtraSections = (sections: unknown) => {
+    promptExtraSections.splice(0, promptExtraSections.length, ...normalizePromptExtraSections(sections))
+  }
+
   const addExtraSection = () => {
-    if (promptForm.extraSections.length >= 3) return
-    promptForm.extraSections.push({ title: '', instruction: '' })
+    if (promptExtraSections.length >= 3) return
+    promptExtraSections.push({ title: '', instruction: '' })
   }
   const removeExtraSection = (idx: number) => {
-    promptForm.extraSections.splice(idx, 1)
+    promptExtraSections.splice(idx, 1)
   }
 
   const imChannelForm = reactive({
@@ -834,9 +864,9 @@ function createQuantWorkbench() {
       status: 'active',
       reportType: 'test_report',
       promptTemplate: `你是量化研究助理。基于结构化 AnalysisBundle 输出受约束的 ReportDraft。\n规则：\n1. 不得虚构 bundle 中不存在的数值。\n2. 数值必须引用 bundle 中已有字段。\n3. 记忆仅用于解释增强，不得替代当天信号。\n4. 输出应包含摘要、信号概览、风险、动作建议、记忆引用。`,
-      extraSections: [],
       changeNote: ''
     })
+    replacePromptExtraSections([])
   }
 
   const hydratePromptForm = (record: PromptTemplateRecord) => {
@@ -848,15 +878,7 @@ function createQuantWorkbench() {
     promptForm.status = record.status
     promptForm.reportType = record.report_type
     promptForm.promptTemplate = record.prompt_template
-    // extra_sections 兼容：缺省空 list；后端 to_dict 已规整
-    const extra = Array.isArray(record.extra_sections) ? record.extra_sections : []
-    promptForm.extraSections = extra
-      .map(s => ({
-        title: String(s?.title || '').trim(),
-        instruction: String(s?.instruction || '')
-      }))
-      .filter(s => s.title)
-      .slice(0, 3)
+    replacePromptExtraSections(record.extra_sections)
     promptForm.changeNote = record.change_note || ''
   }
 
@@ -875,6 +897,7 @@ function createQuantWorkbench() {
       allowManualRun: true,
       description: '',
       dataSymbols: [],
+      dataAllActive: false,
       dataProvider: 'auto',
       dataAdjustFlag: 'qfq',
       dataLookbackTradeDays: 20,
@@ -914,6 +937,7 @@ function createQuantWorkbench() {
     scheduleForm.description = record.description || ''
     const payload = record.payload || {}
     scheduleForm.dataSymbols = payload.symbols || []
+    scheduleForm.dataAllActive = !!payload.all_active
     scheduleForm.dataProvider = payload.provider || 'auto'
     scheduleForm.dataAdjustFlag = payload.adjust_flag || 'qfq'
     // 兼容旧 payload.frequency 单值 + 新 payload.frequencies 列表
@@ -1539,14 +1563,15 @@ function createQuantWorkbench() {
   }
 
   const createTask = async () => {
-    if (!taskForm.symbols.length || !taskForm.startDate || !taskForm.endDate) {
-      ElMessage.warning('请先补全任务的股票池和时间范围')
+    if ((!taskForm.symbols.length && !taskForm.allActive) || !taskForm.startDate || !taskForm.endDate) {
+      ElMessage.warning('请先补全任务的股票池和时间范围（或勾选"拉取全部 active 标的"）')
       return
     }
     loading.createTask = true
     try {
       await quantTaskAPI.create({
-        symbols: taskForm.symbols,
+        symbols: taskForm.allActive ? [] : taskForm.symbols,
+        all_active: taskForm.allActive,
         start_date: taskForm.startDate,
         end_date: taskForm.endDate,
         provider: taskForm.provider,
@@ -1566,14 +1591,15 @@ function createQuantWorkbench() {
   }
 
   const fetchNowFromTaskForm = async () => {
-    if (!taskForm.symbols.length || !taskForm.startDate || !taskForm.endDate) {
-      ElMessage.warning('请先补全股票池和时间范围')
+    if ((!taskForm.symbols.length && !taskForm.allActive) || !taskForm.startDate || !taskForm.endDate) {
+      ElMessage.warning('请先补全股票池和时间范围（或勾选"拉取全部 active 标的"）')
       return
     }
     loading.fetchNow = true
     try {
       const response: any = await quantDataAPI.fetchNow({
-        symbols: taskForm.symbols,
+        symbols: taskForm.allActive ? [] : taskForm.symbols,
+        all_active: taskForm.allActive,
         start_date: taskForm.startDate,
         end_date: taskForm.endDate,
         provider: taskForm.provider,
@@ -1598,14 +1624,15 @@ function createQuantWorkbench() {
   }
 
   const createBackfillTask = async () => {
-    if (!backfillForm.symbols.length) {
-      ElMessage.warning('先选择需要补历史数据的股票')
+    if (!backfillForm.symbols.length && !backfillForm.allActive) {
+      ElMessage.warning('先选择需要补历史数据的股票（或勾选"拉取全部 active 标的"）')
       return
     }
     loading.createTask = true
     try {
       await quantDataAPI.backfill({
-        symbols: backfillForm.symbols,
+        symbols: backfillForm.allActive ? [] : backfillForm.symbols,
+        all_active: backfillForm.allActive,
         lookback_days: backfillForm.lookbackDays,
         provider: backfillForm.provider,
         adjust_flag: backfillForm.adjustFlag,
@@ -1750,7 +1777,9 @@ function createQuantWorkbench() {
   const saveScheduleConfig = async () => {
     if (!scheduleForm.name.trim()) return ElMessage.warning('调度名称不能为空')
     if (!scheduleForm.cronExpr.trim()) return ElMessage.warning('cron 表达式不能为空')
-    if (scheduleForm.taskType === 'data_sync' && !scheduleForm.dataSymbols.length) return ElMessage.warning('拉数任务至少选择一个标的')
+    if (scheduleForm.taskType === 'data_sync' && !scheduleForm.dataSymbols.length && !scheduleForm.dataAllActive) {
+      return ElMessage.warning('拉数任务至少选择一个标的，或勾选『拉取全部 active 标的』')
+    }
     if (scheduleForm.taskType === 'analysis_report' && !scheduleForm.analysisStrategyIds.length) return ElMessage.warning('测试报告至少选择一个策略')
     if (scheduleForm.taskType === 'memory_digest' && scheduleForm.memoryLimit < 1) return ElMessage.warning('记忆梳理的标的数量至少为 1')
     if (['industry_collect', 'industry_report'].includes(scheduleForm.taskType) && !scheduleForm.industryBoardIds.length) return ElMessage.warning('行业任务至少选择一个板块')
@@ -2022,12 +2051,6 @@ function createQuantWorkbench() {
   const savePromptTemplate = async () => {
     if (!promptForm.promptVersion.trim()) return ElMessage.warning('Prompt 版本不能为空')
     if (!promptForm.promptTemplate.trim()) return ElMessage.warning('Prompt 模板不能为空')
-    // extra_sections 落库前规整：去空标题、去重、最多 3 段
-    const extraSections = (promptForm.extraSections || [])
-      .map(s => ({ title: String(s.title || '').trim(), instruction: String(s.instruction || '').trim() }))
-      .filter(s => s.title)
-      .filter((s, i, arr) => arr.findIndex(t => t.title === s.title) === i)
-      .slice(0, 3)
     loading.savingPrompt = true
     try {
       const payload = {
@@ -2038,7 +2061,7 @@ function createQuantWorkbench() {
         status: promptForm.status,
         report_type: promptForm.reportType,
         prompt_template: promptForm.promptTemplate,
-        extra_sections: extraSections,
+        extra_sections: normalizePromptExtraSections(promptExtraSections),
         change_note: promptForm.changeNote
       }
       if (promptForm.id) {
@@ -2352,6 +2375,7 @@ function createQuantWorkbench() {
     backtestForm,
     scheduleForm,
     promptForm,
+    promptExtraSections,
     imChannelForm,
     imSendForm,
     positionForm,

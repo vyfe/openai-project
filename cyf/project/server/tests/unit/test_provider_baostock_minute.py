@@ -203,3 +203,55 @@ class TestFetchMinuteBarsTopLevel:
         assert records == []
         call_kwargs = bs.query_history_k_data_plus.call_args.kwargs
         assert call_kwargs["frequency"] == "15"
+
+    def test_index_symbols_skipped_without_api_call(self):
+        """指数在白名单内，fetch_minute_bars 必须直接跳过（不调 baostock API）。"""
+        provider = BaostockAshareProvider()
+        rows, columns = _make_minute_response([
+            {"date": "2024-01-02", "time": "20240102093500000",
+             "open": "1", "high": "2", "low": "0.5", "close": "1.5",
+             "volume": "100", "amount": "150"},
+        ])
+        bs = self._build_mock_bs(rows, columns)
+        with patch.dict("sys.modules", {"baostock": bs}):
+            records = provider.fetch_minute_bars(
+                symbols=["000300.SH", "399006.SZ"], interval="5m",
+                start_dt="2024-01-02", end_dt="2024-01-02",
+            )
+        # 全部是指数 → 直接 return []，baostock 接口根本没被调用
+        assert records == []
+        bs.query_history_k_data_plus.assert_not_called()
+        bs.login.assert_not_called()
+
+    def test_stocks_fetched_indices_skipped(self):
+        """混传：股票正常拉取，指数被跳过。"""
+        provider = BaostockAshareProvider()
+        rows, columns = _make_minute_response([
+            {"date": "2024-01-02", "time": "20240102093500000",
+             "open": "1", "high": "2", "low": "0.5", "close": "1.5",
+             "volume": "100", "amount": "150"},
+        ])
+        bs = self._build_mock_bs(rows, columns)
+        # 每次调用都返回一个新的 FakeBaostockResult（共享实例会导致 cursor 被消费）
+        bs.query_history_k_data_plus.side_effect = [
+            FakeBaostockResult(rows, columns),
+            FakeBaostockResult(rows, columns),
+        ]
+        with patch.dict("sys.modules", {"baostock": bs}):
+            with patch("quant_client.provider_baostock.MAX_RETRIES", 1):
+                records = provider.fetch_minute_bars(
+                    symbols=["600519.SH", "000300.SH", "300750.SZ", "399006.SZ"],
+                    interval="5m",
+                    start_dt="2024-01-02", end_dt="2024-01-02",
+                )
+        # 只剩 2 个股票被 baostock 拉取
+        assert len(records) == 2
+        symbols_returned = {r["symbol"] for r in records}
+        assert symbols_returned == {"600519.SH", "300750.SZ"}
+        # baostock 只被调用 2 次（指数那 2 次被跳过）
+        assert bs.query_history_k_data_plus.call_count == 2
+        # 验证被请求的 symbol 不含指数
+        called_symbols = {
+            call.args[0] for call in bs.query_history_k_data_plus.call_args_list
+        }
+        assert called_symbols == {"sh.600519", "sz.300750"}

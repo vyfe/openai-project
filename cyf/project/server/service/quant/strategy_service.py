@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional
@@ -6,6 +7,9 @@ from typing import Dict, Iterable, List, Optional
 from peewee import fn
 
 from quant.db import quant_db
+
+
+logger = logging.getLogger("quant.strategy")
 from quant.entities import (
     QuantDailyBar,
     QuantInstrument,
@@ -335,11 +339,57 @@ def soft_delete_instrument(symbol: str) -> bool:
     return rows > 0
 
 
+def _cascade_soft_delete_bar(symbols: list[str]) -> dict:
+    """级联软删除 K 线 / 分时数据。返回各表受影响行数。
+
+    单次 update ... where(symbol.in_(...)) 一条 SQL 完成整批更新，
+    避免 per-symbol 循环引起的 N 次 IO。
+    """
+    from quant.entities import QuantDailyBar, QuantMinuteBar
+    now = datetime.now()
+    out = {"daily": 0, "minute": 0}
+    if not symbols:
+        return out
+    try:
+        out["daily"] = (
+            QuantDailyBar.update(status="deleted", updated_at=now)
+            .where(QuantDailyBar.symbol.in_(symbols), QuantDailyBar.status == "active")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cascade_soft_delete daily failed: %s", exc)
+    try:
+        out["minute"] = (
+            QuantMinuteBar.update(status="deleted", updated_at=now)
+            .where(QuantMinuteBar.symbol.in_(symbols), QuantMinuteBar.status == "active")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("cascade_soft_delete minute failed: %s", exc)
+    return out
+
+
+def soft_delete_instrument(symbol: str) -> bool:
+    """软删除单个股票池条目，并级联软删除对应 K 线 / 分时数据。
+    返回是否真正改了状态（false 表示已经是 deleted）。
+    """
+    if not symbol:
+        return False
+    rows = (
+        QuantInstrument.update(status="deleted", updated_at=datetime.now())
+        .where(QuantInstrument.symbol == symbol, QuantInstrument.status == "active")
+        .execute()
+    )
+    if rows > 0:
+        _cascade_soft_delete_bar([symbol])
+    return rows > 0
+
+
 def batch_soft_delete_instruments(symbols: Iterable[str]) -> dict:
-    """批量软删除。返回 {deleted: [...], missing: [...]}。"""
+    """批量软删除：股票池 + 级联 K 线 / 分时数据。返回 {deleted, missing, cascade}。"""
     symbol_list = [s for s in (symbols or []) if s]
     if not symbol_list:
-        return {"deleted": [], "missing": []}
+        return {"deleted": [], "missing": [], "cascade": {"daily": 0, "minute": 0}}
     active_tuples = (
         QuantInstrument.select(QuantInstrument.symbol)
         .where(QuantInstrument.symbol.in_(symbol_list), QuantInstrument.status == "active")
@@ -348,8 +398,10 @@ def batch_soft_delete_instruments(symbols: Iterable[str]) -> dict:
     active = {row[0] for row in active_tuples}
     missing = [s for s in symbol_list if s not in active]
     deleted = [s for s in symbol_list if s in active]
+    cascade = {"daily": 0, "minute": 0}
     if deleted:
         QuantInstrument.update(status="deleted", updated_at=datetime.now()).where(
             QuantInstrument.symbol.in_(deleted), QuantInstrument.status == "active"
         ).execute()
-    return {"deleted": deleted, "missing": missing}
+        cascade = _cascade_soft_delete_bar(deleted)
+    return {"deleted": deleted, "missing": missing, "cascade": cascade}

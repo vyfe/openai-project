@@ -6,7 +6,7 @@ from datetime import datetime
 
 import logging
 
-from quant_client.common import normalize_symbol, parse_trade_date, resolve_market_info, to_baostock_symbol, to_float
+from quant_client.common import is_minute_bar_skip_symbol, normalize_symbol, parse_trade_date, resolve_market_info, to_baostock_symbol, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 MAX_RETRIES = 3
@@ -170,6 +170,18 @@ class BaostockAshareProvider(BaseAshareProvider):
 
         bs_freq = self._INTERVAL_TO_FREQ.get(interval, "5")
         adjust_code = self._ADJUST_MAP.get(adjust_flag, "2")
+
+        # fail-fast：指数在 baostock 不开放分钟线，直接跳过避免 3 次重试 × sleep 60s
+        filtered_symbols = [s for s in (symbols or []) if not is_minute_bar_skip_symbol(s)]
+        skipped = [s for s in (symbols or []) if is_minute_bar_skip_symbol(s)]
+        if skipped:
+            logger.info(
+                "baostock_minute_skip_index symbols=%s reason=minute_bar_skiplist",
+                ",".join(skipped),
+            )
+        if not filtered_symbols:
+            return []
+        symbols = filtered_symbols
 
         last_exc = None
         for attempt in range(MAX_RETRIES):

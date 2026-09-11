@@ -164,3 +164,46 @@ class TestEastmoneyMinuteTopLevel:
             )
         assert len(records) == 1
         assert records[0]["symbol"] == "600519.SH"
+
+    def test_index_symbols_skipped_without_api_call(self):
+        """指数在白名单内，fetch_minute_bars 必须直接跳过（不发请求）。"""
+        provider = EastmoneyAshareProvider()
+        session = MagicMock()
+        session.get_headers.return_value = ({"User-Agent": "test"}, "")
+
+        with patch("quant_client.provider_eastmoney.get_eastmoney_session", return_value=session), \
+             patch("quant_client.provider_eastmoney.urllib.request.urlopen") as mock_urlopen, \
+             patch("quant_client.provider_eastmoney.MAX_RETRIES", 1):
+            records = provider.fetch_minute_bars(
+                symbols=["000300.SH", "399006.SZ", "399001.SZ"], interval="5m",
+                start_dt="2024-01-02", end_dt="2024-01-02",
+                adjust_flag="qfq",
+            )
+        assert records == []
+        mock_urlopen.assert_not_called()
+
+    def test_stocks_fetched_indices_skipped(self):
+        """混传：股票正常拉取，指数被跳过（只对股票发起 urlopen）。"""
+        provider = EastmoneyAshareProvider()
+        session = MagicMock()
+        session.get_headers.return_value = ({"User-Agent": "test"}, "")
+
+        def urlopen_side_effect(req, timeout=None):
+            if "1.600519" in req.full_url or "0.300750" in req.full_url:
+                return _fake_response(_make_minute_payload([
+                    _make_minute_row("2024-01-02 09:35", "1", "1.5", "2", "0.5"),
+                ]))
+            raise AssertionError(f"指数 URL 不应被请求: {req.full_url}")
+
+        with patch("quant_client.provider_eastmoney.get_eastmoney_session", return_value=session), \
+             patch("quant_client.provider_eastmoney.urllib.request.urlopen", side_effect=urlopen_side_effect), \
+             patch("quant_client.provider_eastmoney.MAX_RETRIES", 1):
+            records = provider.fetch_minute_bars(
+                symbols=["600519.SH", "000300.SH", "300750.SZ", "399006.SZ"],
+                interval="5m",
+                start_dt="2024-01-02", end_dt="2024-01-02",
+                adjust_flag="qfq",
+            )
+        assert len(records) == 2
+        symbols_returned = {r["symbol"] for r in records}
+        assert symbols_returned == {"600519.SH", "300750.SZ"}

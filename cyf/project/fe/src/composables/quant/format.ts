@@ -75,6 +75,9 @@ export const buildSchedulePayload = (scheduleForm: any): any => {
       : ['1d']
     const payload: Record<string, unknown> = {
       symbols: scheduleForm.dataSymbols,
+      // all_active 为 true 时后端从 quant_instrument 拉全部 active 标的
+      // （symbols 与 all_active 同时存在时，全表优先）。
+      all_active: !!scheduleForm.dataAllActive,
       provider: scheduleForm.dataProvider,
       adjust_flag: scheduleForm.dataAdjustFlag,
       frequencies,

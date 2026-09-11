@@ -100,8 +100,11 @@ def quant_data_backfill(user, password):
             raw_symbols = str(data.get("symbols_text", "")).strip()
             if raw_symbols:
                 symbols = [item.strip() for item in raw_symbols.split(",") if item.strip()]
+        all_active = _truthy(data.get("all_active"))
+        if all_active and not symbols:
+            symbols = _list_active_instrument_symbols()
         if not symbols:
-            return error_response("symbols 不能为空")
+            return error_response("symbols 不能为空（或勾选 all_active 从 quant_instrument 全表拉取）")
 
         result = enqueue_position_backfill_task(
             symbols=symbols,
@@ -115,6 +118,24 @@ def quant_data_backfill(user, password):
         return success_response(data=result, msg="历史补数任务已创建")
     except Exception as exc:
         return error_response(f"创建历史补数任务失败: {exc}")
+
+
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None or value == "":
+        return False
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
+
+def _list_active_instrument_symbols() -> list[str]:
+    """拉取 quant_instrument 中所有 status='active' 的 symbol。"""
+    from quant.entities import QuantInstrument
+    rows = (
+        QuantInstrument.select(QuantInstrument.symbol)
+        .where(QuantInstrument.status == "active")
+    )
+    return [r.symbol for r in rows.iterator()]
 
 
 @bp.route("/symbols/upsert", methods=["POST"])
@@ -188,8 +209,10 @@ def quant_data_fetch_now():
             raw_symbols = str(data.get("symbols_text", "")).strip()
             if raw_symbols:
                 symbols = [item.strip() for item in raw_symbols.split(",") if item.strip()]
+        if _truthy(data.get("all_active")) and not symbols:
+            symbols = _list_active_instrument_symbols()
         if not symbols:
-            return error_response("symbols 不能为空")
+            return error_response("symbols 不能为空（或勾选 all_active 从 quant_instrument 全表拉取）")
 
         start_date = str(data.get("start_date", "")).strip()
         end_date = str(data.get("end_date", "")).strip()
@@ -230,7 +253,11 @@ def quant_daily_bars(user, password):
         end_date = str(request.args.get("end_date", "")).strip() or None
         limit = request.args.get("limit", default=200, type=int) or 200
         limit = max(1, min(limit, 5000))
-        return success_response(data=fetch_daily_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
+        include_deleted = _truthy(request.args.get("include_deleted"))
+        return success_response(data=fetch_daily_bars(
+            symbol=symbol, start_date=start_date, end_date=end_date,
+            limit=limit, include_deleted=include_deleted,
+        ))
     except Exception as exc:
         return error_response(f"查询日线失败: {exc}")
 
@@ -246,7 +273,11 @@ def quant_weekly_bars(user, password):
         end_date = str(request.args.get("end_date", "")).strip() or None
         limit = request.args.get("limit", default=200, type=int) or 200
         limit = max(1, min(limit, 5000))
-        return success_response(data=fetch_weekly_bars(symbol=symbol, start_date=start_date, end_date=end_date, limit=limit))
+        include_deleted = _truthy(request.args.get("include_deleted"))
+        return success_response(data=fetch_weekly_bars(
+            symbol=symbol, start_date=start_date, end_date=end_date,
+            limit=limit, include_deleted=include_deleted,
+        ))
     except Exception as exc:
         return error_response(f"查询周线失败: {exc}")
 
@@ -263,6 +294,7 @@ def quant_minute_bars(user, password):
         end_dt = str(request.args.get("end_datetime", "")).strip() or None
         limit = request.args.get("limit", default=480, type=int) or 480
         adjust_flag = str(request.args.get("adjust_flag", "qfq")).strip() or "qfq"
+        include_deleted = _truthy(request.args.get("include_deleted"))
         return success_response(
             data=fetch_minute_bars(
                 symbol=symbol,
@@ -271,6 +303,7 @@ def quant_minute_bars(user, password):
                 end_dt=end_dt,
                 limit=limit,
                 adjust_flag=adjust_flag,
+                include_deleted=include_deleted,
             )
         )
     except Exception as exc:

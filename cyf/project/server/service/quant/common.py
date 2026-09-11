@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from typing import NamedTuple, Optional
 
@@ -31,16 +32,22 @@ def resolve_market_info(raw_symbol: str) -> MarketInfo:
 
 
 def normalize_code(raw_symbol: str) -> str:
-    symbol = str(raw_symbol or "").strip().lower()
+    """从 `code.SUFFIX` / `SUFFIX.code` / `code` 形式中提取纯 code。
+
+    code 部分**保留大小写**——alpha 代码（如 ETF / 测试用符号 "WARMUP.SH"）的
+    大小写是有意义的，不能被 `.lower()` 一刀切。仅在判断 sh/sz/bj 前缀后缀时
+    局部忽略大小写。
+    """
+    symbol = str(raw_symbol or "").strip()
     if not symbol:
         raise ValueError("symbol 不能为空")
     if "." in symbol:
         left, right = symbol.split(".", 1)
-        if left in ("sh", "sz", "bj"):
+        if left.lower() in ("sh", "sz", "bj"):
             return right
-        if right in ("sh", "sz", "bj"):
+        if right.lower() in ("sh", "sz", "bj"):
             return left
-    if symbol.endswith(".sh") or symbol.endswith(".sz") or symbol.endswith(".bj"):
+    if symbol.lower().endswith((".sh", ".sz", ".bj")):
         return symbol[:-3]
     return symbol
 
@@ -116,6 +123,101 @@ def correct_known_index_exchange(symbol: str) -> Optional[str]:
         return f"{code}.{expected}"
     # 用户给的 suffix 跟已知不符 → 纠正
     return f"{code}.{expected}"
+
+
+# ----------------------------------------------------------------------
+# 分钟线跳过白名单（指数）
+# ----------------------------------------------------------------------
+# A 股指数在 baostock / 东方财富的分钟线 API 都不开放（指数只到日线级别），
+# 历史上一直重试 3 次 × sleep 60s 才放弃，单个指数 × 单 provider 要吃满 120s 纯等待。
+# 改为在调度生成 client_task 和 provider 入口处 fail-fast 跳过指数。
+
+_DEFAULT_INDEX_NO_MINUTE: frozenset[str] = frozenset({
+    "000001.SH",  # 上证综指
+    "000016.SH",  # 上证50
+    "000300.SH",  # 沪深300
+    "000688.SH",  # 科创50
+    "000852.SH",  # 中证1000
+    "000905.SH",  # 中证500
+    "399001.SZ",  # 深证成指
+    "399006.SZ",  # 创业板指
+    "399330.SZ",  # 深证100
+    "399905.SZ",  # 中证500(深)
+    "000680.SZ",  # 科创综指
+})
+
+
+def _load_minute_bar_skiplist() -> frozenset[str]:
+    """环境变量 `QUANT_MINUTE_BAR_SKIPLIST` 可覆盖默认白名单。
+
+    格式：逗号/空格分隔的 symbol 列表，例如
+        QUANT_MINUTE_BAR_SKIPLIST="000001.SH,399001.SZ 399006.SZ"
+    与默认集合取并集——不会清空默认值。
+    """
+    raw = os.environ.get("QUANT_MINUTE_BAR_SKIPLIST", "").strip()
+    if not raw:
+        return _DEFAULT_INDEX_NO_MINUTE
+    extras = {item.strip() for item in raw.replace(",", " ").split() if item.strip()}
+    return _DEFAULT_INDEX_NO_MINUTE | frozenset(extras)
+
+
+# 模块级常量，进程启动时读一次环境变量；如需运行时调整，调用 reload_minute_bar_skiplist()。
+MINUTE_BAR_SKIPLIST: frozenset[str] = _load_minute_bar_skiplist()
+
+
+def reload_minute_bar_skiplist() -> frozenset[str]:
+    """重新读环境变量刷新白名单；返回刷新后的集合。"""
+    global MINUTE_BAR_SKIPLIST
+    MINUTE_BAR_SKIPLIST = _load_minute_bar_skiplist()
+    return MINUTE_BAR_SKIPLIST
+
+
+def _canonical_symbol(raw_symbol: str) -> Optional[str]:
+    """把任意写法 ('600519.SH' / 'sh.600519' / '600519') 归一为 'code.exchange' 大写形式。
+
+    已知指数（KNOWN_INDICES 收录）的纯 code 会优先用 KNOWN_INDICES 里的交易所，
+    避免 000300 被 infer_exchange 强行推断成 SZ 后漏匹配白名单。
+    解析失败 / 无法推断交易所返回 None（让上游直接放过、不当作指数）。
+    """
+    if not raw_symbol:
+        return None
+    try:
+        code = normalize_code(raw_symbol)
+    except ValueError:
+        return None
+    user_exchange = extract_user_exchange(raw_symbol)
+    if user_exchange:
+        return f"{code}.{user_exchange}"
+    known = KNOWN_INDICES.get(code)
+    if known:
+        return f"{code}.{known}"
+    try:
+        exchange = infer_exchange(code)
+    except ValueError:
+        return None
+    return f"{code}.{exchange}"
+
+
+def is_minute_bar_skip_symbol(raw_symbol: str) -> bool:
+    """判断给定 symbol 是否在分钟线跳过白名单中。
+
+    兼容 '600519.SH' / 'sh.600519' / '600519' 等多种写法；空白/无法解析返回 False。
+    """
+    canonical = _canonical_symbol(raw_symbol)
+    if canonical is None:
+        return False
+    return canonical in MINUTE_BAR_SKIPLIST
+
+
+def filter_minute_bar_symbols(symbols: list[str] | tuple[str, ...]) -> list[str]:
+    """过滤掉分钟线跳过白名单内的 symbol，返回剩余列表（不去重，保留原顺序）。
+
+    主要在 schedule_execution_service.execute_data_sync 的 frequency='5m' 分支使用——
+    不在白名单内的 symbol 原样透传；白名单内的全部丢弃（不抛错，指数本来就拉不到）。
+    """
+    if not symbols:
+        return []
+    return [item for item in symbols if not is_minute_bar_skip_symbol(item)]
 
 
 def normalize_symbol(raw_symbol: str) -> str:

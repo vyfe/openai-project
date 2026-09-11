@@ -6,7 +6,7 @@ import math
 from datetime import datetime, time, timedelta
 
 from quant.entities import QuantPositionJournal, QuantReportRecord, QuantScheduleConfig, QuantScheduleRun
-from service.quant.common import correct_known_index_exchange, normalize_symbol
+from service.quant.common import correct_known_index_exchange, filter_minute_bar_symbols, is_minute_bar_skip_symbol, normalize_symbol
 from service.quant.im_delivery_service import send_position_summary_to_channel, send_report_to_channel
 from service.quant.industry_service import collect_industry, get_industry_board, get_industry_dashboard, render_industry_daily_markdown
 from service.quant.memory_service import curate_symbol_memories
@@ -124,6 +124,21 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
     symbols = payload.get("symbols") or []
     if isinstance(symbols, str):
         symbols = [item.strip() for item in symbols.split(",") if item.strip()]
+    # all_active=True 且 symbols 为空 → 从 quant_instrument 拿全表 active 标的。
+    # 与 symbols 同时存在时，全表优先（避免旧定时器"漏标的"）。
+    all_active = bool(payload.get("all_active"))
+    if all_active and not symbols:
+        from quant.entities import QuantInstrument
+        symbols = [
+            row.symbol for row in
+            QuantInstrument.select(QuantInstrument.symbol)
+            .where(QuantInstrument.status == "active")
+            .iterator()
+        ]
+        logger.info(
+            "data_sync_all_active run_id=%s schedule_id=%s total=%d",
+            run.id, run.schedule_id, len(symbols),
+        )
     for sym in collect_active_user_symbols():
         if sym not in symbols:
             symbols.append(sym)
@@ -152,8 +167,8 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
     note = str(payload.get("note", "")).strip() or f"schedule:{run.schedule_name}"
     lease_seconds = int(payload.get("lease_seconds", 600) or 600)
     logger.info(
-        "data_sync_start run_id=%s schedule_id=%s trade_date=%s symbols=%s window=%s~%s provider=%s adjust=%s frequencies=%s",
-        run.id, run.schedule_id, run.trade_date, len(normalized_symbols),
+        "data_sync_start run_id=%s schedule_id=%s trade_date=%s symbols=%d all_active=%s window=%s~%s provider=%s adjust=%s frequencies=%s",
+        run.id, run.schedule_id, run.trade_date, len(normalized_symbols), all_active,
         start_date, end_date, provider, adjust_flag, frequencies,
     )
 
@@ -163,8 +178,19 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
         per_payload = dict(payload)
         per_payload["frequency"] = frequency
         per_start, per_end = resolve_fetch_window(per_payload, run.trade_date)
+        # 5m 分时：指数在 baostock/eastmoney 都不开放分钟线，第一道防线就过滤掉。
+        # 1d 日线：指数保留（指数日线两个 provider 都支持）。
+        per_symbols = normalized_symbols
+        if frequency == "5m":
+            per_symbols = filter_minute_bar_symbols(normalized_symbols)
+            dropped = [s for s in normalized_symbols if is_minute_bar_skip_symbol(s)]
+            if dropped:
+                logger.info(
+                    "data_sync_minute_skip_index run_id=%s frequency=%s dropped=%s kept=%s",
+                    run.id, frequency, ",".join(dropped), len(per_symbols),
+                )
         task = create_fetch_bars_task(
-            symbols=normalized_symbols,
+            symbols=per_symbols,
             start_date=per_start,
             end_date=per_end,
             provider=provider,
@@ -180,7 +206,7 @@ def execute_data_sync(run: QuantScheduleRun) -> dict:
         client_tasks.append(task)
         logger.info(
             "data_sync_enqueued run_id=%s frequency=%s task_id=%s symbols=%s window=%s~%s",
-            run.id, frequency, task.get("task_id"), len(normalized_symbols), per_start, per_end,
+            run.id, frequency, task.get("task_id"), len(per_symbols), per_start, per_end,
         )
 
     return {

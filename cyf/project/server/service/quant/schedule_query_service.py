@@ -90,9 +90,12 @@ def validate_schedule(task_type: str, cron_expr: str, payload: dict):
         raw_symbols = payload.get("symbols") or []
         if isinstance(raw_symbols, str):
             raw_symbols = [item.strip() for item in raw_symbols.split(",") if item.strip()]
-        if not raw_symbols:
-            raise ValueError("data_sync 任务至少需要一个 symbol")
-        _validate_data_sync_symbols(raw_symbols)
+        # symbols 为空 + all_active=True → 拉到 quant_instrument 全表；否则视为非法。
+        all_active = bool(payload.get("all_active"))
+        if not raw_symbols and not all_active:
+            raise ValueError("data_sync 任务至少需要一个 symbol，或勾选『拉取全部 active 标的』")
+        if raw_symbols:
+            _validate_data_sync_symbols(raw_symbols)
     if normalized_task_type == TASK_TYPE_ANALYSIS:
         if not payload.get("strategy_ids"):
             raise ValueError("analysis_report 任务至少需要一个 strategy_id")

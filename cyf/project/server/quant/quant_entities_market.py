@@ -43,6 +43,9 @@ class QuantDailyBar(QuantBaseModel):
     exchange = CharField(index=True)
     trade_date = DateField(index=True)
     adjust_flag = CharField(default="qfq", index=True)
+    # 软删除状态：与 quant_instrument.status 对齐。删除股票池时级联更新为 'deleted'。
+    # 查询路径（query_service.fetch_*_bars）默认过滤 status='active'。
+    status = CharField(default="active", index=True)
     open_price = FloatField(null=True)
     high_price = FloatField(null=True)
     low_price = FloatField(null=True)
@@ -72,6 +75,7 @@ class QuantDailyBar(QuantBaseModel):
             "exchange": self.exchange,
             "trade_date": self.trade_date.isoformat() if isinstance(self.trade_date, date) else None,
             "adjust_flag": self.adjust_flag,
+            "status": self.status,
             "open_price": self.open_price,
             "high_price": self.high_price,
             "low_price": self.low_price,
@@ -103,6 +107,8 @@ class QuantMinuteBar(QuantBaseModel):
     trade_date = DateField(index=True)
     interval = CharField(default="5m", index=True)
     adjust_flag = CharField(default="qfq", index=True)
+    # 软删除状态：与 quant_instrument.status 对齐。删除股票池时级联更新为 'deleted'。
+    status = CharField(default="active", index=True)
     open_price = FloatField(null=True)
     high_price = FloatField(null=True)
     low_price = FloatField(null=True)
@@ -129,6 +135,7 @@ class QuantMinuteBar(QuantBaseModel):
             "trade_date": self.trade_date.isoformat() if isinstance(self.trade_date, date) else None,
             "interval": self.interval,
             "adjust_flag": self.adjust_flag,
+            "status": self.status,
             "open_price": self.open_price,
             "high_price": self.high_price,
             "low_price": self.low_price,

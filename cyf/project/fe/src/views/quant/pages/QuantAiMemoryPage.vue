@@ -59,13 +59,13 @@
         <details class="quant-extra-sections">
           <summary class="quant-extra-sections__title">
             <span>额外段落声明（extra_sections）</span>
-            <span class="quant-muted">{{ workbench.promptForm.extraSections.length }} / 3 段</span>
+            <span class="quant-muted">{{ workbench.promptExtraSections.length }} / 3 段</span>
           </summary>
-          <div v-if="!workbench.promptForm.extraSections.length" class="quant-extra-sections__empty">
+          <div v-if="!workbench.promptExtraSections.length" class="quant-extra-sections__empty">
             没有声明额外段落时，报告只输出固定的 7 个章节。
           </div>
           <div
-            v-for="(section, idx) in workbench.promptForm.extraSections"
+            v-for="(section, idx) in workbench.promptExtraSections"
             :key="idx"
             class="quant-extra-sections__row"
           >
@@ -96,7 +96,7 @@
             type="primary"
             plain
             :icon="Plus"
-            :disabled="workbench.promptForm.extraSections.length >= 3"
+            :disabled="workbench.promptExtraSections.length >= 3"
             @click="workbench.addExtraSection"
           >添加一段</el-button>
         </details>
@@ -271,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { Delete, Plus, RefreshRight, Setting } from '@element-plus/icons-vue'
+import { Delete, Plus, RefreshRight, Setting, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import ReportPreviewIde from './ReportPreviewIde.vue'
 

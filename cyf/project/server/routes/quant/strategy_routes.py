@@ -257,6 +257,7 @@ def quant_prompt_template_create():
             prompt_template=str(data.get("prompt_template", "")).strip(),
             model_name=str(data.get("model_name", "")).strip(),
             change_note=str(data.get("change_note", "")).strip(),
+            extra_sections=data.get("extra_sections"),
         )
         return success_response(data=result, msg="Prompt 模板创建成功")
     except Exception as exc:
@@ -269,7 +270,7 @@ def quant_prompt_template_update():
     try:
         data = get_request_data()
         template_id = int(data.get("id"))
-        updates = {key: data.get(key) for key in ("strategy_id", "template_name", "prompt_version", "status", "report_type", "prompt_template", "model_name", "change_note") if key in data}
+        updates = {key: data.get(key) for key in ("strategy_id", "template_name", "prompt_version", "status", "report_type", "prompt_template", "model_name", "change_note", "extra_sections") if key in data}
         result = update_prompt_template(template_id, **updates)
         return success_response(data=result, msg="Prompt 模板更新成功")
     except Exception as exc:
@@ -607,4 +608,3 @@ def quant_strategy_dry_run(user, password):
         )
     except Exception as exc:
         return error_response(f"试算失败: {exc}")
-

@@ -489,6 +489,10 @@ def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = No
                      可传组名（"ma"/"macd"/"kdj"/"boll"/"td_sequential"/"bottom_structure"/"top_structure"）
                      或具体字段名（"ma_5"/"macd_dif"/...）混合过滤
     params: 可覆盖默认窗口（ma_windows / boll_window / macd / kdj）
+
+    返回值的每个 row 包含**所有匹配 name_filter 的指标键**：能算的位置是数值，
+    不能算的位置是 None（例如历史不足 lookback 时 ma_60 = None）。这样前端可以
+    直接拿到完整指标 schema，不用根据 key 缺失推断"没算出来"。
     """
     if not bars:
         return {}
@@ -506,12 +510,12 @@ def compute_indicators(bars: list, indicator_names: Optional[Iterable[str]] = No
     for snap in snapshots:
         date_key = _date_key(snap["bar"].trade_date)
         row: dict = {}
+        # 主指标快照：保留 None，让请求方能看到完整 schema
         for k, v in snap["value"].items():
-            if v is None:
-                continue
             if name_filter is not None and not _name_matches_group(k, name_filter):
                 continue
             row[k] = v
+        # TD 序列：None / False 都不写入（TD 信号是 bool 事件型指标，不是连续序列）
         td_row = td_snapshot.get(date_key, {})
         for tk, tv in td_row.items():
             if tv is None or tv is False:

@@ -265,3 +265,29 @@ class TestExecuteDataSyncFrequencies:
         assert "T" not in daily_payload["end_date"]
         assert "T" in minute_payload["start_date"]
         assert "T" in minute_payload["end_date"]
+
+    def test_minute_task_drops_index_symbols(self):
+        """frequency=5m 时指数必须被过滤掉（指数分钟线 baostock/eastmoney 都不开放）。
+
+        1d 任务保留全部 symbol（指数日线两个 provider 都支持）。
+        """
+        from service.quant.schedule_execution_service import execute_data_sync
+        run = self._make_run({
+            "frequencies": ["1d", "5m"],
+            "symbols": ["600519.SH", "000300.SH", "399006.SZ", "300750.SZ"],
+            "provider": "auto",
+            "lookback_trade_days": 3,
+            "lookback_minutes": 60,
+        })
+        result = execute_data_sync(run)
+        assert result["frequencies"] == ["1d", "5m"]
+        assert len(result["client_tasks"]) == 2
+
+        daily_task = result["client_tasks"][0]
+        minute_task = result["client_tasks"][1]
+        # 1d 任务保留全部 symbol（含指数）
+        assert daily_task["payload"]["symbols"] == [
+            "600519.SH", "000300.SH", "399006.SZ", "300750.SZ"
+        ]
+        # 5m 任务过滤掉指数
+        assert minute_task["payload"]["symbols"] == ["600519.SH", "300750.SZ"]

@@ -102,12 +102,16 @@ def fetch_daily_bars(
     end_date: Optional[str] = None,
     limit: int = 500,
     adjust_flag: Optional[str] = None,
+    include_deleted: bool = False,
 ):
     """日线查询。
 
-    adjust_flag：可选过滤（None = 不过滤，返回该 symbol 在区间内的所有 adjust_flag 行）。
+    - adjust_flag：可选过滤（None = 不过滤，返回该 symbol 在区间内的所有 adjust_flag 行）。
+    - include_deleted：默认 False（过滤 status='deleted'）。运维排查时可设 True 看全量。
     """
     query = QuantDailyBar.select().where(QuantDailyBar.symbol == normalize_symbol(symbol))
+    if not include_deleted:
+        query = query.where(QuantDailyBar.status == "active")
     if start_date:
         query = query.where(QuantDailyBar.trade_date >= parse_trade_date(start_date))
     if end_date:
@@ -125,12 +129,14 @@ def fetch_minute_bars(
     end_dt: Optional[str] = None,
     limit: int = 500,
     adjust_flag: str = "qfq",
+    include_deleted: bool = False,
 ):
     """分时 K 线查询。limit 上限 5000，避免一次返回过多 bar。
 
     - interval="5m"：直接查入库的 5m 数据
     - interval="15m"/"30m"：从入库的 5m 端上聚合（OHLC 规则），不写库；
       按 (date, am/pm) 切片避开午休跨段，桶内 5m 不足时整桶跳过
+    - include_deleted：默认 False（过滤 status='deleted'）。
     """
     bounded_limit = max(1, min(limit, 5000))
 
@@ -142,6 +148,7 @@ def fetch_minute_bars(
             (QuantMinuteBar.symbol == normalize_symbol(symbol))
             & (QuantMinuteBar.interval == "5m")
             & (QuantMinuteBar.adjust_flag == adjust_flag)
+            & (QuantMinuteBar.status == "active" if not include_deleted else (QuantMinuteBar.status != "deleted"))
         )
         if start_dt:
             five_m_query = five_m_query.where(QuantMinuteBar.trade_datetime >= parse_trade_datetime(start_dt))
@@ -159,6 +166,8 @@ def fetch_minute_bars(
         & (QuantMinuteBar.interval == interval)
         & (QuantMinuteBar.adjust_flag == adjust_flag)
     )
+    if not include_deleted:
+        query = query.where(QuantMinuteBar.status == "active")
     if start_dt:
         query = query.where(QuantMinuteBar.trade_datetime >= parse_trade_datetime(start_dt))
     if end_dt:
@@ -167,7 +176,13 @@ def fetch_minute_bars(
     return [item.to_dict() for item in query.iterator()]
 
 
-def fetch_weekly_bars(symbol: str, start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 500):
+def fetch_weekly_bars(
+    symbol: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 500,
+    include_deleted: bool = False,
+):
     """基于入库日线按 ISO 周聚合为周线，避开 provider 改造。
 
     实现思路：
@@ -175,9 +190,12 @@ def fetch_weekly_bars(symbol: str, start_date: Optional[str] = None, end_date: O
     2. 按 ISO 周 (year, week) 分组
     3. 每组聚合成一根周线：open=周一 open, close=周末 close, high/low 取最值, volume/amount 累加
     4. trade_date 用本周代表日（见 _pick_week_representative）
+    - include_deleted：默认 False（过滤 status='deleted'）。
     """
     normalized = normalize_symbol(symbol)
     query = QuantDailyBar.select().where(QuantDailyBar.symbol == normalized)
+    if not include_deleted:
+        query = query.where(QuantDailyBar.status == "active")
     if start_date:
         query = query.where(QuantDailyBar.trade_date >= parse_trade_date(start_date))
     if end_date:

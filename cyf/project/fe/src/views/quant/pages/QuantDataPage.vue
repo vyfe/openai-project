@@ -222,27 +222,19 @@
         <div class="quant-form-stack">
           <el-form label-position="top">
             <el-form-item label="股票池">
-              <el-select
-                v-model="workbench.taskForm.symbols"
-                multiple
-                filterable
+              <QuantPoolSelect
+                :model-value="workbench.taskForm.symbols"
+                :all-active="workbench.taskForm.allActive"
+                :options="workbench.visibleSymbolOptions"
                 remote
-                reserve-keyword
-                allow-create
-                default-first-option
-                collapse-tags
-                collapse-tags-tooltip
-                placeholder="搜索或选择一个或多个标的"
                 :remote-method="workbench.searchSymbols"
                 :loading="workbench.loading.symbolSearch"
-              >
-                <el-option
-                  v-for="item in workbench.visibleSymbolOptions"
-                  :key="item.symbol"
-                  :label="symbolLabel(item)"
-                  :value="item.symbol"
-                />
-              </el-select>
+                :allow-create="true"
+                :reserve-keyword="true"
+                placeholder="搜索或选择一个或多个标的（不选 = 拉取全部）"
+                @update:model-value="(v: string[]) => workbench.taskForm.symbols = v"
+                @update:all-active="(v: boolean) => workbench.taskForm.allActive = v"
+              />
             </el-form-item>
           </el-form>
           <div class="quant-form-grid quant-form-grid--two">
@@ -325,27 +317,19 @@
           <div class="quant-form-grid quant-form-grid--two">
             <el-form label-position="top">
               <el-form-item label="股票池">
-                <el-select
-                  v-model="workbench.backfillForm.symbols"
-                  multiple
-                  filterable
+                <QuantPoolSelect
+                  :model-value="workbench.backfillForm.symbols"
+                  :all-active="workbench.backfillForm.allActive"
+                  :options="workbench.visibleSymbolOptions"
                   remote
-                  reserve-keyword
-                  allow-create
-                  default-first-option
-                  collapse-tags
-                  collapse-tags-tooltip
-                  placeholder="搜索或选择要补数的股票"
                   :remote-method="workbench.searchSymbols"
                   :loading="workbench.loading.symbolSearch"
-                >
-                  <el-option
-                    v-for="item in workbench.visibleSymbolOptions"
-                    :key="item.symbol"
-                    :label="symbolLabel(item)"
-                    :value="item.symbol"
-                  />
-                </el-select>
+                  :allow-create="true"
+                  :reserve-keyword="true"
+                  placeholder="搜索或选择要补数的股票（不选 = 拉取全部）"
+                  @update:model-value="(v: string[]) => workbench.backfillForm.symbols = v"
+                  @update:all-active="(v: boolean) => workbench.backfillForm.allActive = v"
+                />
               </el-form-item>
             </el-form>
             <el-form label-position="top">
@@ -593,6 +577,7 @@ import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { useThemeManager } from '@/composables/useThemeManager'
 import { symbolLabel } from '@/composables/quant/format'
 import EChartsCandlestick from '@/components/quant/EChartsCandlestick.vue'
+import QuantPoolSelect from '@/components/quant/QuantPoolSelect.vue'
 
 const workbench = useQuantWorkbench()
 const { isDarkTheme } = useThemeManager()

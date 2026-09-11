@@ -17,6 +17,10 @@ from service.quant.common import (
     normalize_date_text,
     compact_date_text,
     to_float,
+    MINUTE_BAR_SKIPLIST,
+    is_minute_bar_skip_symbol,
+    filter_minute_bar_symbols,
+    reload_minute_bar_skiplist,
 )
 
 
@@ -288,3 +292,83 @@ class TestToFloat:
 
     def test_empty_string(self):
         assert to_float("") is None
+
+
+class TestMinuteBarSkiplist:
+    """MINUTE_BAR_SKIPLIST + is_minute_bar_skip_symbol + filter_minute_bar_symbols。"""
+
+    def test_default_contains_main_indices(self):
+        """默认白名单覆盖主流指数（上证/沪深/科创/创业等）。"""
+        expected = {
+            "000001.SH",  # 上证综指
+            "000016.SH",  # 上证50
+            "000300.SH",  # 沪深300
+            "000688.SH",  # 科创50
+            "000852.SH",  # 中证1000
+            "000905.SH",  # 中证500
+            "399001.SZ",  # 深证成指
+            "399006.SZ",  # 创业板指
+            "399330.SZ",  # 深证100
+            "399905.SZ",  # 中证500(深)
+        }
+        assert expected.issubset(MINUTE_BAR_SKIPLIST)
+
+    def test_stocks_not_in_skiplist(self):
+        """普通股票不在白名单里。"""
+        assert is_minute_bar_skip_symbol("600519.SH") is False
+        assert is_minute_bar_skip_symbol("000001.SZ") is False  # 平安银行
+        assert is_minute_bar_skip_symbol("300750.SZ") is False
+
+    def test_main_indices_in_skiplist(self):
+        assert is_minute_bar_skip_symbol("000001.SH") is True   # 上证综指
+        assert is_minute_bar_skip_symbol("000300.SH") is True   # 沪深300
+        assert is_minute_bar_skip_symbol("399001.SZ") is True   # 深证成指
+        assert is_minute_bar_skip_symbol("399006.SZ") is True   # 创业板指
+
+    def test_case_insensitive_suffix(self):
+        """小写 .sh / .sz 也应能命中。"""
+        assert is_minute_bar_skip_symbol("000300.sh") is True
+        assert is_minute_bar_skip_symbol("sh.000300") is True
+        assert is_minute_bar_skip_symbol("399006.sz") is True
+
+    def test_pure_code_uses_inferred_exchange(self):
+        """纯 code (000300) 走 infer_exchange → SH，再命中白名单。"""
+        assert is_minute_bar_skip_symbol("000300") is True
+        assert is_minute_bar_skip_symbol("399006") is True
+        # 000001 推断为 SZ（平安银行），不在白名单
+        assert is_minute_bar_skip_symbol("000001") is False
+
+    def test_empty_or_invalid_returns_false(self):
+        """空字符串 / None / 无法解析返回 False（不当指数处理）。"""
+        assert is_minute_bar_skip_symbol("") is False
+        assert is_minute_bar_skip_symbol(None) is False
+        assert is_minute_bar_skip_symbol("not-a-symbol") is False
+
+    def test_filter_keeps_stocks_drops_indices(self):
+        symbols = ["600519.SH", "000300.SH", "300750.SZ", "399006.SZ", "000001.SZ"]
+        result = filter_minute_bar_symbols(symbols)
+        assert result == ["600519.SH", "300750.SZ", "000001.SZ"]
+
+    def test_filter_preserves_order(self):
+        symbols = ["399006.SZ", "600519.SH", "000300.SH", "300750.SZ"]
+        result = filter_minute_bar_symbols(symbols)
+        assert result == ["600519.SH", "300750.SZ"]
+
+    def test_filter_empty_input(self):
+        assert filter_minute_bar_symbols([]) == []
+        assert filter_minute_bar_symbols(None) == []
+
+    def test_env_var_extends_skiplist(self, monkeypatch):
+        """环境变量追加新 symbol；不影响默认集合。"""
+        monkeypatch.setenv("QUANT_MINUTE_BAR_SKIPLIST", "830946.BJ, 600000.SH")
+        try:
+            updated = reload_minute_bar_skiplist()
+            assert "830946.BJ" in updated
+            assert "600000.SH" in updated
+            # 默认的 000300.SH 仍然在
+            assert "000300.SH" in updated
+            # 调用 is_minute_bar_skip_symbol 也能命中新增项
+            assert is_minute_bar_skip_symbol("830946.BJ") is True
+        finally:
+            monkeypatch.delenv("QUANT_MINUTE_BAR_SKIPLIST", raising=False)
+            reload_minute_bar_skiplist()

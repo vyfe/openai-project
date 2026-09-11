@@ -9,7 +9,7 @@ import urllib.request
 from datetime import datetime
 
 from quant_client.eastmoney_patch import get_eastmoney_session
-from quant_client.common import normalize_symbol, parse_trade_date, parse_trade_datetime, resolve_market_info, to_float
+from quant_client.common import is_minute_bar_skip_symbol, normalize_symbol, parse_trade_date, parse_trade_datetime, resolve_market_info, to_float
 from quant_client.provider_base import BaseAshareProvider
 
 
@@ -80,8 +80,19 @@ class EastmoneyAshareProvider(BaseAshareProvider):
         end_dt: str,
         adjust_flag: str = "qfq",
     ) -> list[dict]:
+        # fail-fast：指数在东方财富分时接口持续断连/限流，直接跳过避免重试
+        filtered_symbols = [s for s in (symbols or []) if not is_minute_bar_skip_symbol(s)]
+        skipped = [s for s in (symbols or []) if is_minute_bar_skip_symbol(s)]
+        if skipped:
+            logger.info(
+                "eastmoney_minute_skip_index symbols=%s reason=minute_bar_skiplist",
+                ",".join(skipped),
+            )
+        if not filtered_symbols:
+            return []
+
         rows: list[dict] = []
-        for raw_symbol in symbols:
+        for raw_symbol in filtered_symbols:
             try:
                 rows.extend(self._fetch_one_symbol_minute(raw_symbol, interval, start_dt, end_dt, adjust_flag))
             except Exception as exc:

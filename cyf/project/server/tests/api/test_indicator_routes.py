@@ -365,11 +365,11 @@ class TestComputeIndicatorsByRange:
 
     def test_compute_minute_interval_fetches_warmup(self, auth_client, test_db):
         """分时形态：MA60 on 5m 需要 60 根 5m bar 前置历史。
-        跨午夜：3 天 × 48 根/天 = 144 根；请求第二天到第三天，第一天作 warmup。
+        跨午夜：4 天 × 48 根/天 = 192 根；请求第三天到第四天，前两天作 warmup（96 根 > 60）。
         """
-        base_dt, end_dt = _seed_multi_day_minute(symbol="MINWARM.SH", days=3, bars_per_day=48)
-        # 请求从第二天开始（让首根需要前一天 48 根 + 当天前 12 根作 warmup）
-        start_dt = base_dt + timedelta(days=1)
+        base_dt, end_dt = _seed_multi_day_minute(symbol="MINWARM.SH", days=4, bars_per_day=48)
+        # 请求从第三天开始：前两天 96 根作 warmup，足够 MA60（60 根）生效
+        start_dt = base_dt + timedelta(days=2)
 
         resp = auth_client.post(
             "/never_guess_my_usage/quant/data/indicators/compute",
@@ -387,8 +387,8 @@ class TestComputeIndicatorsByRange:
         assert data["success"] is True, data
         meta = data["data"]["meta"]
         results = data["data"]["results"]
-        # 至少 48 根 warmup（前一天整天的 bar）
-        assert meta["warmup_count"] >= 48, f"expected warmup >= 48, got {meta['warmup_count']}"
+        # 至少 96 根 warmup（前两天）
+        assert meta["warmup_count"] >= 96, f"expected warmup >= 96, got {meta['warmup_count']}"
         # 第一根（请求区间首根）的 ma_60 应有值（warmup 跨日生效）
         sorted_keys = sorted(results.keys())
         first_key = sorted_keys[0]

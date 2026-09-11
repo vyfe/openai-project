@@ -240,5 +240,10 @@ class TestStockPoolDelete:
         assert "" not in result["deleted"]
 
     def test_batch_delete_empty_returns_empty(self):
-        assert batch_soft_delete_instruments([]) == {"deleted": [], "missing": []}
-        assert batch_soft_delete_instruments(None) == {"deleted": [], "missing": []}
+        # cascade 字段是级联 K 线的 rowcount 计数；空入参时不应该触发任何 SQL。
+        assert batch_soft_delete_instruments([]) == {
+            "deleted": [], "missing": [], "cascade": {"daily": 0, "minute": 0}
+        }
+        assert batch_soft_delete_instruments(None) == {
+            "deleted": [], "missing": [], "cascade": {"daily": 0, "minute": 0}
+        }

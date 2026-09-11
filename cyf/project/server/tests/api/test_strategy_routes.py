@@ -44,3 +44,25 @@ class TestStrategyRoutes:
         with app.test_client() as client:
             resp = client.get("/never_guess_my_usage/quant/strategy/list")
             assert resp.status_code == 401
+
+
+class TestPromptTemplateRoutes:
+    def test_create_and_update_extra_sections(self, auth_client):
+        created = auth_client.post(
+            "/never_guess_my_usage/quant/prompt_template/create",
+            json={
+                "prompt_version": "template-v1",
+                "prompt_template": "测试模板",
+                "extra_sections": [{"title": "风险矩阵", "instruction": "列出风险"}],
+            },
+        ).get_json()["data"]
+        assert created["extra_sections"] == [{"title": "风险矩阵", "instruction": "列出风险"}]
+
+        updated = auth_client.post(
+            "/never_guess_my_usage/quant/prompt_template/update",
+            json={
+                "id": created["id"],
+                "extra_sections": [{"title": "操作清单", "instruction": "列出动作"}],
+            },
+        ).get_json()["data"]
+        assert updated["extra_sections"] == [{"title": "操作清单", "instruction": "列出动作"}]

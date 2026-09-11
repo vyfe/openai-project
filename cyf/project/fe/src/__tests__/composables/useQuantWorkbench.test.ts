@@ -272,6 +272,43 @@ describe('useQuantWorkbench — 表单操作', () => {
     expect(wb.scheduleForm.cronExpr).toBe('20 15 * * 1-5')
   })
 
+  it('Prompt 模板动态段落应使用稳定状态并在保存时透传', async () => {
+    const wb = await getWorkbench()
+    const { quantPromptAPI } = await import('@/services/quantApi')
+    const extraSections = wb.promptExtraSections
+    vi.mocked(quantPromptAPI.update).mockResolvedValue({ success: true, data: null, msg: '' })
+
+    wb.hydratePromptForm({
+      id: 12,
+      strategy_id: null,
+      template_name: 'default',
+      prompt_version: 'template-v1',
+      status: 'active',
+      report_type: 'test_report',
+      prompt_template: '测试模板',
+      extra_sections: [{ title: '  风险矩阵  ', instruction: '  列出风险  ' }]
+    })
+    expect(wb.promptExtraSections).toBe(extraSections)
+    expect(wb.promptExtraSections).toEqual([{ title: '风险矩阵', instruction: '列出风险' }])
+
+    wb.addExtraSection()
+    wb.promptExtraSections[1].title = '操作清单'
+    wb.promptExtraSections[1].instruction = '列出次日动作'
+    await wb.savePromptTemplate()
+
+    expect(quantPromptAPI.update).toHaveBeenCalledWith(expect.objectContaining({
+      id: 12,
+      extra_sections: [
+        { title: '风险矩阵', instruction: '列出风险' },
+        { title: '操作清单', instruction: '列出次日动作' }
+      ]
+    }))
+
+    wb.resetPromptForm()
+    expect(wb.promptExtraSections).toBe(extraSections)
+    expect(wb.promptExtraSections).toEqual([])
+  })
+
   it('hydrateScheduleForm 应正确解析 payload 到表单', async () => {
     const wb = await getWorkbench()
     const config = {
@@ -510,6 +547,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       success: true, data: { records_imported: 48 }, msg: '',
     })
     wb.taskForm.symbols = ['600519.SH']
+    wb.taskForm.allActive = false
     wb.taskForm.startDate = '2024-01-02'
     wb.taskForm.endDate = '2024-01-02'
     wb.taskForm.provider = 'baostock'
@@ -521,6 +559,7 @@ describe('useQuantWorkbench — 核心业务', () => {
 
     expect(quantDataAPI.fetchNow).toHaveBeenCalledWith({
       symbols: ['600519.SH'],
+      all_active: false,
       start_date: '2024-01-02',
       end_date: '2024-01-02',
       provider: 'baostock',

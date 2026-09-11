@@ -128,7 +128,8 @@
                   filterable
                   collapse-tags
                   collapse-tags-tooltip
-                  placeholder="定时拉哪些股票"
+                  :disabled="workbench.scheduleForm.dataAllActive"
+                  placeholder="定时拉哪些股票（勾选下方『拉取全部』可忽略此栏）"
                 >
                   <el-option
                     v-for="item in workbench.symbolOptions"
@@ -138,6 +139,12 @@
                   />
                 </el-select>
               </el-form-item>
+              <el-checkbox
+                v-model="workbench.scheduleForm.dataAllActive"
+                class="quant-schedule-all-active"
+              >
+                拉取全部 active 标的（quant_instrument 全表，忽略上方标的池）
+              </el-checkbox>
             </el-form>
             <el-form label-position="top">
               <el-form-item label="任务备注">
