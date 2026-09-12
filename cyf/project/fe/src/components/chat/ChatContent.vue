@@ -67,6 +67,20 @@
             </div>
           </div>
           <div class="message-text" v-html="renderRichText(getTextContent(message.content))"></div>
+          <div v-if="getToolResultParts(message.parts).length" class="tool-results">
+            <div v-for="(part, partIndex) in getToolResultParts(message.parts)" :key="partIndex" class="tool-result-card">
+              <div class="tool-result-title">{{ t('chat.toolResultTitle') }}</div>
+              <div v-if="part.text" class="tool-result-text">{{ part.text }}</div>
+              <a
+                v-for="source in getToolSources(part)"
+                :key="source.url"
+                :href="source.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="tool-result-source"
+              >{{ source.title || source.url }}</a>
+            </div>
+          </div>
           <!-- TODO(human): 验证中文引号粗体修复 - 测试包含中文引号的**"文本"**是否能正确显示为粗体 -->
           <!-- 已完成: 代码块和表格的移动端响应式布局优化 -->
           <!-- 图片预览 - 支持从消息url字段和内容中提取，避免重复显示 -->
@@ -206,7 +220,9 @@
       :is-scrolled-to-bottom="formData.isScrolledToBottom"
       :is-mobile="formData.isMobile"
       :font-size="fontSize"
+      :enabled-tools="formData.enabledTools"
       @send-message="handleSendMessage"
+      @update:enabled-tools="formData.enabledTools = $event"
       @file-change="handleFileChange"
       @clear-file="clearFile"
       @stop-stream="handleStopStream"
@@ -501,6 +517,14 @@ const mathRenderer = {
 };
 
 const formData = (props.modelValue || {}) as FormData
+
+const getToolResultParts = (parts?: import('@/components/chat/types').MessagePart[]) =>
+  (parts || []).filter((part: any) => part?.type === 'tool_result') as Array<any>
+
+const getToolSources = (part: any) => {
+  const sources = part?.data?.sources
+  return Array.isArray(sources) ? sources : []
+}
 
 const authStore = useAuthStore()
 // 使用formData中的状态，不再定义局部状态
@@ -1667,6 +1691,10 @@ const callApi = async (
               })
               return
             }
+            // 工具调用状态仅用于协议层通知，具体搜索结果通过 part 事件展示。
+            if (response?.type === 'tool_status') {
+              return
+            }
 
             mutateSessionMessages(requestSessionKey, (targetMessages) => {
               if (!targetMessages[aiMessageIndex]) {
@@ -1732,7 +1760,8 @@ const callApi = async (
           formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
           roleSetting,
           requestId,
-          abortController.signal
+          abortController.signal,
+          formData.enabledTools
         );
       } else {
         // 使用非流式API
@@ -1767,7 +1796,8 @@ const callApi = async (
           formData.dialogTitle,
           Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
           formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
-          roleSetting
+          roleSetting,
+          formData.enabledTools
         );
 
         // 更新AI消息内容
@@ -2580,4 +2610,36 @@ watch(() => formData.isDarkTheme, (newVal) => {
 @import '@/styles/chat-content.css';
 @import '@/styles/global-font-sizes.css';
 @import '@/styles/message-container-fix.css';
+
+.tool-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tool-result-card {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #dcdfe6);
+  border-radius: 8px;
+  background: var(--bg-secondary, #f8fafc);
+  font-size: 0.9em;
+}
+
+.tool-result-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.tool-result-text {
+  white-space: pre-wrap;
+}
+
+.tool-result-source {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

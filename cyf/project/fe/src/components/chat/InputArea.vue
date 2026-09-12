@@ -64,6 +64,22 @@
               </div>
             </el-popover>
 
+            <!-- 模型自主调用的服务端工具 -->
+            <el-popover v-if="canUseWebSearch" placement="top-start" :width="180" trigger="click">
+              <template #reference>
+                <el-button
+                  class="tool-trigger-btn"
+                  :type="webSearchEnabled ? 'primary' : 'default'"
+                  :icon="Search"
+                  size="large"
+                  :aria-label="t('chat.webSearch')"
+                  :title="t('chat.webSearch')"
+                />
+              </template>
+              <el-checkbox v-model="webSearchEnabled">{{ t('chat.webSearch') }}</el-checkbox>
+              <div class="tool-hint">{{ t('chat.webSearchHint') }}</div>
+            </el-popover>
+
             <el-button
               v-if="props.isLoading && props.streamEnabled"
               type="danger"
@@ -99,7 +115,8 @@ import {
   Plus,
   Document,
   Close,
-  CircleClose
+  CircleClose,
+  Search
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
 import { Props, FileUploadResponse } from '@/components/chat/types'
@@ -131,12 +148,14 @@ const props = withDefaults(defineProps<Props>(), {
   isScrolledToBottom: true,
   isMobile: false,
   fontSize: 'medium',
+  enabledTools: () => [],
 })
 
 // 定义 emits
 interface Emits {
   'update:modelValue': [value: string]
   'send-message': [message: string, file?: File, imageSize?: string]  // 添加图片尺寸参数
+  'update:enabled-tools': [value: string[]]
   'file-change': [file: any]
   'clear-file': []
   'stop-stream': []
@@ -198,6 +217,11 @@ const isMultimodalModel = computed(() => {
 
 // 文件上传权限：图片模型、多模态模型或允许联网的模型
 const canUploadAttachment = computed(() => isImageModel.value || isMultimodalModel.value || props.selectedModelAllowNet !== false)
+const canUseWebSearch = computed(() => !isImageModel.value && props.selectedModelAllowNet !== false)
+const webSearchEnabled = computed({
+  get: () => (props.enabledTools || []).includes('web_search'),
+  set: (enabled: boolean) => emit('update:enabled-tools', enabled ? ['web_search'] : [])
+})
 
 // 添加键盘可见性检测
 const isKeyboardVisible = ref(false)
@@ -507,4 +531,11 @@ watch(() => inputMessage.value, (value) => {
 
 <style scoped>
 @import '@/styles/input-area.css';
+
+.tool-hint {
+  margin-top: 6px;
+  color: var(--text-secondary, #909399);
+  font-size: 12px;
+  line-height: 1.4;
+}
 </style>

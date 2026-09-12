@@ -29,6 +29,7 @@ export interface ChatSettings {
   streamEnabled: boolean
   systemPrompt: string
   sendPreference: 'enter' | 'ctrl_enter'
+  enabledTools?: string[]
 }
 
 export interface DialogItem {
@@ -93,6 +94,7 @@ export interface Props {
   selectedModel?: string
   selectedModelType?: number  // 添加模型类型参数
   selectedModelAllowNet?: boolean
+  enabledTools?: string[]
   streamEnabled?: boolean
   maxResponseChars?: number
   dialogTitle?: string

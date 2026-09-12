@@ -21,6 +21,8 @@ from service.message_normalizer import (
 )
 from service.claude_service import run_claude_chat_completion
 from service.model_service import is_valid_model
+from service.tool_loop import run_openai_tool_loop
+from service.tools.registry import ToolConfigurationError, validate_enabled_tools
 
 
 def is_gemini_model(model_name: str) -> bool:
@@ -124,6 +126,10 @@ def run_chat_completion(user: str, payload, logger):
     dialogvo, title = prepare_dialog(dialogs, payload.dialog_mode, payload.dialog_title, payload.system_prompt_id, logger)
     if dialogvo is None:
         return {"msg": title}, 200
+    try:
+        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []), model)
+    except ToolConfigurationError as exc:
+        return {"success": False, "msg": str(exc), "error_type": "TOOL_NOT_AVAILABLE"}, 200
 
     # === Claude 分支 ===
     if is_claude_model(model):
@@ -136,6 +142,8 @@ def run_chat_completion(user: str, payload, logger):
                 dialogvo=dialogvo,
                 max_tokens=payload.max_response_tokens or 102400,
                 logger=logger,
+                tool_names=enabled_tools,
+                max_tool_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
             )
             usage = normalize_usage(result_data.get("usage", {}))
             tokens = usage.get("total_tokens", 0)
@@ -179,6 +187,47 @@ def run_chat_completion(user: str, payload, logger):
     url_index = 0
     try:
         client, url_index = get_client_for_user(user)
+        if enabled_tools:
+            result_data = run_openai_tool_loop(
+                client=client,
+                model=model,
+                messages=api_params["messages"],
+                max_tokens=api_params["max_tokens"],
+                tool_names=enabled_tools,
+                logger=logger,
+                max_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+            )
+            usage = normalize_usage(result_data.get("usage", {}))
+            tokens = usage.get("total_tokens", 0)
+            set_log(user, tokens, model, json.dumps(result_data.get("raw_response", {}), ensure_ascii=False))
+            request_messages = stamp_latest_user_message(dialogvo)
+            assistant_time = current_time_str()
+            assistant_message = {
+                "role": result_data.get("role", "assistant"),
+                "content": result_data.get("content", ""),
+                "time": assistant_time,
+                "parts": result_data.get("parts", []),
+            }
+            assistant_message = ensure_message_parts(assistant_message)
+            dialog_id = set_dialog(
+                user,
+                model,
+                "chat",
+                title,
+                build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting, usage),
+            )
+            response_data = {
+                "role": assistant_message["role"],
+                "content": assistant_message.get("content", ""),
+                "parts": assistant_message.get("parts", []),
+                "finish_reason": result_data.get("finish_reason", "stop"),
+                "time": assistant_time,
+                "usage": usage,
+            }
+            if dialog_id:
+                response_data["dialog_id"] = dialog_id
+            return response_data, 200
+
         result = client.chat.completions.create(**api_params)
         usage = normalize_usage(result.usage)
         tokens = usage.get("total_tokens", 0)

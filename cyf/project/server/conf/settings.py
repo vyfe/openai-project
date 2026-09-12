@@ -50,6 +50,14 @@ class Settings:
     claude_api_key: str
     claude_api_hosts: list[str]
     claude_api_version: str
+    # 服务端工具配置。默认关闭，避免未配置 Google Key 时改变现有请求行为。
+    google_web_search_enabled: bool = False
+    google_web_search_api_key: str = ""
+    google_web_search_model: str = "gemini-2.5-flash"
+    google_web_search_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    google_web_search_timeout_seconds: int = 30
+    google_web_search_max_rounds: int = 3
+    google_web_search_max_sources: int = 8
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -76,6 +84,7 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         for item in conf.get("model_filter", "exclude_keywords", fallback="instruct,realtime,audio").split(",")
         if item.strip()
     ]
+    tools_conf = conf["tools"] if conf.has_section("tools") else {}
 
     return Settings(
         conf=conf,
@@ -118,6 +127,18 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         claude_api_key=_get_str(conf, "claude", "api_key", fallback=""),
         claude_api_hosts=[h.strip() for h in conf.get("claude", "api_host", fallback="").split(",") if h.strip()],
         claude_api_version=_get_str(conf, "claude", "api_version", fallback=""),
+        google_web_search_enabled=_get_bool(conf, "tools", "google_web_search_enabled", fallback="false"),
+        google_web_search_api_key=_get_str(conf, "tools", "google_web_search_api_key", fallback=""),
+        google_web_search_model=_get_str(conf, "tools", "google_web_search_model", fallback="gemini-2.5-flash"),
+        google_web_search_base_url=_get_str(
+            conf,
+            "tools",
+            "google_web_search_base_url",
+            fallback="https://generativelanguage.googleapis.com/v1beta",
+        ),
+        google_web_search_timeout_seconds=int(tools_conf.get("google_web_search_timeout_seconds", "30")),
+        google_web_search_max_rounds=int(tools_conf.get("google_web_search_max_rounds", "3")),
+        google_web_search_max_sources=int(tools_conf.get("google_web_search_max_sources", "8")),
     )
 
 

@@ -9,9 +9,11 @@ from service.chat_service import check_test_user_limit, convert_dialog_for_model
 from service.common_service import generate_sse_error, handle_api_exception
 from service.dialog_context_service import build_dialog_context_payload, current_time_str, stamp_latest_user_message
 from service.host_service import get_client_for_user, get_claude_client_for_user, is_claude_model
-from service.claude_service import stream_claude_chat
+from service.claude_service import stream_claude_chat, stream_claude_tool_loop
 from service.llm_usage_service import estimate_total_tokens
 from service.message_normalizer import build_parts_from_message, ensure_message_parts
+from service.tool_loop import stream_openai_tool_loop
+from service.tools.registry import ToolConfigurationError, validate_enabled_tools
 
 
 def register_stream_request(request_id: str):
@@ -72,10 +74,15 @@ def stream_chat(user: str, payload, logger):
     dialogvo, title = prepare_dialog(dialogs, payload.dialog_mode, payload.dialog_title, payload.system_prompt_id, logger)
     if dialogvo is None:
         return build_stream_response(generate_sse_error(title, "DIALOG_MODE_ERROR"))
+    try:
+        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []), model)
+    except ToolConfigurationError as exc:
+        return build_stream_response(generate_sse_error(str(exc), "TOOL_NOT_AVAILABLE"))
     register_stream_request(request_id)
 
     def generate():
         full_content = ""
+        tool_parts = []
         was_cancelled = False
         url_index = None
         try:
@@ -85,57 +92,121 @@ def stream_chat(user: str, payload, logger):
             # === Claude 流式分支 ===
             if is_claude_model(model):
                 claude_client, url_index = get_claude_client_for_user(user)
-                stream_gen = stream_claude_chat(
-                    client=claude_client,
-                    model=model,
-                    dialogvo=dialogvo,
-                    max_tokens=payload.max_response_tokens or 102400,
-                    logger=logger,
-                )
+                if enabled_tools:
+                    stream_gen = stream_claude_tool_loop(
+                        client=claude_client,
+                        model=model,
+                        dialogvo=dialogvo,
+                        max_tokens=payload.max_response_tokens or 102400,
+                        tool_names=enabled_tools,
+                        max_tool_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                        logger=logger,
+                        is_cancelled=lambda: is_stream_cancelled(request_id),
+                        on_stream=lambda stream: set_stream_object(request_id, stream),
+                    )
+                else:
+                    stream_gen = stream_claude_chat(
+                        client=claude_client,
+                        model=model,
+                        dialogvo=dialogvo,
+                        max_tokens=payload.max_response_tokens or 102400,
+                        logger=logger,
+                    )
                 finish_reason = None
                 for event in stream_gen:
                     if is_stream_cancelled(request_id):
                         was_cancelled = True
                         break
+                    if enabled_tools:
+                        event_type = event.get("type")
+                        if event_type == "text_delta":
+                            content_piece = event.get("content", "")
+                            full_content += content_piece
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "tool_call":
+                            yield f"data: {json.dumps({'type': 'tool_status', 'status': 'calling', 'calls': event.get('calls', []), 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "tool_result":
+                            part = event.get("part")
+                            if part:
+                                tool_parts.append(part)
+                                yield f"data: {json.dumps({'type': 'part', 'part': part, 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "done":
+                            finish_reason = event.get("finish_reason") or "end_turn"
+                        continue
                     event_type = event[0]
                     if event_type == "text_delta":
                         content_piece = event[1]
                         full_content += content_piece
-                        yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False})}\n\n"
+                        yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False}, ensure_ascii=False)}\n\n"
                     elif event_type == "done":
                         _, content, finish_reason = event
                 if was_cancelled:
                     return
 
             else:
-                # === 原有 OpenAI 流式分支 ===
-                api_params = {
-                    "model": model,
-                    "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
-                    "max_tokens": payload.max_response_tokens or 102400,
-                    "stream": True,
-                    "timeout": 300,
-                }
+                # === OpenAI 流式分支 ===
                 client, url_index = get_client_for_user(user)
-                stream = client.chat.completions.create(**api_params)
-                set_stream_object(request_id, stream)
-                finish_reason = None
-                for chunk in stream:
-                    if is_stream_cancelled(request_id):
-                        was_cancelled = True
-                        try:
-                            stream.close()
-                        except Exception:
-                            pass
-                        break
-                    if chunk.choices:
-                        delta = chunk.choices[0].delta
-                        if delta.content:
-                            content_piece = delta.content
+                if enabled_tools:
+                    stream_gen = stream_openai_tool_loop(
+                        client=client,
+                        model=model,
+                        messages=convert_dialog_for_model(dialogvo, model, logger=logger),
+                        max_tokens=payload.max_response_tokens or 102400,
+                        tool_names=enabled_tools,
+                        max_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                        logger=logger,
+                        is_cancelled=lambda: is_stream_cancelled(request_id),
+                        on_stream=lambda stream: set_stream_object(request_id, stream),
+                    )
+                    finish_reason = None
+                    for event in stream_gen:
+                        if is_stream_cancelled(request_id):
+                            was_cancelled = True
+                            break
+                        event_type = event.get("type")
+                        if event_type == "text_delta":
+                            content_piece = event.get("content", "")
                             full_content += content_piece
-                            yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False})}\n\n"
-                        if chunk.choices[0].finish_reason:
-                            finish_reason = chunk.choices[0].finish_reason
+                            yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "tool_call":
+                            yield f"data: {json.dumps({'type': 'tool_status', 'status': 'calling', 'calls': event.get('calls', []), 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "tool_result":
+                            part = event.get("part")
+                            if part:
+                                tool_parts.append(part)
+                                yield f"data: {json.dumps({'type': 'part', 'part': part, 'done': False}, ensure_ascii=False)}\n\n"
+                        elif event_type == "done":
+                            finish_reason = event.get("finish_reason") or "stop"
+                    if was_cancelled:
+                        return
+                else:
+                    # === 原有 OpenAI 流式分支 ===
+                    api_params = {
+                        "model": model,
+                        "messages": convert_dialog_for_model(dialogvo, model, logger=logger),
+                        "max_tokens": payload.max_response_tokens or 102400,
+                        "stream": True,
+                        "timeout": 300,
+                    }
+                    stream = client.chat.completions.create(**api_params)
+                    set_stream_object(request_id, stream)
+                    finish_reason = None
+                    for chunk in stream:
+                        if is_stream_cancelled(request_id):
+                            was_cancelled = True
+                            try:
+                                stream.close()
+                            except Exception:
+                                pass
+                            break
+                        if chunk.choices:
+                            delta = chunk.choices[0].delta
+                            if delta.content:
+                                content_piece = delta.content
+                                full_content += content_piece
+                                yield f"data: {json.dumps({'type': 'text_delta', 'content': content_piece, 'done': False}, ensure_ascii=False)}\n\n"
+                            if chunk.choices[0].finish_reason:
+                                finish_reason = chunk.choices[0].finish_reason
                 if was_cancelled:
                     return
 
@@ -146,6 +217,8 @@ def stream_chat(user: str, payload, logger):
             request_messages = stamp_latest_user_message(dialogvo)
             assistant_time = current_time_str()
             assistant_message = {"role": "assistant", "content": full_content, "time": assistant_time}
+            if tool_parts:
+                assistant_message["parts"] = build_parts_from_message(assistant_message) + tool_parts
             # 归一化为统一 MessagePart 协议
             assistant_message = ensure_message_parts(assistant_message)
             dialog_id = set_dialog(
@@ -155,7 +228,7 @@ def stream_chat(user: str, payload, logger):
                 title,
                 build_dialog_context_payload(request_messages + [assistant_message], payload.role_setting, usage),
             )
-            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time, 'usage': usage})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'content': '', 'done': True, 'finish_reason': finish_reason, 'dialog_id': dialog_id, 'time': assistant_time, 'usage': usage, 'parts': assistant_message.get('parts', build_parts_from_message(assistant_message))}, ensure_ascii=False)}\n\n"
         except Exception as api_exc:
             error_response = handle_api_exception(api_exc, logger, user=user, model=model, dialog_content=dialogs, url_index=url_index)
             yield f"data: {json.dumps({'content': error_response.get('msg', 'API请求失败'), 'done': True, 'error': error_response})}\n\n"

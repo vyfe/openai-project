@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from service.dialog_context_service import parse_role_setting
+from service.tools.registry import normalize_enabled_tools
 
 
 @dataclass
@@ -13,6 +14,8 @@ class ChatRequest:
     system_prompt_id: str
     role_setting: Optional[dict]
     max_response_tokens: Optional[int]
+    # 关键字字段避免破坏 StreamChatRequest/ImageChatRequest 的 dataclass 继承顺序。
+    enabled_tools: list[str] = field(default_factory=list, kw_only=True)
 
     @classmethod
     def from_data(cls, data):
@@ -26,6 +29,7 @@ class ChatRequest:
             system_prompt_id=str(data.get("system_prompt_id", "")).strip(),
             role_setting=parse_role_setting(data.get("role_setting")),
             max_response_tokens=max_tokens,
+            enabled_tools=normalize_enabled_tools(data.get("enabled_tools")),
         )
 
 
@@ -44,6 +48,7 @@ class StreamChatRequest(ChatRequest):
             system_prompt_id=base.system_prompt_id,
             role_setting=base.role_setting,
             max_response_tokens=base.max_response_tokens,
+            enabled_tools=base.enabled_tools,
             request_id=str(data.get("request_id", "")).strip(),
         )
 
@@ -64,6 +69,7 @@ class ImageChatRequest(ChatRequest):
             system_prompt_id=base.system_prompt_id,
             role_setting=base.role_setting,
             max_response_tokens=base.max_response_tokens,
+            enabled_tools=base.enabled_tools,
             size=str(data.get("size", "1024x1024")).strip(),
             dialog_id=str(data.get("dialogId", "")).strip(),
         )

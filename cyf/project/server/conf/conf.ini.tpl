@@ -66,3 +66,13 @@ include_prefixes=gpt,gemini,qwen,nano-banana,deepseek
 exclude_keywords=instruct,realtime,audio
 # 缓存时间（秒）
 cache_ttl=3600
+
+[tools]
+# 模型可调用的服务端工具。首期网络搜索默认关闭，配置 Google Gemini API Key 后再开启。
+google_web_search_enabled=false
+google_web_search_api_key=
+google_web_search_model=gemini-2.5-flash
+google_web_search_base_url=https://generativelanguage.googleapis.com/v1beta
+google_web_search_timeout_seconds=30
+google_web_search_max_rounds=3
+google_web_search_max_sources=8

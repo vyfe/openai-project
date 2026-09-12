@@ -4,6 +4,7 @@ export interface FormData {
     selectedModel: string;
     selectedModelType: number;
     selectedModelAllowNet: boolean;
+    enabledTools: string[];
     contextCount: number;
     sidebarCollapsed: boolean;
     maxResponseChars: number;

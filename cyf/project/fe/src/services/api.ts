@@ -42,7 +42,7 @@ const getAuthHeaders = async () => {
 }
 
 export const chatAPI = {
-  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number, roleSetting?: any) => {
+  sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number, roleSetting?: any, enabledTools?: string[]) => {
     const data: any = {
       model,
       dialog: message
@@ -55,6 +55,7 @@ export const chatAPI = {
     if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
     if (systemPromptId) data.system_prompt_id = systemPromptId
     if (roleSetting) data.role_setting = roleSetting
+    if (enabledTools?.length) data.enabled_tools = enabledTools
     return api.post('/never_guess_my_usage/split', data)
   },
 
@@ -69,7 +70,8 @@ export const chatAPI = {
     systemPromptId?: number,
     roleSetting?: any,
     requestId?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    enabledTools?: string[]
   ): Promise<void> => {
     const data: any = {
       model,
@@ -84,6 +86,7 @@ export const chatAPI = {
     if (systemPromptId) data.system_prompt_id = systemPromptId
     if (roleSetting) data.role_setting = roleSetting
     if (requestId) data.request_id = requestId
+    if (enabledTools?.length) data.enabled_tools = enabledTools
 
     const headers = await getAuthHeaders()
     const response = await fetch(`${API_BASE_URL}/never_guess_my_usage/split_stream`, {
@@ -129,11 +132,13 @@ export const chatAPI = {
           }
 
           // 多模态协议：根据 event type 分别处理
-          const eventType = parsedData.type // 'text_delta' | 'part' | 'done' | undefined (legacy)
+          const eventType = parsedData.type // 'text_delta' | 'part' | 'tool_status' | 'done' | undefined (legacy)
 
           if (eventType === 'part') {
             // 非文本部件（图片/文件等），通过 response 传递
             onChunk('', false, undefined, { part: parsedData.part, done: false })
+          } else if (eventType === 'tool_status') {
+            onChunk('', false, undefined, parsedData)
           } else if (eventType === 'done') {
             // 流结束事件
             onChunk('', true, parsedData.finish_reason, parsedData)

@@ -242,6 +242,7 @@ type ChatTab = {
   selectedModel: string
   selectedModelType: number
   selectedModelAllowNet: boolean
+  enabledTools: string[]
   providerValue: string
   modelValue: string
   currentModelDesc: string
@@ -261,6 +262,7 @@ const formData = reactive({
   selectedModel: localStorage.getItem('selectedModel') || '',
   selectedModelType: parseInt(localStorage.getItem('selectedModelType') || '1'),
   selectedModelAllowNet: localStorage.getItem('selectedModelAllowNet') !== 'false',
+  enabledTools: JSON.parse(localStorage.getItem('enabledTools') || '[]') as string[],
   // 上下文字数
   contextCount: parseInt(localStorage.getItem('contextCount') || '10'),
   // 侧边栏折叠状态
@@ -358,6 +360,7 @@ const chatTabs = ref<ChatTab[]>([{
   unread: false,
   ...getModelStateByModelName(formData.selectedModel || ''),
   ...getRoleStateFromForm(),
+  enabledTools: [...formData.enabledTools],
   contextTotalTokens: 0,
 }])
 const activeTabKey = ref(chatTabs.value[0].key)
@@ -383,6 +386,7 @@ watch(() => formData.sidebarCollapsed, (val) => localStorage.setItem('sidebarCol
 watch(() => formData.selectedModel, (val) => localStorage.setItem('selectedModel', val))
 watch(() => formData.selectedModelType, (val) => localStorage.setItem('selectedModelType', val.toString()))
 watch(() => formData.selectedModelAllowNet, (val) => localStorage.setItem('selectedModelAllowNet', val ? 'true' : 'false'))
+watch(() => formData.enabledTools, (val) => localStorage.setItem('enabledTools', JSON.stringify(val)), { deep: true })
 watch(() => formData.streamEnabled, (val) => localStorage.setItem('streamEnabled', JSON.stringify(val)))
 watch(() => formData.systemPrompt, (val) => localStorage.setItem('systemPrompt', val))
 watch(() => formData.sendPreference, (val) => localStorage.setItem('sendPreference', val))
@@ -441,6 +445,7 @@ const syncFormDataFromActiveTab = () => {
   formData.selectedModel = tab.selectedModel
   formData.selectedModelType = tab.selectedModelType
   formData.selectedModelAllowNet = tab.selectedModelAllowNet !== false
+  formData.enabledTools = [...(tab.enabledTools || [])]
   formData.providerValue = tab.providerValue
   formData.modelValue = tab.modelValue
   formData.currentModelDesc = tab.currentModelDesc
@@ -463,6 +468,7 @@ const createChatTab = (dialogId: number | null = null, title: string = '', model
     unread: false,
     ...modelState,
     ...getRoleStateFromForm(),
+    enabledTools: [...formData.enabledTools],
     contextTotalTokens: 0,
   }
   chatTabs.value.push(tab)
@@ -536,6 +542,7 @@ const handleHandoffCreated = async (payload: { dialogId: number, dialogName: str
     unread: false,
     ...modelState,
     ...getRoleStateFromForm(),
+    enabledTools: [...formData.enabledTools],
     contextTotalTokens: Number(payload.usage?.total_tokens || 0),
   }
   chatTabs.value.push(tab)
@@ -800,6 +807,15 @@ watch(
     tab.modelValue = modelValue || ''
     tab.currentModelDesc = currentModelDesc || ''
   }
+)
+
+watch(
+  () => formData.enabledTools,
+  (enabledTools) => {
+    const tab = getActiveTab()
+    if (tab) tab.enabledTools = [...(enabledTools || [])]
+  },
+  { deep: true }
 )
 
 watch(
