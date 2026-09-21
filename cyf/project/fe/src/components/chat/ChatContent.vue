@@ -69,16 +69,37 @@
           <div class="message-text" v-html="renderRichText(getTextContent(message.content))"></div>
           <div v-if="getToolResultParts(message.parts).length" class="tool-results">
             <div v-for="(part, partIndex) in getToolResultParts(message.parts)" :key="partIndex" class="tool-result-card">
-              <div class="tool-result-title">{{ t('chat.toolResultTitle') }}</div>
-              <div v-if="part.text" class="tool-result-text">{{ part.text }}</div>
-              <a
-                v-for="source in getToolSources(part)"
-                :key="source.url"
-                :href="source.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="tool-result-source"
-              >{{ source.title || source.url }}</a>
+              <div class="tool-result-header">
+                <div class="tool-result-title">
+                  <span class="tool-result-dot" aria-hidden="true"></span>
+                  {{ t('chat.toolResultTitle') }}
+                </div>
+                <span v-if="getToolSources(part).length" class="tool-result-count">
+                  {{ getToolSources(part).length }} {{ t('chat.toolResultSourceCount') }}
+                </span>
+              </div>
+              <div v-if="getToolSources(part).length" class="tool-result-sources">
+                <a
+                  v-for="(source, sourceIndex) in getToolSources(part)"
+                  :key="source.url"
+                  :href="source.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="tool-result-source"
+                  :title="source.url"
+                >
+                  <span class="tool-result-source-index" aria-hidden="true">{{ sourceIndex + 1 }}</span>
+                  <span class="tool-result-source-label">{{ source.title || source.url }}</span>
+                </a>
+              </div>
+              <details v-if="part.text" class="tool-result-details">
+                <summary class="tool-result-summary">
+                  <span class="tool-result-expand-label">{{ t('chat.toolResultExpand') }}</span>
+                  <span class="tool-result-collapse-label">{{ t('chat.toolResultCollapse') }}</span>
+                  <span class="tool-result-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div class="tool-result-text">{{ part.text }}</div>
+              </details>
             </div>
           </div>
           <!-- TODO(human): 验证中文引号粗体修复 - 测试包含中文引号的**"文本"**是否能正确显示为粗体 -->
@@ -2619,27 +2640,138 @@ watch(() => formData.isDarkTheme, (newVal) => {
 }
 
 .tool-result-card {
-  padding: 10px 12px;
-  border: 1px solid var(--border-color, #dcdfe6);
-  border-radius: 8px;
-  background: var(--bg-secondary, #f8fafc);
+  overflow: hidden;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--bg-1);
+  color: var(--text-1);
   font-size: 0.9em;
 }
 
+.tool-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px 8px;
+}
+
 .tool-result-title {
-  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 600;
 }
 
-.tool-result-text {
-  white-space: pre-wrap;
+.tool-result-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  box-shadow: 0 0 0 3px var(--accent-1-soft);
+}
+
+.tool-result-count {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: 0.88em;
+}
+
+.tool-result-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 12px 9px;
 }
 
 .tool-result-source {
-  display: block;
-  margin-top: 4px;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 7px;
+  padding: 3px 0;
+  color: var(--accent-1);
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.tool-result-source:hover {
+  color: var(--el-color-primary-dark-2);
+  text-decoration: underline;
+}
+
+.tool-result-source-index {
+  flex: 0 0 auto;
+  min-width: 1.2em;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tool-result-source-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tool-result-details {
+  border-top: 1px solid var(--line-1);
+  background: var(--bg-0);
+}
+
+.tool-result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.tool-result-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-result-summary:hover {
+  color: var(--text-1);
+  background: var(--bg-2);
+}
+
+.tool-result-chevron {
+  color: var(--accent-1);
+  font-size: 1.15em;
+  line-height: 1;
+  transform: translateY(-2px);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.tool-result-details[open] .tool-result-chevron {
+  transform: rotate(180deg) translateY(2px);
+}
+
+.tool-result-collapse-label {
+  display: none;
+}
+
+.tool-result-details[open] .tool-result-expand-label {
+  display: none;
+}
+
+.tool-result-details[open] .tool-result-collapse-label {
+  display: inline;
+}
+
+.tool-result-text {
+  max-height: 320px;
+  padding: 0 12px 12px;
+  overflow: auto;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

@@ -68,11 +68,14 @@ exclude_keywords=instruct,realtime,audio
 cache_ttl=3600
 
 [tools]
-# 模型可调用的服务端工具。首期网络搜索默认关闭，配置 Google Gemini API Key 后再开启。
-google_web_search_enabled=false
-google_web_search_api_key=
-google_web_search_model=gemini-2.5-flash
-google_web_search_base_url=https://generativelanguage.googleapis.com/v1beta
-google_web_search_timeout_seconds=30
-google_web_search_max_rounds=3
-google_web_search_max_sources=8
+# 模型可调用的本地网络搜索脚本，无需第三方搜索 API Key。
+web_search_enabled=true
+web_search_engines=duckduckgo,bing
+# DuckDuckGo 区域：wt-wt（全球）、sg-en（新加坡）、cn-zh（中国）
+web_search_duckduckgo_region=wt-wt
+web_search_timeout_seconds=15
+web_search_max_rounds=3
+web_search_max_sources=5
+web_search_max_page_chars=4000
+web_search_max_context_chars=16000
+web_search_max_download_bytes=1048576

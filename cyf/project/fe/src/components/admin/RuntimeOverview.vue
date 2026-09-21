@@ -7,28 +7,58 @@ import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
 const loading = ref(false)
-const runtime = ref<any>(null)
+const runtime = ref<RuntimeSnapshot | null>(null)
 const dbPath = ref('')
+const errorMessage = ref('')
 
-const formatSeconds = (seconds: number) => {
-  if (!Number.isFinite(seconds)) return '-'
+interface RuntimeSnapshot {
+  database?: {
+    path: string
+  }
+  uptime_seconds: number
+  model_cache?: {
+    cached: boolean
+    model_count: number
+    expires_in_seconds: number
+  }
+  api_hosts: Array<{
+    index: number
+    host: string
+    blacklisted: boolean
+    blacklist_remaining_seconds: number
+  }>
+  token_stats?: {
+    active_token_count: number
+  }
+}
+
+const formatSeconds = (seconds?: number) => {
+  if (seconds === undefined || !Number.isFinite(seconds)) return '-'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
   return `${h}h ${m}m ${s}s`
 }
 
+const formatExpiry = (seconds?: number) => (
+  seconds === undefined || !Number.isFinite(seconds) ? '-' : `${seconds}s`
+)
+
 const fetchOverview = async () => {
   loading.value = true
+  errorMessage.value = ''
   try {
     const response = await runtimeAPI.overview()
     if (response.success) {
-      runtime.value = response.data?.runtime || null
+      runtime.value = response.data || null
       dbPath.value = response.data?.database?.path || ''
     } else {
       throw new Error(response.msg || '加载失败')
     }
   } catch (error: any) {
+    runtime.value = null
+    dbPath.value = ''
+    errorMessage.value = error.response?.data?.msg || error.message || t('admin.loading')
     ElMessage.error(error.response?.data?.msg || error.message || t('admin.loading'))
   } finally {
     loading.value = false
@@ -53,22 +83,31 @@ onMounted(() => {
 
     <el-skeleton v-if="loading" :rows="6" animated />
 
-    <template v-else>
+    <el-alert
+      v-else-if="errorMessage"
+      :title="t('admin.executeFailed')"
+      :description="errorMessage"
+      type="error"
+      show-icon
+      :closable="false"
+    />
+
+    <template v-else-if="runtime">
       <div class="admin-runtime-metrics grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-        <el-card>
+        <el-card class="runtime-metric-card">
           <template #header>{{ t('admin.uptime') }}</template>
-          <div class="text-xl font-semibold">{{ formatSeconds(runtime?.uptime_seconds || 0) }}</div>
+          <div class="runtime-metric-value">{{ formatSeconds(runtime.uptime_seconds) }}</div>
         </el-card>
-        <el-card>
+        <el-card class="runtime-metric-card">
           <template #header>{{ t('admin.activeTokens') }}</template>
-          <div class="text-xl font-semibold">{{ runtime?.token_stats?.active_token_count ?? 0 }}</div>
+          <div class="runtime-metric-value">{{ runtime.token_stats?.active_token_count ?? 0 }}</div>
         </el-card>
-        <el-card>
+        <el-card class="runtime-metric-card">
           <template #header>{{ t('admin.modelCache') }}</template>
-          <div class="text-sm">
-            <div>{{ t('admin.status') }}: {{ runtime?.model_cache?.cached ? t('admin.active') : t('admin.inactive') }}</div>
-            <div>{{ t('admin.modelCount') }}: {{ runtime?.model_cache?.model_count ?? 0 }}</div>
-            <div>{{ t('admin.expireIn') }}: {{ runtime?.model_cache?.expires_in_seconds ?? 0 }}s</div>
+          <div class="runtime-metric-details">
+            <div><span>{{ t('admin.status') }}</span><strong>{{ runtime.model_cache?.cached ? t('admin.active') : t('admin.inactive') }}</strong></div>
+            <div><span>{{ t('admin.modelCount') }}</span><strong>{{ runtime.model_cache?.model_count ?? 0 }}</strong></div>
+            <div><span>{{ t('admin.expireIn') }}</span><strong>{{ formatExpiry(runtime.model_cache?.expires_in_seconds) }}</strong></div>
           </div>
         </el-card>
       </div>
@@ -94,5 +133,44 @@ onMounted(() => {
         </el-table>
       </el-card>
     </template>
+
+    <el-empty v-else :description="t('admin.noData')" />
   </div>
 </template>
+
+<style scoped>
+.runtime-metric-card :deep(.el-card__body) {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+}
+
+.runtime-metric-value {
+  color: var(--accent-1);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.runtime-metric-details {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.runtime-metric-details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.runtime-metric-details span {
+  color: var(--text-2);
+}
+
+.runtime-metric-details strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+</style>

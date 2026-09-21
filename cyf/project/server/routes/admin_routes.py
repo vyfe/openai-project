@@ -226,7 +226,7 @@ def model_meta_delete():
 @require_admin_auth
 @crud_list(
     SystemPrompt,
-    serializer=lambda p: dict(p),
+    serializer=SystemPrompt.to_dict,
     search_fields=["role_name", "role_group", "role_desc"],
     default_page_size=30,
 )
@@ -236,7 +236,7 @@ def system_prompt_list():
 
 @admin_bp.route("/system_prompt/get/<int:prompt_id>", methods=["GET"])
 @require_admin_auth
-@crud_get(SystemPrompt, serializer=lambda p: dict(p), id_param="prompt_id")
+@crud_get(SystemPrompt, serializer=SystemPrompt.to_dict, id_param="prompt_id")
 def system_prompt_get(prompt_id):
     pass
 
@@ -245,7 +245,7 @@ def system_prompt_get(prompt_id):
 @require_admin_auth
 @crud_create(
     SystemPrompt,
-    serializer=lambda p: dict(p),
+    serializer=SystemPrompt.to_dict,
     required=["role_name", "role_group"],
     field_map={"role_name": str, "role_group": str, "role_desc": str, "role_content": str, "status_valid": bool},
     integrity_msg="该角色名称和分组组合已存在",
@@ -258,7 +258,7 @@ def system_prompt_create():
 @require_admin_auth
 @crud_update(
     SystemPrompt,
-    serializer=lambda p: dict(p),
+    serializer=SystemPrompt.to_dict,
     field_map={"role_name": str, "role_group": str, "role_desc": str, "role_content": str, "status_valid": bool},
     integrity_msg="该角色名称和分组组合已存在",
 )
@@ -571,7 +571,7 @@ def sql_execute():
         summary = _summarize_sql(sql, params)
         llm_logger.warning(f"管理员执行SQL: {summary}")
         cursor = db.execute_sql(sql, params or ())
-        if sql.lower().startswith("select"):
+        if sql.lower().startswith(("select", "pragma")):
             columns = [d[0] for d in cursor.description]
             rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
             return success_response(data={"columns": columns, "rows": rows[:500], "summary": summary})
@@ -597,7 +597,35 @@ def sql_meta():
         cursor = db.execute_sql(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
-        tables = [row[0] for row in cursor.fetchall()]
-        return success_response(data={"tables": tables})
+        tables = []
+        for row in cursor.fetchall():
+            table_name = row[0]
+            quoted_table_name = _quote_sql_identifier(table_name)
+            columns_cursor = db.execute_sql(f"PRAGMA table_info({quoted_table_name})")
+            columns = [
+                {
+                    "name": column[1],
+                    "data_type": column[2] or "",
+                    "nullable": not bool(column[3]),
+                    "primary_key": bool(column[5]),
+                }
+                for column in columns_cursor.fetchall()
+            ]
+            row_count = db.execute_sql(f"SELECT COUNT(*) FROM {quoted_table_name}").fetchone()[0]
+            tables.append({
+                "table_name": table_name,
+                "row_count": row_count,
+                "columns": columns,
+            })
+        return success_response(data={
+            "database": {"path": str(db.database)},
+            "tables": tables,
+        })
     except Exception as exc:
         return error_response(f"获取表元信息失败: {exc}")
+
+
+def _quote_sql_identifier(identifier: str) -> str:
+    """引用来自 sqlite_master 的标识符，避免表名破坏元信息查询。"""
+    escaped_identifier = str(identifier).replace('"', '""')
+    return f'"{escaped_identifier}"'

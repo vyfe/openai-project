@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from service.dialog_context_service import parse_role_setting
@@ -14,8 +14,7 @@ class ChatRequest:
     system_prompt_id: str
     role_setting: Optional[dict]
     max_response_tokens: Optional[int]
-    # 关键字字段避免破坏 StreamChatRequest/ImageChatRequest 的 dataclass 继承顺序。
-    enabled_tools: list[str] = field(default_factory=list, kw_only=True)
+    enabled_tools: list[str]
 
     @classmethod
     def from_data(cls, data):

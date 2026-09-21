@@ -52,6 +52,8 @@ def _coerce(value: Any, caster: Callable[[Any], Any]) -> Any:
     """按 caster 类型转换 value；caster 不存在则原样返回。"""
     if value is None:
         return None
+    if caster is bool:
+        return to_bool(value)
     return caster(value)
 
 
@@ -77,7 +79,6 @@ def crud_list(model, *, serializer, search_fields=None, filters=None,
                 keyword = (request.args.get("keyword") or "").strip()
                 query = model.select()
                 if search_fields and keyword:
-                    from peewee import fn
                     clauses = [getattr(model, f).contains(keyword) for f in search_fields]
                     or_clause = clauses[0]
                     for c in clauses[1:]:

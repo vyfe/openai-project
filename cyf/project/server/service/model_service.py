@@ -2,6 +2,7 @@ import time
 from datetime import datetime, timedelta
 
 from conf.runtime import runtime_state
+from model.db import db
 from model.repositories.model_meta_repository import get_model_meta_list
 from model.repositories.user_repository import get_active_token_count
 from service.host_service import random_client
@@ -114,6 +115,7 @@ def get_runtime_state_snapshot() -> dict:
         )
     model_cache_expire_ts = int(runtime_state.cache_expiry_time.get("models", 0) or 0)
     return {
+        "database": {"path": str(db.database)},
         "uptime_seconds": max(0, int(now_ts - runtime_state.server_start_time)),
         "model_cache": {
             "cached": "models" in runtime_state.model_cache,

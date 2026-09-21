@@ -22,6 +22,7 @@ from service.quant.binding_service import get_username_by_feishu
 from service.quant.im_channel_service import list_im_channels
 from service.quant.im_delivery_service import reply_feishu_text as _reply_feishu_text, render_position_summary_markdown
 from service.quant.im_helpers import CHANNEL_FEISHU_APP, json_loads as _json_loads, to_bool as _to_bool, truncate_text as _truncate_text
+from service.quant.im_operation_service import handle_operation_command
 from service.quant.im_rules import _message_rules, register_message_handler  # noqa: F401
 from service.quant.position_service import create_position_entry
 
@@ -131,6 +132,9 @@ def _feishu_help_text() -> str:
             "3. 最新报告 / 报告：返回最近一份量化报告。",
             "4. 买入 600519 100 1688 备注：登记一条买入持仓流水。",
             "5. 卖出 600519 100 1688 备注：登记一条卖出持仓流水。",
+            "6. 录入操作 买入 600519.SH 100 1688 | 理由=突破年线：登记操作记录，需二次确认。",
+            "7. 操作历史 [今天|近7天|600519.SH]：查询本人操作记录。",
+            "8. 操作详情 123：查询本人单条操作记录。",
         ]
     )
 
@@ -187,7 +191,7 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
     return entry
 
 
-def _route_feishu_command(text: str, parsed: dict) -> tuple[str, str]:
+def _route_feishu_command(text: str, parsed: dict, event_record_id: int) -> tuple[str, str]:
     command_text = str(text or "").strip()
     if not command_text:
         return "help", _feishu_help_text()
@@ -197,11 +201,16 @@ def _route_feishu_command(text: str, parsed: dict) -> tuple[str, str]:
             if result is not None:
                 logger.debug("[rule-engine] 命中规则 | name=%s | text=%s", rule.name, command_text[:60])
                 return result
+    operation_result = handle_operation_command(command_text, parsed, event_record_id)
+    if operation_result is not None:
+        return operation_result
     compact = command_text.lower().replace(" ", "")
     if compact in ("help", "帮助", "菜单", "说明"):
         return "help", _feishu_help_text()
     if compact in ("持仓", "持仓摘要", "仓位", "position", "positions"):
         created_by = get_username_by_feishu(parsed.get("sender_id", "") or "") or ""
+        if not created_by:
+            return "auth_error", "请先在私聊中完成飞书账号绑定，再查询持仓。"
         return "position_summary", render_position_summary_markdown(created_by=created_by)
     if compact in ("报告", "最新报告", "日报", "report", "latestreport"):
         return "latest_report", _latest_report_text()
@@ -267,6 +276,13 @@ def _on_im_message_receive(data: P2ImMessageReceiveV1) -> None:
     except IntegrityError:
         logger.info("[feishu-event] 重复事件，跳过 | event_id=%s", parsed.get("event_id"))
         return
+    if not channel:
+        logger.info("[feishu-event] 未匹配到活跃通道，忽略消息 | chat_id=%s", parsed.get("chat_id"))
+        event_record.status = "ignored"
+        event_record.command = "unmatched_channel"
+        event_record.processed_at = datetime.now()
+        event_record.save()
+        return
     if not _should_process_feishu_message(parsed):
         logger.info(
             "[feishu-event] 消息被忽略 | chat_type=%s | has_mentions=%s",
@@ -280,12 +296,12 @@ def _on_im_message_receive(data: P2ImMessageReceiveV1) -> None:
         return
     logger.info("[feishu-event] 开始处理 | command_text=%s", (parsed.get("text") or "")[:100])
     try:
-        command, response_text = _route_feishu_command(parsed.get("text") or "", parsed)
+        command, response_text = _route_feishu_command(parsed.get("text") or "", parsed, event_record.id)
         logger.info("[feishu-event] 命令路由 | command=%s | response_len=%d", command, len(response_text))
         reply_in_thread = _to_bool(_json_loads(channel.get("config", {}) if channel else {}, {}).get("reply_in_thread"), False) if channel else False
         response_payload = _reply_feishu_text(parsed.get("message_id") or "", response_text, reply_in_thread=reply_in_thread)
         event_record.command = command
-        event_record.status = "processed"
+        event_record.status = "pending_confirmation" if command == "operation_pending" else "processed"
         event_record.response_payload_json = json.dumps(response_payload, ensure_ascii=False)
         event_record.processed_at = datetime.now()
         event_record.save()

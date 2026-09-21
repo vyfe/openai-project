@@ -13,60 +13,107 @@ def test_normalize_enabled_tools_deduplicates_and_parses_json():
     assert normalize_enabled_tools([" WEB_SEARCH ", "unknown"]) == ["web_search", "unknown"]
 
 
-def test_validate_enabled_tools_respects_server_and_model_network_policy():
+def test_validate_enabled_tools_respects_local_search_server_switch():
     from service.tools.registry import ToolConfigurationError, validate_enabled_tools
 
     with patch("service.tools.registry.runtime_state") as runtime:
         runtime.model_cache = {"models": [{"id": "offline", "allow_net": False}]}
-        runtime.settings.google_web_search_enabled = True
-        with pytest.raises(ToolConfigurationError, match="未开启联网"):
-            validate_enabled_tools(["web_search"], "offline")
+        runtime.settings.web_search_enabled = True
+        assert validate_enabled_tools(["web_search"]) == ["web_search"]
+        runtime.settings.web_search_enabled = False
+        with pytest.raises(ToolConfigurationError, match="未启用网络搜索"):
+            validate_enabled_tools(["web_search"])
 
 
-def test_google_search_response_normalization_extracts_sources():
-    from service.tools.google_web_search import _normalize_response
+def test_local_search_parses_duckduckgo_and_bing_results():
+    from service.tools.local_web_search import _parse_search_results
 
-    result = _normalize_response(
-        {
-            "steps": [
-                {"type": "model_output", "content": [{"type": "text", "text": "摘要"}], "annotations": [{"title": "来源", "url": "https://example.com"}]}
-            ]
-        },
-        max_sources=8,
-    )
-    assert result == {"text": "摘要", "sources": [{"title": "来源", "url": "https://example.com"}]}
+    duckduckgo_html = """
+        <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fnews">示例新闻</a>
+        <a class="result__snippet">摘要内容</a>
+    """
+    assert _parse_search_results(duckduckgo_html, 5) == [
+        {"title": "示例新闻", "url": "https://example.com/news", "snippet": "摘要内容"}
+    ]
 
-    result = _normalize_response(
-        {"outputs": [{"type": "google_search_result", "result": [{"title": "结果", "url": "https://google.example"}]}, {"type": "text", "text": "答案", "annotations": [{"source": "https://source.example"}]}]},
-        max_sources=8,
-    )
-    assert result["sources"] == [
-        {"title": "结果", "url": "https://google.example"},
-        {"title": "https://source.example", "url": "https://source.example"},
+    bing_html = """
+        <li class="b_algo"><h2><a href="https://example.org/doc">官方文档</a></h2><div class="b_caption"><p>文档摘要</p></div></li>
+    """
+    assert _parse_search_results(bing_html, 5) == [
+        {"title": "官方文档", "url": "https://example.org/doc", "snippet": "文档摘要"}
     ]
 
 
-def test_google_search_execute_uses_server_side_key_and_url_context():
-    from service.tools import google_web_search
+def test_local_search_logs_parser_diagnostics_when_no_results():
+    from service.tools import local_web_search
+
+    response = SimpleNamespace(
+        status_code=200,
+        url="https://html.duckduckgo.com/html/?q=%E8%8B%B1%E7%BB%B4%E5%85%8B",
+        headers={"Content-Type": "text/html; charset=UTF-8"},
+        text="<html><body>captcha challenge</body></html>",
+        raise_for_status=Mock(),
+    )
+    session = SimpleNamespace(post=Mock(return_value=response))
+    logger = Mock()
+
+    with pytest.raises(local_web_search.LocalWebSearchError, match="challenge"):
+        local_web_search._search(session, "英维克", ["duckduckgo"], 10, 5, logger=logger)
+
+    parse_call = next(
+        call for call in logger.warning.call_args_list if call.args and call.args[0].startswith("本地搜索结果解析")
+    )
+    assert parse_call.args[1] == "duckduckgo"
+    assert parse_call.args[3] == "wt-wt"
+    assert parse_call.args[-3] == "captcha,challenge"
+    assert parse_call.args[-2] is True
+    assert parse_call.args[-1] == 0
+    assert session.post.call_args_list[0].kwargs["data"] == {
+        "q": "英维克",
+        "b": "",
+        "kl": "wt-wt",
+        "kp": "-1",
+    }
+    assert session.post.call_args_list[0].kwargs["headers"]["Sec-Fetch-Mode"] == "navigate"
+    assert session.post.call_args_list[0].kwargs["headers"]["Referer"] == "https://html.duckduckgo.com/"
+
+
+def test_local_search_execute_reads_public_pages_without_api_key():
+    from service.tools import local_web_search
 
     settings = SimpleNamespace(
-        google_web_search_enabled=True,
-        google_web_search_api_key="secret",
-        google_web_search_model="gemini-test",
-        google_web_search_base_url="https://google.test/v1beta",
-        google_web_search_timeout_seconds=10,
-        google_web_search_max_sources=8,
+        web_search_enabled=True,
+        web_search_engines="duckduckgo,bing",
+        web_search_timeout_seconds=10,
+        web_search_max_sources=5,
+        web_search_max_page_chars=4000,
+        web_search_max_context_chars=16000,
+        web_search_max_download_bytes=1048576,
     )
-    response = SimpleNamespace(
-        raise_for_status=lambda: None,
-        json=lambda: {"steps": [{"type": "model_output", "content": [{"type": "text", "text": "ok"}]}]},
-    )
-    with patch.object(google_web_search.runtime_state, "settings", settings), patch.object(google_web_search.requests, "post", return_value=response) as post:
-        result = google_web_search.execute({"query": "latest news", "urls": ["https://example.com"]})
+    search_results = [{"title": "搜索标题", "url": "https://example.com", "snippet": "搜索摘要"}]
+    with (
+        patch.object(local_web_search.runtime_state, "settings", settings),
+        patch.object(local_web_search, "_search", return_value=(search_results, "duckduckgo")) as search,
+        patch.object(
+            local_web_search,
+            "_get_public_page",
+            return_value=("https://example.com", "<html><title>页面标题</title><body>网页正文</body></html>"),
+        ) as get_page,
+    ):
+        result = local_web_search.execute({"query": "latest news"})
 
-    assert result["text"] == "ok"
-    assert post.call_args.kwargs["headers"]["x-goog-api-key"] == "secret"
-    assert {"type": "url_context"} in post.call_args.kwargs["json"]["tools"]
+    assert result["provider"] == "local:duckduckgo"
+    assert result["sources"] == [{"title": "页面标题", "url": "https://example.com"}]
+    assert "网页正文" in result["text"]
+    search.assert_called_once()
+    get_page.assert_called_once()
+
+
+def test_local_search_rejects_private_addresses():
+    from service.tools.local_web_search import _is_public_url
+
+    with patch("service.tools.local_web_search.socket.getaddrinfo", return_value=[(None, None, None, None, ("127.0.0.1", 80))]):
+        assert _is_public_url("http://example.test") is False
 
 
 def test_openai_tool_loop_executes_call_then_continues():

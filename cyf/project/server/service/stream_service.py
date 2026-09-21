@@ -75,7 +75,7 @@ def stream_chat(user: str, payload, logger):
     if dialogvo is None:
         return build_stream_response(generate_sse_error(title, "DIALOG_MODE_ERROR"))
     try:
-        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []), model)
+        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []))
     except ToolConfigurationError as exc:
         return build_stream_response(generate_sse_error(str(exc), "TOOL_NOT_AVAILABLE"))
     register_stream_request(request_id)
@@ -99,7 +99,7 @@ def stream_chat(user: str, payload, logger):
                         dialogvo=dialogvo,
                         max_tokens=payload.max_response_tokens or 102400,
                         tool_names=enabled_tools,
-                        max_tool_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                        max_tool_rounds=getattr(runtime_state.settings, "web_search_max_rounds", 3),
                         logger=logger,
                         is_cancelled=lambda: is_stream_cancelled(request_id),
                         on_stream=lambda stream: set_stream_object(request_id, stream),
@@ -153,7 +153,7 @@ def stream_chat(user: str, payload, logger):
                         messages=convert_dialog_for_model(dialogvo, model, logger=logger),
                         max_tokens=payload.max_response_tokens or 102400,
                         tool_names=enabled_tools,
-                        max_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                        max_rounds=getattr(runtime_state.settings, "web_search_max_rounds", 3),
                         logger=logger,
                         is_cancelled=lambda: is_stream_cancelled(request_id),
                         on_stream=lambda stream: set_stream_object(request_id, stream),

@@ -64,7 +64,7 @@
               </div>
             </el-popover>
 
-            <!-- 模型自主调用的服务端工具 -->
+            <!-- 服务端本地搜索工具，不依赖模型原生联网能力 -->
             <el-popover v-if="canUseWebSearch" placement="top-start" :width="180" trigger="click">
               <template #reference>
                 <el-button
@@ -217,7 +217,7 @@ const isMultimodalModel = computed(() => {
 
 // 文件上传权限：图片模型、多模态模型或允许联网的模型
 const canUploadAttachment = computed(() => isImageModel.value || isMultimodalModel.value || props.selectedModelAllowNet !== false)
-const canUseWebSearch = computed(() => !isImageModel.value && props.selectedModelAllowNet !== false)
+const canUseWebSearch = computed(() => !isImageModel.value)
 const webSearchEnabled = computed({
   get: () => (props.enabledTools || []).includes('web_search'),
   set: (enabled: boolean) => emit('update:enabled-tools', enabled ? ['web_search'] : [])

@@ -6,10 +6,9 @@ import json
 from typing import Any, Dict, Iterable, List
 
 from conf.runtime import runtime_state
-from service.tools.google_web_search import (
-    GoogleWebSearchError,
+from service.tools.local_web_search import (
     claude_tool_definition,
-    execute as execute_google_web_search,
+    execute as execute_local_web_search,
     serialize_result,
     tool_definition,
 )
@@ -40,25 +39,13 @@ def normalize_enabled_tools(raw_tools: Any) -> List[str]:
     return result
 
 
-def _model_allows_network(model: str) -> bool:
-    models = runtime_state.model_cache.get("models") or []
-    for item in models:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("id", "")).strip().lower() == str(model).strip().lower():
-            return item.get("allow_net") is not False
-    return True
-
-
-def validate_enabled_tools(raw_tools: Any, model: str) -> List[str]:
+def validate_enabled_tools(raw_tools: Any) -> List[str]:
     tools = normalize_enabled_tools(raw_tools)
     unsupported = [name for name in tools if name not in SUPPORTED_TOOLS]
     if unsupported:
         raise ToolConfigurationError(f"不支持的工具: {', '.join(unsupported)}")
     if TOOL_WEB_SEARCH in tools:
-        if not _model_allows_network(model):
-            raise ToolConfigurationError("当前模型未开启联网能力")
-        if not bool(getattr(runtime_state.settings, "google_web_search_enabled", False)):
+        if not bool(getattr(runtime_state.settings, "web_search_enabled", True)):
             raise ToolConfigurationError("服务端未启用网络搜索")
     return tools
 
@@ -73,10 +60,7 @@ def get_tool_definitions(tool_names: Iterable[str], provider: str = "openai") ->
 def execute_tool(name: str, arguments: Dict[str, Any], logger=None) -> Dict[str, Any]:
     if name != TOOL_WEB_SEARCH:
         raise ToolConfigurationError(f"不支持的工具: {name}")
-    try:
-        result = execute_google_web_search(arguments, logger=logger)
-    except GoogleWebSearchError:
-        raise
+    result = execute_local_web_search(arguments, logger=logger)
     return {"name": name, "text": result.get("text", ""), "sources": result.get("sources", [])}
 
 

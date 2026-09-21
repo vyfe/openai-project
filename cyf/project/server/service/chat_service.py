@@ -127,7 +127,7 @@ def run_chat_completion(user: str, payload, logger):
     if dialogvo is None:
         return {"msg": title}, 200
     try:
-        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []), model)
+        enabled_tools = validate_enabled_tools(getattr(payload, "enabled_tools", []))
     except ToolConfigurationError as exc:
         return {"success": False, "msg": str(exc), "error_type": "TOOL_NOT_AVAILABLE"}, 200
 
@@ -143,7 +143,7 @@ def run_chat_completion(user: str, payload, logger):
                 max_tokens=payload.max_response_tokens or 102400,
                 logger=logger,
                 tool_names=enabled_tools,
-                max_tool_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                max_tool_rounds=getattr(runtime_state.settings, "web_search_max_rounds", 3),
             )
             usage = normalize_usage(result_data.get("usage", {}))
             tokens = usage.get("total_tokens", 0)
@@ -195,7 +195,7 @@ def run_chat_completion(user: str, payload, logger):
                 max_tokens=api_params["max_tokens"],
                 tool_names=enabled_tools,
                 logger=logger,
-                max_rounds=getattr(runtime_state.settings, "google_web_search_max_rounds", 3),
+                max_rounds=getattr(runtime_state.settings, "web_search_max_rounds", 3),
             )
             usage = normalize_usage(result_data.get("usage", {}))
             tokens = usage.get("total_tokens", 0)

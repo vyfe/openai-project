@@ -9,6 +9,7 @@ export interface AdminPagination {
 
 type ListResponse<T> = {
   success: boolean
+  msg?: string
   data?: {
     items?: T[]
     pagination?: AdminPagination
@@ -41,11 +42,12 @@ export function useAdminPagedList<T, P extends Record<string, any> = Record<stri
         ...(extraParams ? extraParams() : {})
       } as P
       const response = await fetcher(params)
-      if (response.success) {
-        items.value = response.data?.items || []
-        if (response.data?.pagination) {
-          pagination.value = response.data.pagination
-        }
+      if (!response.success) {
+        throw new Error(response.msg || '列表加载失败')
+      }
+      items.value = response.data?.items || []
+      if (response.data?.pagination) {
+        pagination.value = response.data.pagination
       }
     } finally {
       loading.value = false

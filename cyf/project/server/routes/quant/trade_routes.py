@@ -103,9 +103,27 @@ def quant_operations_list(user, password):
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
     status = str(request.args.get("status", "")).strip() or None
+    action = str(request.args.get("action", "")).strip() or None
+    result_status = str(request.args.get("result_status", "")).strip() or None
+    date_from = str(request.args.get("date_from", "")).strip() or None
+    date_to = str(request.args.get("date_to", "")).strip() or None
     limit = request.args.get("limit", default=100, type=int) or 100
     limit = max(1, min(limit, 500))
-    return success_response(data=list_operation_records(strategy_id=strategy_id, symbol=symbol, status=status, limit=limit))
+    try:
+        return success_response(
+            data=list_operation_records(
+                strategy_id=strategy_id,
+                symbol=symbol,
+                status=status,
+                action=action,
+                result_status=result_status,
+                date_from=date_from,
+                date_to=date_to,
+                limit=limit,
+            )
+        )
+    except Exception as exc:
+        return error_response(f"查询操作记录失败: {exc}")
 
 
 @bp.route("/operations/get/<int:record_id>", methods=["GET"])

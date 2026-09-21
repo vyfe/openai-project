@@ -1,32 +1,31 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { CaretRight, CircleCloseFilled, Document } from '@element-plus/icons-vue'
 import { sqlAPI } from '@/services/adminApi'
+import {
+  formatSqlCell,
+  normalizeSqlExecutionData,
+  normalizeSqlMetadata,
+  type SqlMetaTable,
+  type SqlRow
+} from '@/utils/adminData'
 
 const { t } = useI18n()
-
-type SqlMetaTable = {
-  table_name: string
-  row_count: number
-  columns: Array<{
-    name: string
-    data_type: string
-    nullable: boolean
-    primary_key: boolean
-  }>
-}
 
 const sqlInput = ref('')
 const executing = ref(false)
 const loadingMeta = ref(false)
-const results = ref<any[]>([])
+const results = ref<SqlRow[]>([])
 const columns = ref<string[]>([])
 const hasError = ref(false)
 const errorMessage = ref('')
+const resultSummary = ref('')
 const dbPath = ref('')
 const metaTables = ref<SqlMetaTable[]>([])
 const activeMetaTable = ref('')
+const activeMeta = computed(() => metaTables.value.find((table) => table.table_name === activeMetaTable.value))
 
 const executeSQL = async () => {
   const sql = sqlInput.value.trim()
@@ -38,19 +37,17 @@ const executeSQL = async () => {
   executing.value = true
   hasError.value = false
   errorMessage.value = ''
+  resultSummary.value = ''
+  results.value = []
+  columns.value = []
 
   try {
     const response = await sqlAPI.execute(sql)
     if (response.success) {
-      results.value = []
-      columns.value = []
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        columns.value = Object.keys(response.data[0])
-        results.value = response.data
-      } else if (typeof response.data === 'object' && response.data !== null) {
-        columns.value = Object.keys(response.data)
-        results.value = [response.data]
-      }
+      const normalized = normalizeSqlExecutionData(response.data)
+      columns.value = normalized.columns
+      results.value = normalized.rows
+      resultSummary.value = normalized.summary
       if (results.value.length === 0) {
         ElMessage.success(t('admin.executeSuccess'))
       }
@@ -72,11 +69,14 @@ const fetchSqlMeta = async () => {
   try {
     const response = await sqlAPI.meta()
     if (response.success) {
-      dbPath.value = response.data?.database?.path || ''
-      metaTables.value = response.data?.tables || []
-      if (metaTables.value.length > 0 && !activeMetaTable.value) {
-        activeMetaTable.value = metaTables.value[0].table_name
+      const normalized = normalizeSqlMetadata(response.data)
+      dbPath.value = normalized.databasePath
+      metaTables.value = normalized.tables
+      if (!metaTables.value.some((table) => table.table_name === activeMetaTable.value)) {
+        activeMetaTable.value = metaTables.value[0]?.table_name || ''
       }
+    } else {
+      throw new Error(response.msg || t('admin.executeFailed'))
     }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.msg || error.message || t('admin.executeFailed'))
@@ -88,6 +88,7 @@ const fetchSqlMeta = async () => {
 const clearResults = () => {
   results.value = []
   columns.value = []
+  resultSummary.value = ''
   hasError.value = false
   errorMessage.value = ''
 }
@@ -140,7 +141,7 @@ onMounted(() => {
         </el-select>
         <el-table
           class="mt-3"
-          :data="metaTables.find(ti => ti.table_name === activeMetaTable)?.columns || []"
+          :data="activeMeta?.columns || []"
           size="small"
           border
           max-height="220"
@@ -196,6 +197,7 @@ onMounted(() => {
         <h3 class="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">
           {{ t('admin.result') }} ({{ results.length }} {{ t('admin.units') }})
         </h3>
+        <p v-if="resultSummary" class="sql-summary mb-3">{{ resultSummary }}</p>
         <el-table
           :data="results"
           stripe
@@ -210,7 +212,9 @@ onMounted(() => {
             :label="col"
             min-width="120"
             show-overflow-tooltip
-          />
+          >
+            <template #default="{ row }">{{ formatSqlCell(row[col]) }}</template>
+          </el-table-column>
         </el-table>
       </div>
     </div>
@@ -232,6 +236,13 @@ onMounted(() => {
 .sql-input {
   font-family: 'Courier New', Courier, monospace;
   font-size: 14px;
+}
+
+.sql-summary {
+  color: var(--text-2);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .error-message {

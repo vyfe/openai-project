@@ -60,6 +60,11 @@ def list_operation_records(
     strategy_id: Optional[int] = None,
     symbol: Optional[str] = None,
     status: Optional[str] = None,
+    action: Optional[str] = None,
+    result_status: Optional[str] = None,
+    date_from=None,
+    date_to=None,
+    created_by: Optional[str] = None,
     limit: int = 100,
 ) -> list[dict]:
     query = QuantOperationRecord.select()
@@ -69,12 +74,25 @@ def list_operation_records(
         query = query.where(QuantOperationRecord.symbol == normalize_symbol(symbol))
     if status:
         query = query.where(QuantOperationRecord.status == status)
+    if action:
+        query = query.where(QuantOperationRecord.action == action)
+    if result_status:
+        query = query.where(QuantOperationRecord.result_status == result_status)
+    if date_from:
+        query = query.where(QuantOperationRecord.trade_date >= parse_trade_date(date_from))
+    if date_to:
+        query = query.where(QuantOperationRecord.trade_date <= parse_trade_date(date_to))
+    if created_by is not None:
+        query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
     query = query.order_by(QuantOperationRecord.trade_date.desc(), QuantOperationRecord.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
 
-def get_operation_record(record_id: int) -> dict:
-    return QuantOperationRecord.get_by_id(record_id).to_dict()
+def get_operation_record(record_id: int, created_by: Optional[str] = None) -> dict:
+    query = QuantOperationRecord.select().where(QuantOperationRecord.id == record_id)
+    if created_by is not None:
+        query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
+    return query.get().to_dict()
 
 
 def create_operation_record(
