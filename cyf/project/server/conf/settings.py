@@ -46,6 +46,8 @@ class Settings:
     quant_feishu_verification_token: str
     quant_feishu_encrypt_key: str
     quant_feishu_debug_suffix: str
+    # 同花顺金融数据 API Key（fuyao.aicubes.cn）。ths provider auto chain 首位。
+    quant_ths_api_key: str
     # Claude SDK 配置（可选，为空则复用 [api] 段配置）
     claude_api_key: str
     claude_api_hosts: list[str]
@@ -125,6 +127,8 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         quant_feishu_verification_token=_get_str(conf, "quant", "feishu_verification_token", fallback=""),
         quant_feishu_encrypt_key=_get_str(conf, "quant", "feishu_encrypt_key", fallback=""),
         quant_feishu_debug_suffix=_get_str(conf, "quant", "feishu_debug_suffix", fallback=""),
+        # 同花顺金融数据 API Key：conf 优先，留空时由 provider 从 env THS_API_KEY 兜底
+        quant_ths_api_key=_get_str(conf, "quant", "ths_api_key", fallback=os.environ.get("THS_API_KEY", "")).strip(),
         # Claude SDK 配置（可选，为空则复用 [api] 段配置）
         claude_api_key=_get_str(conf, "claude", "api_key", fallback=""),
         claude_api_hosts=[h.strip() for h in conf.get("claude", "api_host", fallback="").split(",") if h.strip()],
@@ -142,3 +146,9 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
 
 
 settings = load_settings()
+
+# 把 conf 里的 ths_api_key 兜底写入环境变量，
+# 让 quant_client/provider_ths.py（独立模块，避免 import cycle）能读到同一份 key。
+# 已存在的 THS_API_KEY 不覆盖——env 适合 CI/开发临时覆盖，conf 适合生产。
+if settings.quant_ths_api_key and not os.environ.get("THS_API_KEY"):
+    os.environ["THS_API_KEY"] = settings.quant_ths_api_key

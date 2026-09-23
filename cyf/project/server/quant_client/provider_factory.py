@@ -7,6 +7,7 @@ from quant_client.provider_base import BaseAshareProvider
 from quant_client.provider_baostock import BaostockAshareProvider
 from quant_client.provider_eastmoney import EastmoneyAshareProvider
 from quant_client.provider_tencent import TencentAshareProvider
+from quant_client.provider_ths import ThsAshareProvider
 from quant_client.provider_yahoo import YfinanceAshareProvider
 
 logger = logging.getLogger("quant.provider_factory")
@@ -20,11 +21,18 @@ logger = logging.getLogger("quant.provider_factory")
 #
 # eastmoney / akshare 因**外网访问默认超时**已被弃用（见 _DEPRECATED_PROVIDERS 与备注），
 # 仍可显式调用兼容旧任务/旧配置。
+#
+# 2026-09-23 起，ths（同花顺官方，fuyao.aicubes.cn）成为 auto 链首选：
+# - 商业 API、SLA 稳定，OHLCV + 成交额直传（6 项），preclose/pct_change/change 反算
+# - 仅日线 1d，且单次请求 1 个 thscode（per-symbol 循环）
+# - 须配置 conf [quant].ths_api_key 或环境变量 THS_API_KEY；缺失时调用即抛清晰错误
+# - 详见 doc/quant/data-sources-overview.md
 _AUTO_CHAIN = [
-    (0, BaostockAshareProvider),    # 主力：字段最全（OHLCV + 成交额 + 换手率 + 涨跌幅 + 前收盘价）
-    (1, TencentAshareProvider),     # 主力：OHLCV + 涨跌幅/前收盘价反算
-    (2, SinaAshareProvider),        # 主力：仅 OHLCV
-    (3, YfinanceAshareProvider),    # 兜底：指数 + ETF 国际可访问
+    (0, ThsAshareProvider),         # 首选：同花顺官方（商业 API，需 api_key，仅日线）
+    (1, BaostockAshareProvider),    # 主力：字段最全（OHLCV + 成交额 + 换手率 + 涨跌幅 + 前收盘价）
+    (2, TencentAshareProvider),     # 主力：OHLCV + 涨跌幅/前收盘价反算
+    (3, SinaAshareProvider),        # 主力：仅 OHLCV
+    (4, YfinanceAshareProvider),    # 兜底：指数 + ETF 国际可访问
 ]
 
 # 分时 K 线的 auto chain：按 fetch_minute_bars 实现度排序。
@@ -170,6 +178,7 @@ class AutoAshareProvider(BaseAshareProvider):
 
 PROVIDER_MAP = {
     "auto": AutoAshareProvider,
+    "ths": ThsAshareProvider,                # 同花顺官方（须 api_key，仅日线）
     "tencent": TencentAshareProvider,
     "sina": SinaAshareProvider,
     "baostock": BaostockAshareProvider,

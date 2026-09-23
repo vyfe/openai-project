@@ -77,6 +77,8 @@ def test_settings(tmp_db_dir):
         quant_feishu_verification_token="",
         quant_feishu_encrypt_key="",
         quant_feishu_debug_suffix="",
+        # 同花顺金融数据 API Key：测试环境留空，ths provider 会清晰提示
+        quant_ths_api_key="",
         # Claude SDK 配置（可选覆盖，为空则复用 [api] 段配置）
         claude_api_key="",
         claude_api_hosts=[],

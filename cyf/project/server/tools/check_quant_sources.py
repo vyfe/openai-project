@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
+import os
 import sys
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 
@@ -150,6 +152,48 @@ def probe_ths_news(code: str, timeout: int) -> dict[str, Any]:
     return {"status": status, "items": text.count(r"\\\"title\\\""), "bytes": len(text)}
 
 
+def probe_fuyao_kline(code: str, start_date: str, end_date: int, timeout: int) -> dict[str, Any]:
+    """同花顺官方 fuyao.aicubes.cn 日线 K（auto 链首选）。
+
+    需 `THS_API_KEY` 环境变量或 conf.ini [quant].ths_api_key；缺失时返回 ok=False。
+    """
+    api_key = os.environ.get("THS_API_KEY", "").strip()
+    if not api_key:
+        try:
+            server_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if server_dir not in os.sys.path:
+                os.sys.path.insert(0, server_dir)
+            from conf.settings import settings  # type: ignore
+            api_key = getattr(settings, "quant_ths_api_key", "") or ""
+        except Exception:
+            api_key = ""
+    if not api_key:
+        return {"status": 0, "items": 0, "sample": "no api key (set THS_API_KEY or conf [quant].ths_api_key)"}
+
+    shanghai = dt.timezone(dt.timedelta(hours=8))
+    start_dt = dt.datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=shanghai)
+    end_dt = dt.datetime.fromtimestamp(end_date / 1000, tz=shanghai)
+    params = {
+        "thscode": code,
+        "interval": "1d",
+        "start": str(int(start_dt.timestamp() * 1000)),
+        "end": str(int(end_dt.timestamp() * 1000)),
+        "adjust": "forward",
+    }
+    url = "https://fuyao.aicubes.cn/api/a-share/prices/historical?" + urllib.parse.urlencode(params)
+    status, text = fetch_text(
+        url,
+        timeout=timeout,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "X-api-key": api_key,
+        },
+    )
+    payload = json.loads(text)
+    items = (payload.get("data") or {}).get("item") or []
+    return {"status": status, "items": len(items), "sample": items[:1]}
+
+
 def probe_eastmoney_report(code: str, timeout: int) -> dict[str, Any]:
     params = {
         "industryCode": "*",
@@ -225,6 +269,8 @@ def main() -> int:
     today = date.today()
     start_date = args.start_date or (today - timedelta(days=7)).isoformat()
     end_date = args.end_date or today.isoformat()
+    # 把 end_date 转成毫秒时间戳（fuyao API 用 ms）
+    end_date_ms = int(datetime.combine(date.fromisoformat(end_date), datetime.min.time()).timestamp() * 1000)
     keyword = args.keyword or code
     timeout = max(1, int(args.timeout or 8))
 
@@ -234,6 +280,7 @@ def main() -> int:
         ("sina_kline", lambda: probe_sina_kline(code, timeout)),
         ("sina_snapshot", lambda: probe_sina_snapshot(code, timeout)),
         ("ths_stock_news", lambda: probe_ths_news(code, timeout)),
+        ("fuyao_kline", lambda: probe_fuyao_kline(f"{code}", start_date, end_date_ms, timeout)),
         ("eastmoney_report", lambda: probe_eastmoney_report(code, timeout)),
     ]
     results = [run_probe(name, fn) for name, fn in probes]

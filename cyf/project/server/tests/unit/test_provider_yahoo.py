@@ -434,6 +434,7 @@ class TestAutoChainSeedBasedRelay:
         from quant_client.provider_baostock import BaostockAshareProvider
         from quant_client.provider_tencent import TencentAshareProvider
         from quant_client.provider_sina import SinaAshareProvider
+        from quant_client.provider_ths import ThsAshareProvider
         from quant_client.provider_yahoo import YfinanceAshareProvider
         from quant_client.provider_factory import AutoAshareProvider
 
@@ -443,7 +444,8 @@ class TestAutoChainSeedBasedRelay:
         tracking_fetch, yahoo_log = self._mock_yahoo_call_log()
         tencent_empty = self._mock_other_providers_empty()
 
-        with patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
+        with patch.object(ThsAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
              patch.object(TencentAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
              patch.object(SinaAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
              patch.object(YfinanceAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tracking_fetch):
@@ -463,6 +465,7 @@ class TestAutoChainSeedBasedRelay:
         from quant_client.provider_baostock import BaostockAshareProvider
         from quant_client.provider_tencent import TencentAshareProvider
         from quant_client.provider_sina import SinaAshareProvider
+        from quant_client.provider_ths import ThsAshareProvider
         from quant_client.provider_yahoo import YfinanceAshareProvider
         from quant_client.provider_factory import AutoAshareProvider
 
@@ -481,7 +484,8 @@ class TestAutoChainSeedBasedRelay:
 
         tencent_empty = self._mock_other_providers_empty()
 
-        with patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
+        with patch.object(ThsAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
+             patch.object(BaostockAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_baostock), \
              patch.object(TencentAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
              patch.object(SinaAshareProvider, "fetch_daily_bars", autospec=True, side_effect=tencent_empty), \
              patch.object(YfinanceAshareProvider, "fetch_daily_bars", autospec=True, side_effect=fake_yahoo):

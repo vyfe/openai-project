@@ -52,6 +52,10 @@ feishu_verification_token=
 feishu_encrypt_key=
 # 消息调试后缀
 feishu_debug_suffix=
+# 同花顺金融数据 API Key（https://fuyao.aicubes.cn/ 的 capability 鉴权）。
+# 留空时 ths provider 会被跳过，auto 链降级到 baostock。
+# 也可使用环境变量 THS_API_KEY 兜底（conf > env）。
+ths_api_key=sk-fuyao-8loNJrxzf22UoChoT-A7GoB8UukEBJwo
 [api]
 api_key=
 api_host=
