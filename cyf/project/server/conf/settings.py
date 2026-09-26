@@ -5,7 +5,8 @@ from typing import Optional
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CONF_PATH = os.path.join(BASE_DIR, "conf", "conf.ini")
+# 默认读 conf/conf.ini（生产/线上）；本地启动可通过环境变量 QUANT_CONF_PATH 指向其他配置（如 conf/conf.dev.ini）
+CONF_PATH = os.environ.get("QUANT_CONF_PATH") or os.path.join(BASE_DIR, "conf", "conf.ini")
 
 
 @dataclass(frozen=True)

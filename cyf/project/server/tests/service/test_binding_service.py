@@ -8,6 +8,7 @@ from service.quant.binding_service import (
     get_binding,
     get_username_by_feishu,
     get_feishu_id_by_username,
+    is_feishu_bound,
     list_all_bindings,
 )
 
@@ -104,3 +105,21 @@ class TestListAllBindings:
         bind_user("feishu_open_1", "test_admin", "test123")
         result = list_all_bindings()
         assert len(result) == 1
+
+
+class TestIsFeishuBound:
+    def test_empty_open_id_returns_false(self):
+        assert is_feishu_bound("") is False
+
+    def test_unbound_returns_false(self):
+        assert is_feishu_bound("ou_does_not_exist") is False
+
+    def test_bound_returns_true(self, seed_admin_user):
+        bind_user("ou_feishu_for_is_bound", "test_admin", "test123")
+        assert is_feishu_bound("ou_feishu_for_is_bound") is True
+
+    def test_unbind_flips_back_to_false(self, seed_admin_user):
+        bind_user("ou_feishu_unbind_test", "test_admin", "test123")
+        assert is_feishu_bound("ou_feishu_unbind_test") is True
+        unbind_user("ou_feishu_unbind_test")
+        assert is_feishu_bound("ou_feishu_unbind_test") is False

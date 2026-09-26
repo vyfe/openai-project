@@ -390,10 +390,29 @@
 
 .quant-grid--strategy,
 .quant-grid--runs,
-.quant-grid--operations,
 .quant-grid--backtest,
 .quant-grid--scheduler {
   grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+}
+
+.quant-grid--operations {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "position position"
+    "operations editor";
+  gap: 12px;
+}
+
+.quant-grid--operations > .quant-panel--compact {
+  grid-area: position;
+}
+
+.quant-grid--operations > .quant-area-operations {
+  grid-area: operations;
+}
+
+.quant-grid--operations > .quant-area-editor {
+  grid-area: editor;
 }
 
 .quant-grid--industry {
@@ -415,6 +434,11 @@
   flex-direction: column;
   gap: 12px;
 }
+.quant-panel--compact {
+  align-self: start;
+  max-height: fit-content;
+}
+
 
 .quant-panel {
   min-width: 0;

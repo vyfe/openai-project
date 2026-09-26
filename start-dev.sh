@@ -225,9 +225,11 @@ else
     BACKEND_PYTHON="python3"
 fi
 
-echo "🔌 启动后端服务..."
+echo "🔌 启动后端服务（使用本地 conf.dev.ini）..."
 (
     cd "$PROJECT_ROOT/cyf/project/server"
+    # 本地启动指向 conf/conf.dev.ini；生产环境不 export 这个变量，fallback 到默认 conf/conf.ini
+    export QUANT_CONF_PATH="$PROJECT_ROOT/cyf/project/server/conf/conf.dev.ini"
     exec "$BACKEND_PYTHON" server.py
 ) >"$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!

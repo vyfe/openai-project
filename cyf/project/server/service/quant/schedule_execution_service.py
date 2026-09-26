@@ -284,7 +284,15 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
             run.id, strategy_id, report.get("id"), strategy_run.get("signals_total"),
         )
         for raw_channel_id in channel_ids:
-            deliveries.append(send_report_to_channel(int(report["id"]), channel_id=int(raw_channel_id)))
+            # 单人级 demo：按 channel 绑定用户过滤标的，推个性化版本（群聊 channel 自动 fallback 全量）
+            try:
+                from service.quant.schedule_user_push_service import push_report_filtered_per_channel
+                personal = push_report_filtered_per_channel([int(raw_channel_id)], int(report["id"]))
+                for item in personal:
+                    if item.get("delivery"):
+                        deliveries.append(item["delivery"])
+            except Exception as exc:
+                logger.warning("push_report_filtered_failed | channel_id=%s | error=%s", raw_channel_id, exc)
     user_deliveries = deliver_to_bound_users()
     total_signals = sum(int(item.get("signals_total", 0) or 0) for item in results)
     logger.info(

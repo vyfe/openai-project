@@ -140,11 +140,24 @@ def create_operation_record(
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
-    return record.to_dict()
+    result_dict = record.to_dict()
+    # 新建即 executed：diff 视为 None → "executed"，触发持仓联动
+    if str(status or "draft").strip().lower() == "executed":
+        try:
+            _apply_position_change(record, from_status=None, to_status="executed")
+        except Exception as exc:
+            # 持仓同步失败不应阻断主流程，但应记录
+            import logging
+            logging.getLogger("quant.ops").warning(
+                "operation_create_position_sync_failed | operation_id=%s | error=%s",
+                record.id, exc,
+            )
+    return result_dict
 
 
 def update_operation_record(record_id: int, **updates) -> dict:
     record = QuantOperationRecord.get_by_id(record_id)
+    old_status = record.status
 
     if "strategy_id" in updates:
         record.strategy_id = int(updates["strategy_id"]) if updates["strategy_id"] not in (None, "") else None
@@ -188,6 +201,17 @@ def update_operation_record(record_id: int, **updates) -> dict:
 
     record.updated_at = datetime.now()
     record.save()
+    # 状态变更触发持仓联动
+    new_status = record.status
+    if "status" in updates and old_status != new_status:
+        try:
+            _apply_position_change(record, from_status=old_status, to_status=new_status)
+        except Exception as exc:
+            import logging
+            logging.getLogger("quant.ops").warning(
+                "operation_update_position_sync_failed | operation_id=%s | error=%s",
+                record_id, exc,
+            )
     return record.to_dict()
 
 
@@ -195,3 +219,59 @@ def delete_operation_record(record_id: int) -> bool:
     record = QuantOperationRecord.get_by_id(record_id)
     record.delete_instance()
     return True
+
+
+
+def _reverse_side(side: str) -> str:
+    """动作反向映射（用于反向计提）。"""
+    return {"buy": "sell", "sell": "buy", "add": "reduce", "reduce": "add"}.get(side, "sell")
+
+
+def _apply_position_change(record, *, from_status, to_status):
+    """操作记录状态变更时同步持仓流水。
+
+    规则：
+    - None/draft/... → executed：创建一条正向流水（计入持仓）
+    - executed → 其他状态：创建一条反向流水（计提持仓，自动抵消 net_quantity）
+    - watch 动作（数量为 0/None）：跳过
+    - created_by 为空：跳过（没有 user 维度，无法归属持仓）
+    """
+    # watch 不影响持仓
+    if str(record.action or "").strip().lower() == "watch":
+        return
+    # 没有数量不写持仓
+    if not record.quantity or int(record.quantity) <= 0:
+        return
+    # 必须有 created_by 才能归属
+    if not str(record.created_by or "").strip():
+        return
+
+    # 延迟导入避免循环
+    from service.quant.position_service import create_position_entry
+
+    if from_status != "executed" and to_status == "executed":
+        # 其他状态 → 已执行：计入持仓
+        create_position_entry(
+            symbol=record.symbol,
+            side=record.action,
+            quantity=record.quantity,
+            price=record.price,
+            occurred_at=record.trade_date,
+            source="operation_record",
+            reason=str(record.thesis or "").strip(),
+            created_by=record.created_by,
+            operation_id=record.id,
+        )
+    elif from_status == "executed" and to_status != "executed":
+        # 已执行 → 其他状态：反向计提
+        create_position_entry(
+            symbol=record.symbol,
+            side=_reverse_side(record.action),
+            quantity=record.quantity,
+            price=record.price,
+            occurred_at=record.trade_date,
+            source="operation_revoked",
+            reason=f"操作 #{record.id} 状态从 executed 变更为 {to_status}",
+            created_by=record.created_by,
+            operation_id=record.id,
+        )

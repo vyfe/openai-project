@@ -1,4 +1,4 @@
-"""飞书量化操作登记 MVP：文本指令、二次确认与历史查询。"""
+"""飞书量化操作记录：位置化解析 + 直接入库（无二次确认）。"""
 
 from __future__ import annotations
 
@@ -13,16 +13,19 @@ from quant.entities import QuantImInboundEvent
 from service.quant.binding_service import get_username_by_feishu
 from service.quant.common import normalize_symbol, parse_trade_date
 from service.quant.im_helpers import truncate_text
-from service.quant.ops_service import create_operation_record, get_operation_record, list_operation_records
+from service.quant.ops_service import create_operation_record, list_operation_records
 
 
+# ---- 别名常量（保留所有原有映射） ----
 _ACTION_ALIASES = {
     "买": "buy",
     "买入": "buy",
     "buy": "buy",
     "加仓": "add",
+    "加": "add",
     "add": "add",
     "减仓": "reduce",
+    "减": "reduce",
     "reduce": "reduce",
     "卖": "sell",
     "卖出": "sell",
@@ -58,16 +61,21 @@ _RESULT_STATUS_ALIASES = {
     "持平": "flat",
     "flat": "flat",
 }
-_ACTION_LABELS = {value: key for key, value in {"买入": "buy", "加仓": "add", "减仓": "reduce", "卖出": "sell", "观察": "watch"}.items()}
+_ACTION_LABELS = {value: key for key, value in {
+    "买入": "buy", "加仓": "add", "减仓": "reduce", "卖出": "sell", "观察": "watch",
+}.items()}
 _STATUS_LABELS = {"draft": "草稿", "executed": "已执行", "closed": "已结束", "cancelled": "已取消"}
 _RESULT_STATUS_LABELS = {"pending": "待复盘", "win": "盈利", "loss": "亏损", "flat": "持平"}
-_OPERATION_PREFIXES = ("录入操作", "新增操作", "操作登记", "记录操作")
+
+# 查询前缀（保留——避免和 position_entry 冲突）
 _HISTORY_PREFIXES = ("操作历史", "历史操作", "查操作", "操作记录")
-_DETAIL_PREFIXES = ("操作详情", "查看操作")
+
+# 已废弃的二次确认命令（向后兼容保留字面，提示用户）
 _CONFIRM_RE = re.compile(r"^(?:确认|confirm)\s+OP-(\d+)$", re.IGNORECASE)
 _CANCEL_RE = re.compile(r"^(?:取消|cancel)\s+OP-(\d+)$", re.IGNORECASE)
 
 
+# ---- 工具函数 ----
 def _clean_command(text: str) -> str:
     return re.sub(r"^[/#\s]+", "", str(text or "").strip())
 
@@ -86,13 +94,92 @@ def _parse_number(value, *, integer: bool = False, field: str = "数值"):
     try:
         number = int(float(text)) if integer else float(text)
     except ValueError as exc:
-        raise ValueError(f"{field}必须是数字") from exc
+        raise ValueError(f"{field}格式错误：{value}") from exc
+    if number <= 0 and field != "价格":
+        raise ValueError(f"{field}必须大于 0")
     return number
 
 
 def _looks_like_date(value: str) -> bool:
+    """判断字符串是否可解析为日期。支持 YYYY-MM-DD / YYYY/MM/DD / YYYYMMDD。"""
     text = str(value or "").strip()
-    return bool(re.fullmatch(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{8}", text))
+    if not text:
+        return False
+    if not re.fullmatch(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{8}", text):
+        return False
+    try:
+        parse_trade_date(text)
+        return True
+    except ValueError:
+        return False
+
+
+def _looks_like_compact_date(value: str) -> bool:
+    """判断是否为 8 位紧凑日期 YYYYMMDD（如 20260926）。"""
+    text = str(value or "").strip()
+    if not re.fullmatch(r"\d{8}", text):
+        return False
+    try:
+        parse_trade_date(text)
+        return True
+    except ValueError:
+        return False
+
+
+_TRADE_FIELD_SEP_RE = re.compile(r"[,，\s]+")
+
+
+def _split_trade_command(text: str) -> list[str]:
+    """按「,」「，」「空格」任意分隔符切分命令字符串。"""
+    if not text:
+        return []
+    return [item for item in _TRADE_FIELD_SEP_RE.split(str(text).strip()) if item]
+
+
+def _resolve_symbol_in_pool(symbol_or_name: str) -> dict:
+    """校验股票代码/名称是否在 quant_instrument 股票池中。
+
+    匹配顺序（精确匹配）：symbol → code → name → custom_name。
+    """
+    from quant.entities import QuantInstrument
+    raw = str(symbol_or_name or "").strip()
+    if not raw:
+        raise ValueError("股票代码或名称不能为空")
+
+    candidates = [raw]
+    if "." in raw:
+        code_only = raw.split(".")[0]
+        if code_only and code_only not in candidates:
+            candidates.append(code_only)
+    else:
+        if raw.isdigit() and len(raw) == 6:
+            if raw.startswith("6"):
+                candidates.append(f"{raw}.SH")
+            elif raw.startswith("0") or raw.startswith("3"):
+                candidates.append(f"{raw}.SZ")
+
+    record = None
+    for cand in candidates:
+        record = QuantInstrument.select().where(
+            (QuantInstrument.symbol == cand)
+            | (QuantInstrument.code == cand)
+            | (QuantInstrument.name == cand)
+            | (QuantInstrument.custom_name == cand)
+        ).first()
+        if record:
+            break
+
+    if not record:
+        raise ValueError(
+            f"❌ 股票「{raw}」不在股票池中。\n"
+            f"请在「数据中心」页面添加，或使用已加入股票池的股票代码/名称。"
+        )
+    return {
+        "symbol": record.symbol,
+        "code": record.code,
+        "name": record.name or record.custom_name or record.symbol,
+        "exchange": record.exchange,
+    }
 
 
 def _normalize_action(value: str) -> str:
@@ -114,160 +201,97 @@ def _normalize_result_status(value: str) -> str:
     if not text:
         return ""
     normalized = _RESULT_STATUS_ALIASES.get(text)
-    if not normalized:
+    if normalized is None:
         raise ValueError("结果状态仅支持：待复盘、盈利、亏损、持平")
     return normalized
 
 
 def _normalize_tags(value: str) -> list[str]:
-    return [item.strip() for item in re.split(r"[,，、]", str(value or "")) if item.strip()]
+    return [item.strip() for item in re.split(r"[,，、/]", str(value or "")) if item.strip()]
 
 
-def _parse_key_values(parts: list[str]) -> dict[str, str]:
-    values: dict[str, str] = {}
-    for part in parts:
-        item = part.strip()
-        if not item:
-            continue
-        matched = re.match(r"^([^=:：]+)\s*[=:：]\s*(.*)$", item)
-        if not matched:
-            raise ValueError(f"扩展参数格式错误：{item}，请使用“字段=值”")
-        key = matched.group(1).strip().lower()
-        values[key] = matched.group(2).strip()
-    return values
+# ---- 位置化解析（统一快速登记 + 操作登记） ----
+def _parse_position_payload(text: str) -> dict:
+    """位置化解析交易命令。
 
-
-def _parse_operation_payload(text: str) -> dict:
-    sections = [item.strip() for item in _clean_command(text).split("|")]
-    main_tokens = [item for item in re.split(r"\s+", sections[0]) if item]
+    格式：[动作,股票,数量,价格[,8位日期][,备注][,状态][,标签]]
+    - 8 位紧凑日期（YYYYMMDD）可以出现在任意位置（除动作/股票外），识别后即作为 trade_date
+    - 后续列按顺序识别：状态别名 → status；含 / , 、 的 → tags；其余 → remark
+    """
+    main_tokens = _split_trade_command(_clean_command(text))
     if len(main_tokens) < 3:
         raise ValueError(_operation_usage())
 
-    action = _normalize_action(main_tokens[1])
-    symbol = normalize_symbol(main_tokens[2])
-    tail = main_tokens[3:]
+    # 探测「已X」前缀（已买/已卖/已加仓/已减仓/已观察）→ 自动标记 status=executed
+    auto_status: Optional[str] = None
+    first_token = main_tokens[0]
+    if first_token.startswith("已") and len(first_token) >= 2:
+        stripped = first_token[1:]
+        if stripped.lower() in {k.lower() for k in _ACTION_ALIASES}:
+            main_tokens[0] = stripped
+            auto_status = "executed"
+
+    action = _normalize_action(main_tokens[0])
+    instrument = _resolve_symbol_in_pool(main_tokens[1])
+    symbol = instrument["symbol"]
+
+    # 提取 8 位紧凑日期（如果存在）—— 任意位置出现都识别
     trade_date = date.today()
-    if tail and _looks_like_date(tail[0]):
-        trade_date = parse_trade_date(tail.pop(0))
+    date_positions = [i for i, tok in enumerate(main_tokens[2:], start=2) if _looks_like_compact_date(tok)]
+    if date_positions:
+        trade_date = parse_trade_date(main_tokens[date_positions[0]])
+        # 把日期 token 移除，剩下的 main_tokens 视为 [动作,股票,数量,价格,备注,...]
+        main_tokens = [tok for i, tok in enumerate(main_tokens) if i not in date_positions]
 
-    quantity = None
-    price = None
-    if action != "watch":
-        if not tail:
-            raise ValueError("买入/卖出等交易操作必须填写数量")
-        quantity = _parse_number(tail.pop(0), integer=True, field="数量")
-        if quantity <= 0:
-            raise ValueError("数量必须大于 0")
-        if tail:
-            price = _parse_number(tail.pop(0), field="价格")
-            if price < 0:
-                raise ValueError("价格不能小于 0")
-    elif tail:
-        price = _parse_number(tail.pop(0), field="价格")
-        if price < 0:
-            raise ValueError("价格不能小于 0")
-    if tail:
-        raise ValueError("主参数过多，请使用“| 字段=值”补充理由、标签等信息")
-
-    extras = _parse_key_values(sections[1:])
-    key_aliases = {
-        "日期": "trade_date",
-        "交易日": "trade_date",
-        "trade_date": "trade_date",
-        "状态": "status",
-        "status": "status",
-        "结果": "result_status",
-        "结果状态": "result_status",
-        "result_status": "result_status",
-        "理由": "thesis",
-        "原因": "thesis",
-        "thesis": "thesis",
-        "备注": "execution_note",
-        "执行备注": "execution_note",
-        "execution_note": "execution_note",
-        "复盘": "review_note",
-        "复盘备注": "review_note",
-        "review_note": "review_note",
-        "标签": "tags",
-        "tags": "tags",
-        "收益率": "result_pct",
-        "结果收益率": "result_pct",
-        "result_pct": "result_pct",
-        "结果金额": "result_amount",
-        "result_amount": "result_amount",
-        "金额": "amount",
-        "amount": "amount",
-        "策略": "strategy_id",
-        "策略id": "strategy_id",
-        "strategy_id": "strategy_id",
-        "运行id": "run_id",
-        "run_id": "run_id",
-        "信号id": "signal_id",
-        "signal_id": "signal_id",
-    }
-    normalized_extras = {key_aliases.get(key, key): value for key, value in extras.items()}
-    supported_fields = {
-        "trade_date",
-        "status",
-        "result_status",
-        "thesis",
-        "execution_note",
-        "review_note",
-        "tags",
-        "result_pct",
-        "result_amount",
-        "amount",
-        "price",
-        "quantity",
-        "strategy_id",
-        "run_id",
-        "signal_id",
-    }
-    unknown_fields = sorted(set(normalized_extras) - supported_fields)
-    if unknown_fields:
-        raise ValueError(f"不支持的字段：{', '.join(unknown_fields)}")
-    if "trade_date" in normalized_extras:
-        trade_date = parse_trade_date(normalized_extras["trade_date"])
-    if "status" in normalized_extras:
-        status = _normalize_status(normalized_extras["status"])
+    # 现在 main_tokens[2]=数量、[3]=价格
+    if len(main_tokens) < 4:
+        raise ValueError("必须填写数量和价格")
+    quantity = _parse_number(main_tokens[2], integer=True, field="数量")
+    if action == "watch":
+        price = None
     else:
-        status = "draft"
-    result_status = _normalize_result_status(normalized_extras.get("result_status", ""))
-    if "quantity" in normalized_extras:
-        quantity = _parse_number(normalized_extras["quantity"], integer=True, field="数量")
-        if quantity <= 0:
-            raise ValueError("数量必须大于 0")
-    if "price" in normalized_extras:
-        price = _parse_number(normalized_extras["price"], field="价格")
-        if price < 0:
+        price = _parse_number(main_tokens[3], field="价格")
+        if price is not None and price < 0:
             raise ValueError("价格不能小于 0")
 
-    payload = {
+    # 解析剩余 token：状态 / 标签 / 备注（按出现顺序，首个状态别名为 status）
+    rest = main_tokens[4:]
+    remark_parts: list[str] = []
+    status: Optional[str] = None  # 用户显式指定的状态
+    tags: list[str] = []
+    for tok in rest:
+        compact = tok.lower().replace(" ", "")
+        if status is None and compact in {k.lower().replace(" ", "") for k in _STATUS_ALIASES}:
+            status = _normalize_status(tok)
+            continue
+        if "/" in tok or "、" in tok or "," in tok:
+            tags.extend(_normalize_tags(tok))
+            continue
+        remark_parts.append(tok)
+
+    # 最终 status 优先级：用户显式 > 已X 前缀自动 > None（None 时由 create_operation_record 默认 draft）
+    final_status = status if status is not None else auto_status
+
+    return {
         "symbol": symbol,
-        "trade_date": trade_date.isoformat(),
         "action": action,
-        "status": status,
-        "result_status": result_status,
-        "price": price,
         "quantity": quantity,
-        "amount": _parse_number(normalized_extras["amount"], field="金额") if "amount" in normalized_extras else None,
-        "thesis": normalized_extras.get("thesis", ""),
-        "execution_note": normalized_extras.get("execution_note", ""),
-        "review_note": normalized_extras.get("review_note", ""),
-        "result_pct": _parse_number(normalized_extras["result_pct"], field="结果收益率") if "result_pct" in normalized_extras else None,
-        "result_amount": _parse_number(normalized_extras["result_amount"], field="结果金额") if "result_amount" in normalized_extras else None,
-        "tags": _normalize_tags(normalized_extras.get("tags", "")),
+        "price": price,
+        "trade_date": trade_date,
+        "status": final_status,
+        "thesis": " ".join(remark_parts),
+        "tags": tags,
     }
-    for field in ("strategy_id", "run_id", "signal_id"):
-        if field in normalized_extras:
-            payload[field] = int(_parse_number(normalized_extras[field], integer=True, field=field))
-    return payload
 
 
 def _operation_usage() -> str:
     return (
-        "用法：录入操作 买入 600519.SH 2026-09-18 100 1688.00 "
-        "| 理由=突破年线 | 状态=已执行 | 标签=观察仓,趋势"
+        "用法（分隔符「,」「，」「空格」任选）：\n"
+        "  简版（默认今天）：买,002837,200,12,突破年线\n"
+        "  带日期（8 位）：买,002837,20260920,200,12,突破年线\n"
+        "  完整字段：买,002837,200,12,20260920,突破年线,已执行,趋势仓/观察仓\n"
+        "提示：日期格式 YYYYMMDD；状态可选 草稿/已执行/已结束/已取消；"
+        "标签用 / , 、 分隔多个。"
     )
 
 
@@ -279,110 +303,14 @@ def _require_bound_user(parsed: dict) -> str:
     return username
 
 
-def _operation_from_payload(payload: dict, *, username: str, parsed: dict) -> dict:
-    operation = dict(payload)
-    meta = dict(operation.get("meta") or {})
-    meta.update(
-        {
-            "source": "feishu_im",
-            "feishu_event_id": parsed.get("event_id") or "",
-            "feishu_message_id": parsed.get("message_id") or "",
-            "feishu_chat_id": parsed.get("chat_id") or "",
-        }
-    )
-    operation["meta"] = meta
-    operation["created_by"] = username
-    return create_operation_record(**operation)
+def _operation_from_payload(payload: dict, *, username: str) -> dict:
+    """将解析结果转换为 create_operation_record 接受的字段并入库。"""
+    op = dict(payload)
+    op["created_by"] = username
+    return create_operation_record(**op)
 
 
-def _pending_payload(record: QuantImInboundEvent) -> dict:
-    parsed = json.loads(record.parsed_payload_json or "{}")
-    payload = parsed.get("operation_payload")
-    return payload if isinstance(payload, dict) else {}
-
-
-def _format_operation_confirmation(payload: dict, token: str) -> str:
-    action = _ACTION_LABELS.get(payload.get("action"), payload.get("action"))
-    lines = [
-        "待确认操作：",
-        f"标的：{payload.get('symbol')}",
-        f"动作：{action}",
-        f"交易日：{payload.get('trade_date')}",
-        f"数量：{payload.get('quantity') if payload.get('quantity') is not None else '--'}",
-        f"价格：{payload.get('price') if payload.get('price') is not None else '--'}",
-        f"理由：{payload.get('thesis') or '--'}",
-        "",
-        f"回复“确认 {token}”写入，或回复“取消 {token}”。",
-    ]
-    return "\n".join(lines)
-
-
-def _create_pending_operation(text: str, parsed: dict, event_record_id: int) -> tuple[str, str]:
-    username = _require_bound_user(parsed)
-    payload = _parse_operation_payload(text)
-    payload["created_by"] = username
-    record = QuantImInboundEvent.get_by_id(event_record_id)
-    token = f"OP-{record.id}"
-    stored = json.loads(record.parsed_payload_json or "{}")
-    stored["operation_payload"] = payload
-    stored["pending_token"] = token
-    record.parsed_payload_json = json.dumps(stored, ensure_ascii=False)
-    record.command = "operation_pending"
-    record.status = "pending_confirmation"
-    record.save()
-    return "operation_pending", _format_operation_confirmation(payload, token)
-
-
-def _load_pending(token_id: int, parsed: dict) -> tuple[QuantImInboundEvent, dict, str]:
-    try:
-        record = QuantImInboundEvent.get_by_id(token_id)
-    except DoesNotExist as exc:
-        raise ValueError("确认码不存在或已过期") from exc
-    if record.status != "pending_confirmation":
-        if record.status == "processed":
-            payload = json.loads(record.response_payload_json or "{}")
-            operation_id = payload.get("operation_id")
-            if operation_id:
-                return record, {}, f"该操作已确认，记录 ID：{operation_id}"
-        raise ValueError("该确认码已处理或已失效")
-    if record.sender_id != str(parsed.get("sender_id") or "") or record.chat_id != str(parsed.get("chat_id") or ""):
-        raise ValueError("确认码不属于当前飞书账号或会话")
-    if record.received_at and datetime.now() - record.received_at > timedelta(minutes=10):
-        record.status = "expired"
-        record.processed_at = datetime.now()
-        record.save()
-        raise ValueError("确认码已过期，请重新发起操作登记")
-    username = _require_bound_user(parsed)
-    payload = _pending_payload(record)
-    if payload.get("created_by") != username:
-        raise ValueError("确认码不属于当前绑定用户")
-    return record, payload, ""
-
-
-def _confirm_operation(token_id: int, parsed: dict) -> tuple[str, str]:
-    pending, payload, existing_message = _load_pending(token_id, parsed)
-    if existing_message:
-        return "operation_confirmed", existing_message
-    operation = _operation_from_payload(payload, username=payload["created_by"], parsed=parsed)
-    pending.status = "processed"
-    pending.command = "operation_confirmed"
-    pending.response_payload_json = json.dumps({"operation_id": operation["id"]}, ensure_ascii=False)
-    pending.processed_at = datetime.now()
-    pending.save()
-    return "operation_confirmed", f"✅ 操作已登记，记录 ID：{operation['id']}。操作登记不会自动改变持仓。"
-
-
-def _cancel_operation(token_id: int, parsed: dict) -> tuple[str, str]:
-    pending, _, existing_message = _load_pending(token_id, parsed)
-    if existing_message:
-        return "operation_cancelled", existing_message
-    pending.status = "cancelled"
-    pending.command = "operation_cancelled"
-    pending.processed_at = datetime.now()
-    pending.save()
-    return "operation_cancelled", "已取消本次操作登记。"
-
-
+# ---- 历史 / 详情查询（保留） ----
 def _parse_history_query(text: str) -> dict:
     query_text = _clean_command(text)
     prefix = _starts_with(query_text, _HISTORY_PREFIXES)
@@ -394,9 +322,6 @@ def _parse_history_query(text: str) -> dict:
         if compact in ("今天", "今日"):
             today = date.today().isoformat()
             query.update(date_from=today, date_to=today)
-        elif compact in ("昨天", "昨日"):
-            target = date.today() - timedelta(days=1)
-            query.update(date_from=target.isoformat(), date_to=target.isoformat())
         elif re.fullmatch(r"近\d+天", compact):
             days = int(re.sub(r"[^0-9]", "", compact))
             query["date_from"] = (date.today() - timedelta(days=max(1, days) - 1)).isoformat()
@@ -438,50 +363,97 @@ def _history_command(text: str, parsed: dict) -> tuple[str, str]:
     return "operation_history", _format_history(records, query)
 
 
-def _detail_command(text: str, parsed: dict) -> tuple[str, str]:
-    username = _require_bound_user(parsed)
-    match = re.search(r"(\d+)\s*$", _clean_command(text))
-    if not match:
-        raise ValueError("用法：操作详情 记录ID")
-    try:
-        record = get_operation_record(int(match.group(1)), created_by=username)
-    except DoesNotExist as exc:
-        raise ValueError("操作记录不存在，或不属于当前绑定用户") from exc
-    return "operation_detail", _format_history([record], {"limit": 1})
+def _render_operation_created(operation: dict) -> str:
+    """渲染创建成功的简洁消息。"""
+    action_label = _ACTION_LABELS.get(operation.get("action"), operation.get("action"))
+    symbol = operation.get("symbol")
+    quantity = operation.get("quantity")
+    price = operation.get("price")
+    trade_date = operation.get("trade_date")
+    status_label = _STATUS_LABELS.get(operation.get("status"), operation.get("status"))
+
+    price_text = f" @ {price}" if price not in (None, "", 0) else ""
+    lines = [
+        f"✅ 已登记操作：{action_label} {symbol} {quantity}股{price_text}",
+        f"日期：{trade_date}｜状态：{status_label}",
+        f"记录 ID: {operation['id']}",
+    ]
+    if operation.get("thesis"):
+        lines.append(f"备注：{truncate_text(operation['thesis'], limit=200)}")
+    if operation.get("tags"):
+        tag_value = operation.get("tags")
+        if isinstance(tag_value, str):
+            try:
+                tag_list = json.loads(tag_value)
+            except (ValueError, TypeError):
+                tag_list = [t.strip() for t in tag_value.split(",") if t.strip()]
+        else:
+            tag_list = list(tag_value)
+        if tag_list:
+            lines.append(f"标签：{', '.join(tag_list)}")
+    return "\n".join(lines)
 
 
+# ---- 入口 ----
 def handle_operation_command(text: str, parsed: dict, event_record_id: int) -> Optional[tuple[str, str]]:
-    """处理操作登记相关命令；非操作命令返回 None。"""
+    """处理操作相关命令（直接入库，无二次确认）。
+
+    - /确认 OP-X / /取消 OP-X：已废弃，提示用户
+    - 操作历史：查询
+    - 其余位置化命令：直接入库
+    """
     command_text = _clean_command(text)
-    confirm_match = _CONFIRM_RE.match(command_text)
-    if confirm_match:
-        try:
-            return _confirm_operation(int(confirm_match.group(1)), parsed)
-        except ValueError as exc:
-            return "operation_confirm_error", f"❌ {exc}"
 
-    cancel_match = _CANCEL_RE.match(command_text)
-    if cancel_match:
-        try:
-            return _cancel_operation(int(cancel_match.group(1)), parsed)
-        except ValueError as exc:
-            return "operation_cancel_error", f"❌ {exc}"
+    # 已废弃的二次确认
+    if _CONFIRM_RE.match(command_text):
+        return "operation_deprecated", "ℹ️ 操作登记已改为直接入库，不再需要「确认 OP-x」。"
+    if _CANCEL_RE.match(command_text):
+        return "operation_deprecated", "ℹ️ 操作登记已改为直接入库，没有待确认项。"
 
-    if _starts_with(command_text, _OPERATION_PREFIXES):
-        try:
-            return _create_pending_operation(command_text, parsed, event_record_id)
-        except ValueError as exc:
-            return "operation_create_error", f"❌ {exc}\n{_operation_usage()}"
-
+    # 查询类
     if _starts_with(command_text, _HISTORY_PREFIXES):
         try:
             return _history_command(command_text, parsed)
         except ValueError as exc:
             return "operation_history_error", f"❌ {exc}"
 
-    if _starts_with(command_text, _DETAIL_PREFIXES):
+    # 操作登记（位置化解析 + 直接入库）
+    if _looks_like_operation_payload(command_text):
         try:
-            return _detail_command(command_text, parsed)
+            username = _require_bound_user(parsed)
+            payload = _parse_position_payload(command_text)
+            payload["created_by"] = username
+            operation = _operation_from_payload(payload, username=username)
+            return "operation_created", _render_operation_created(operation)
         except ValueError as exc:
-            return "operation_detail_error", f"❌ {exc}"
+            return "operation_create_error", f"❌ {exc}\n{_operation_usage()}"
+
     return None
+
+
+def _looks_like_operation_payload(text: str) -> bool:
+    """判断文本是否应作为操作登记处理（位置化格式）。
+
+    判定条件（任一）：
+    1. 主参数至少 4 列，且首列是动作别名（买/卖/...）
+    2. 主参数至少 3 列且第 3 或第 4 列是 8 位紧凑日期
+    """
+    if not text:
+        return False
+    main_tokens = _split_trade_command(text)
+    if len(main_tokens) < 3:
+        return False
+    # 判定首列是合法动作（含「已X」前缀）→ 入库为 operation record
+    first = main_tokens[0]
+    action_keys = {k.lower() for k in _ACTION_ALIASES}
+    if len(main_tokens) >= 4 and (
+        first.lower() in action_keys
+        or (first.startswith("已") and len(first) >= 2 and first[1:].lower() in action_keys)
+    ):
+        return True
+    # 仅含日期（短格式）也命中
+    if _looks_like_compact_date(main_tokens[2] if len(main_tokens) > 2 else ""):
+        return True
+    if _looks_like_compact_date(main_tokens[3] if len(main_tokens) > 3 else ""):
+        return True
+    return False

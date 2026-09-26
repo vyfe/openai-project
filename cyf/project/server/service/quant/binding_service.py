@@ -71,3 +71,15 @@ def get_feishu_id_by_username(username: str) -> Optional[str]:
 def list_all_bindings() -> list[dict]:
     """列出所有绑定关系（管理用）"""
     return [b.to_dict() for b in QuantFeishuUserBinding.select().iterator()]
+
+
+def is_feishu_bound(feishu_open_id: str) -> bool:
+    """便捷判断：飞书 open_id 是否已绑定到任何慧聊用户。
+
+    比 get_username_by_feishu(...) is not None 略快（命中后短路返回）。
+    """
+    if not feishu_open_id:
+        return False
+    return QuantFeishuUserBinding.select().where(
+        QuantFeishuUserBinding.feishu_open_id == feishu_open_id
+    ).exists()

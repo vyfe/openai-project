@@ -74,6 +74,7 @@ else
     echo "警告: 未找到 requirements.txt 文件"
 fi
 
-# 启动服务
-echo "🚀 启动后端服务，监听端口 $PORT..."
+# 启动服务（指向本地 conf.dev.ini；生产不 export 该变量即可 fallback 到默认 conf/conf.ini）
+export QUANT_CONF_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/conf/conf.dev.ini"
+echo "🚀 启动后端服务，监听端口 $PORT，使用配置: $QUANT_CONF_PATH"
 python server.py

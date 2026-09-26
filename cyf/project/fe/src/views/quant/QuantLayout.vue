@@ -105,7 +105,7 @@ const allNavItems = [
   { label: '回测评估', to: '/quant/backtest', icon: TrendCharts, adminOnly: true },
   { label: '调度执行', to: '/quant/scheduler', icon: RefreshRight, adminOnly: true },
   { label: 'AI与记忆', to: '/quant/ai-memory', icon: Histogram, adminOnly: false },
-  { label: 'IM与持仓', to: '/quant/im-positions', icon: Promotion, adminOnly: false }
+  { label: 'IM 通道', to: '/quant/im-positions', icon: Promotion, adminOnly: false }
 ]
 
 const navItems = computed(() =>

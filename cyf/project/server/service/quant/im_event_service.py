@@ -16,9 +16,9 @@ from lark_oapi.core.model import RawRequest, RawResponse
 from lark_oapi.event.dispatcher_handler import EventDispatcherHandler
 from peewee import IntegrityError
 
-from quant.entities import QuantImInboundEvent, QuantReportRecord
+from quant.entities import QuantImChannel, QuantImInboundEvent, QuantReportRecord
 from service.auth_service import require_auth
-from service.quant.binding_service import get_username_by_feishu
+from service.quant.binding_service import get_username_by_feishu, is_feishu_bound
 from service.quant.im_channel_service import list_im_channels
 from service.quant.im_delivery_service import reply_feishu_text as _reply_feishu_text, render_position_summary_markdown
 from service.quant.im_helpers import CHANNEL_FEISHU_APP, json_loads as _json_loads, to_bool as _to_bool, truncate_text as _truncate_text
@@ -123,18 +123,152 @@ def _match_feishu_channel(chat_id: str):
     return None
 
 
+_P2P_VIRTUAL_CHANNEL_NAME_PREFIX = "p2p:"
+_P2P_BIND_CMD_RE = re.compile(r"^/(?:bind|unbind|whoami)\b", re.IGNORECASE)
+
+
+def _ensure_p2p_virtual_channel(chat_id: str, sender_id: str) -> Optional[dict]:
+    """为首次私聊的用户自动注册虚拟通道。
+
+    规则：
+    - name 用 `p2p:{chat_id}` 作为唯一键，重复调用幂等
+    - config.inbound_chat_id 写入 chat_id（用于 _match_feishu_channel 反向匹配）
+    - config.receive_id / receive_id_type 用 sender_id / open_id，确保推送回到发起人
+    - config.is_p2p_virtual=True 作为标记，前端可隐藏
+    - 若同一 chat_id 已被注册过，复用并更新 updated_at
+    """
+    if not chat_id or not sender_id:
+        return None
+    name = f"{_P2P_VIRTUAL_CHANNEL_NAME_PREFIX}{chat_id}"
+    try:
+        record = QuantImChannel.get_or_none(QuantImChannel.name == name)
+        if record is not None:
+            # 命中已存在：返回它的 dict（上层继续用）
+            logger.debug("[p2p-channel] 命中已注册虚拟通道 | name=%s | id=%d", name, record.id)
+            return record.to_dict()
+        config = {
+            "inbound_chat_id": chat_id,
+            "receive_id": sender_id,
+            "receive_id_type": "open_id",
+            "is_p2p_virtual": True,
+        }
+        record = QuantImChannel.create(
+            name=name,
+            channel_type=CHANNEL_FEISHU_APP,
+            status="active",
+            config_json=json.dumps(config, ensure_ascii=False),
+            mention_list_json="[]",
+            description=f"私聊自动注册 @ {datetime.now().isoformat()}",
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        logger.info("[p2p-channel] 自动注册虚拟通道 | id=%d | name=%s | sender=%s", record.id, name, sender_id[:8])
+        return record.to_dict()
+    except IntegrityError:
+        # 极端并发：name 唯一约束撞上
+        logger.warning("[p2p-channel] 并发创建虚拟通道被唯一约束拦截，重读 | name=%s", name)
+        record = QuantImChannel.get_or_none(QuantImChannel.name == name)
+        return record.to_dict() if record else None
+    except Exception as exc:
+        logger.exception("[p2p-channel] 自动注册虚拟通道失败 | name=%s | error=%s", name, exc)
+        return None
+
+
+def _p2p_bind_guide_text() -> str:
+    """私聊未绑定用户的 bind 引导文案。"""
+    return (
+        "👋 欢迎使用量化助手！\n\n"
+        "您还未绑定慧聊账号，请先绑定：\n\n"
+        "  /bind {用户名} {密码}\n\n"
+        "示例：/bind admin mypassword123\n\n"
+        "绑定后回复「帮助」可查看完整命令列表。"
+    )
+
+
+def _resolve_p2p_access(parsed: dict) -> tuple[Optional[dict], str]:
+    """私聊消息访问决策。
+
+    返回 (channel, reason)：
+    - channel 为 dict（虚拟通道）+ reason in ("bind_cmd", "bound_user") → 放行
+    - channel 为 None + reason == "unbound_guide" → 不放行，调用方应回引导文案
+    - channel 为 None + reason == "no_chat_id" → 异常兜底（无 chat_id 也无法回信）
+
+    /bind 系列命令（/bind /unbind /whoami）无论是否绑定一律放行，否则用户首次无入口。
+    """
+    text = (parsed.get("text") or "").strip()
+    sender_id = str(parsed.get("sender_id") or "").strip()
+    chat_id = str(parsed.get("chat_id") or "").strip()
+
+    if not chat_id:
+        return None, "no_chat_id"
+
+    is_bind_cmd = bool(_P2P_BIND_CMD_RE.match(text))
+
+    if is_bind_cmd:
+        channel = _ensure_p2p_virtual_channel(chat_id, sender_id)
+        return channel, "bind_cmd"
+
+    if is_feishu_bound(sender_id):
+        channel = _ensure_p2p_virtual_channel(chat_id, sender_id)
+        return channel, "bound_user"
+
+    return None, "unbound_guide"
+
+
+_HELP_HINT_INSTRUMENT = (
+    "提示：股票识别支持「代码」(如 600519、002837、600519.SH) 或「股票名」(如 贵州茅台)，"
+    "前提是已在「数据中心」加入股票池；不在池中会报错并拒绝。"
+)
+
+
 def _feishu_help_text() -> str:
     return "\n".join(
         [
-            "量化助手可用命令：",
-            "1. 帮助：查看命令。",
-            "2. 持仓 / 持仓摘要：返回当前持仓快照。",
-            "3. 最新报告 / 报告：返回最近一份量化报告。",
-            "4. 买入 600519 100 1688 备注：登记一条买入持仓流水。",
-            "5. 卖出 600519 100 1688 备注：登记一条卖出持仓流水。",
-            "6. 录入操作 买入 600519.SH 100 1688 | 理由=突破年线：登记操作记录，需二次确认。",
-            "7. 操作历史 [今天|近7天|600519.SH]：查询本人操作记录。",
-            "8. 操作详情 123：查询本人单条操作记录。",
+            "═══════════════════════════════",
+            "量化助手 · 命令一览",
+            "═══════════════════════════════",
+            "通用规则：",
+            "  · 分隔符「,」「，」「空格」任选，可混合",
+            "  · 股票可填代码或名称（须先加入股票池）",
+            "",
+            "【基础命令】",
+            "1. 帮助 — 查看本说明",
+            "2. 持仓 — 返回当前持仓快照",
+            "3. 报告 — 返回最近一份量化报告",
+            "",
+            "【登记交易】直接入库，无需二次确认",
+            "4. 买,股票,数量,价格,备注",
+            "   示例：买,贵州茅台,100,1688,突破年线",
+            "5. 卖,股票,数量,价格,备注",
+            "   示例：卖,002837,200,12,止损",
+            "",
+            "【已执行】动作前缀加「已」= 状态自动为「已执行」",
+            "   已买/已卖/已加仓/已减仓/已观察",
+            "   示例：已买,贵州茅台,100,1688,突破年线  ≡ 买,贵州茅台,100,1688,突破年线,已执行",
+            "",
+            "【自定义交易日】在「价格」前加 8 位日期 YYYYMMDD",
+            "6. 买,股票,日期,数量,价格,备注",
+            "   示例：买,002837,20260920,200,12,补仓",
+            "   日期不是今天时，自动写入操作记录（QuantOperationRecord），",
+            "   便于「操作历史」查询。",
+            "",
+            "【可选字段】在「备注」之后追加，依次识别：",
+            "  状态：草稿/已执行/已结束/已取消（默认草稿）",
+            "  标签：用 / 或 , 分隔多个，如 趋势仓/观察仓",
+            "  完整示例：买,002837,200,12,20260920,补仓,已执行,趋势仓/观察仓",
+            "  注：显式指定的状态会覆盖「已X」自动标记",
+            "      如：已买,X,100,10,备注,已结束 → status=已结束（不是已执行）",
+            "",
+            "【查询】",
+            "7. 操作历史 [过滤] — 按过滤条件查本人操作记录",
+            "   过滤：今天 / 近7天 / YYYYMMDD / 股票代码 / 状态 / 动作",
+            "   示例：操作历史 近7天 002837",
+            "",
+            "【账号绑定】（仅私聊）",
+            "8. /bind {用户名} {密码} — 绑定飞书账号到慧聊用户",
+            "   /unbind — 解绑    /whoami — 查询当前绑定",
+            "",
+            _HELP_HINT_INSTRUMENT,
         ]
     )
 
@@ -154,8 +288,8 @@ def _parse_number_token(token: str, *, as_int: bool = False):
 
 
 def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dict]:
-    normalized = re.sub(r"[，,]+", " ", str(text or "")).strip()
-    tokens = [item for item in re.split(r"\s+", normalized) if item]
+    # 统一分隔符：英文逗号、中文逗号、空白字符（混合也兼容）
+    tokens = [item for item in re.split(r"[,，\s]+", str(text or "").strip()) if item]
     if len(tokens) < 3:
         return None
     side_map = {
@@ -163,6 +297,8 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
         "买入": "buy",
         "buy": "buy",
         "b": "buy",
+        "加仓": "add",
+        "减仓": "reduce",
         "卖": "sell",
         "卖出": "sell",
         "sell": "sell",
@@ -171,10 +307,18 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
     side = side_map.get(tokens[0].lower())
     if not side:
         return None
-    symbol = tokens[1]
+    # 股票池校验（精确匹配 symbol/code/name/custom_name）
+    try:
+        from service.quant.im_operation_service import _resolve_symbol_in_pool
+        instrument = _resolve_symbol_in_pool(tokens[1])
+    except ValueError:
+        raise
+    symbol = instrument["symbol"]
     quantity = _parse_number_token(tokens[2], as_int=True)
     if not quantity or quantity <= 0:
-        raise ValueError("数量必须大于 0，例如：买入 600519 100 1688")
+        raise ValueError(
+            "数量必须大于 0，例如：买,002837,200,12,突破年线"
+        )
     price = _parse_number_token(tokens[3]) if len(tokens) >= 4 else None
     remark = " ".join(tokens[4:]) if len(tokens) >= 5 else ""
     entry = create_position_entry(
@@ -253,12 +397,30 @@ def _on_im_message_receive(data: P2ImMessageReceiveV1) -> None:
         parsed.get("chat_type"),
         (parsed.get("text") or "")[:80],
     )
-    channel = _match_feishu_channel(parsed.get("chat_id", ""))
-    channel_id = channel.get("id") if channel else None
-    if channel:
-        logger.info("[feishu-event] 匹配到通道 | channel_id=%d | name=%s", channel.get("id"), channel.get("name"))
+
+    # ---- 私聊准入决策：未绑定用户 → 引导 bind；已绑定或 /bind 系列命令 → 放行 ----
+    chat_type = str(parsed.get("chat_type") or "").lower()
+    is_private = chat_type in ("p2p", "private")
+    channel: Optional[dict] = None
+    p2p_reason = ""
+    if is_private:
+        channel, p2p_reason = _resolve_p2p_access(parsed)
+        if p2p_reason == "bind_cmd":
+            logger.info("[feishu-event] 私聊 /bind 系列命令，放行 | sender=%s", parsed.get("sender_id", "")[:8])
+        elif p2p_reason == "bound_user":
+            logger.info("[feishu-event] 私聊已绑定用户，放行 | sender=%s", parsed.get("sender_id", "")[:8])
+        elif p2p_reason == "unbound_guide":
+            logger.info("[feishu-event] 私聊未绑定用户，引导 bind | sender=%s", parsed.get("sender_id", "")[:8])
+        elif p2p_reason == "no_chat_id":
+            logger.warning("[feishu-event] 私聊消息缺少 chat_id，无法回信 | sender=%s", parsed.get("sender_id", "")[:8])
     else:
-        logger.info("[feishu-event] 未匹配到任何活跃通道 | chat_id=%s", parsed.get("chat_id"))
+        channel = _match_feishu_channel(parsed.get("chat_id", ""))
+        if channel:
+            logger.info("[feishu-event] 匹配到通道 | channel_id=%d | name=%s", channel.get("id"), channel.get("name"))
+        else:
+            logger.info("[feishu-event] 未匹配到任何活跃通道 | chat_id=%s", parsed.get("chat_id"))
+
+    channel_id = channel.get("id") if channel else None
     try:
         event_record = QuantImInboundEvent.create(
             event_id=parsed["event_id"],
@@ -276,6 +438,28 @@ def _on_im_message_receive(data: P2ImMessageReceiveV1) -> None:
     except IntegrityError:
         logger.info("[feishu-event] 重复事件，跳过 | event_id=%s", parsed.get("event_id"))
         return
+
+    # ---- 私聊未绑定：回 bind 引导并落档 ----
+    if is_private and p2p_reason == "unbound_guide":
+        guide_text = _p2p_bind_guide_text()
+        try:
+            response_payload = _reply_feishu_text(
+                parsed.get("message_id") or "", guide_text, reply_in_thread=False
+            )
+            event_record.command = "p2p_unbound_guide"
+            event_record.status = "processed"
+            event_record.response_payload_json = json.dumps(response_payload, ensure_ascii=False)
+            event_record.processed_at = datetime.now()
+            event_record.save()
+            logger.info("[feishu-event] 已回私聊 bind 引导 | message_id=%s", parsed.get("message_id"))
+        except Exception as exc:
+            logger.exception("[feishu-event] 回私聊 bind 引导失败 | error=%s", exc)
+            event_record.status = "failed"
+            event_record.error_message = str(exc)
+            event_record.processed_at = datetime.now()
+            event_record.save()
+        return
+
     if not channel:
         logger.info("[feishu-event] 未匹配到活跃通道，忽略消息 | chat_id=%s", parsed.get("chat_id"))
         event_record.status = "ignored"

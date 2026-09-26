@@ -189,6 +189,39 @@ def seed_admin_user(test_db):
 
 
 @pytest.fixture()
+def seed_test_instruments(test_db):
+    """预填测试用的股票池（quant_instrument）。
+
+    提供以下标的：
+    - 600519.SH 贵州茅台（沪A）
+    - 002837.SZ 英维克（深A）
+    - 000001.SZ 平安银行（深A）
+    """
+    from datetime import datetime
+    from quant.entities import QuantInstrument
+    test_instruments = [
+        ("600519.SH", "600519", "SH", "贵州茅台"),
+        ("002837.SZ", "002837", "SZ", "英维克"),
+        ("000001.SZ", "000001", "SZ", "平安银行"),
+        ("600036.SH", "600036", "SH", "招商银行"),
+    ]
+    now = datetime.now()
+    for symbol, code, exchange, name in test_instruments:
+        QuantInstrument.create(
+            symbol=symbol,
+            code=code,
+            exchange=exchange,
+            market="A_SHARE",
+            name=name,
+            custom_name=None,
+            source="test",
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+
+
+@pytest.fixture()
 def seed_daily_bars(test_db):
     """插入测试用日线数据（30 日 × 2 标的）。"""
     from datetime import date, timedelta

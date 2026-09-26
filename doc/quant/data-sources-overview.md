@@ -130,7 +130,10 @@ HTTP 429 与 `code=4001` 等价：fail-fast 不重试。
 
 - **每日一次只能拉 1 个 thscode**：批量请求会失败。Provider 内部循环遍历 symbols。
 - **窗口 ≤ 10 年**：`end - start` 超过 10 年返回 `code=1003`。
-- **仅日线 1d**：不实现 `fetch_minute_bars`。
+- **仅日线 1d**：不实现 `fetch_minute_bars`。原因：
+  - `/api/a-share/prices/historical` 的 `interval` 参数**当前仅支持 `1d`**（官方文档明确）。
+  - `/api/a-share/high-frequency/historical` 虽然支持 `interval=1m`，但**官方明确"暂未开放外部接入"**，且返回的是专有指标 `hf_direction` / `hf_participation`，**不提供 OHLCV**，无法做回测 / 实时打分。
+  - 因此分钟线仍走原链 `baostock → eastmoney → sina`，ths provider 显式抛 `NotImplementedError`，不进 `_AUTO_MINUTE_CHAIN`。
 - **不复权 / 前复权 / 后复权**：`adjust=none/forward/backward`，provider 透传。
 - **thscode 标准化**：入参会被服务端 `trim().toUpperCase()`；provider 输出统一 `code.EXCHANGE`
   （如 `600519.SH`），与 baostock/tencent/sina/yahoo 一致。
