@@ -131,27 +131,55 @@ def _ensure_p2p_virtual_channel(chat_id: str, sender_id: str) -> Optional[dict]:
     """为首次私聊的用户自动注册虚拟通道。
 
     规则：
-    - name 用 `p2p:{chat_id}` 作为唯一键，重复调用幂等
-    - config.inbound_chat_id 写入 chat_id（用于 _match_feishu_channel 反向匹配）
-    - config.receive_id / receive_id_type 用 sender_id / open_id，确保推送回到发起人
-    - config.is_p2p_virtual=True 作为标记，前端可隐藏
-    - 若同一 chat_id 已被注册过，复用并更新 updated_at
+    - 逻辑查找键使用 ``config.inbound_chat_id``（而非 ``name``），避免前端给通道
+      重命名后导致同一 chat_id 重复注册（同一 chat_id 出现多条等价记录）。
+    - 命中已存在：核对 ``receive_id``，不一致则回写（reply 永远回到当前发送者），
+      避免历史 sender_id 固化为孤儿。
+    - 没命中：新建（``name`` 按 ``p2p:{chat_id}`` 拼，仅用于前端展示，
+      实际去重不再依赖它）。
+    - 并发 ``IntegrityError`` 兜底：按 ``chat_id`` 重读 + 同样回写 sender_id。
     """
     if not chat_id or not sender_id:
         return None
+
+    def _sync_sender(record: QuantImChannel) -> QuantImChannel:
+        """核对并按需回写 receive_id / receive_id_type。"""
+        cfg = _json_loads(record.config_json, {}) or {}
+        if cfg.get("receive_id") == sender_id:
+            return record
+        cfg["receive_id"] = sender_id
+        cfg["receive_id_type"] = "open_id"
+        record.config_json = json.dumps(cfg, ensure_ascii=False)
+        record.updated_at = datetime.now()
+        record.save()
+        logger.info(
+            "[p2p-channel] 虚拟通道 sender_id 已更新 | id=%d | chat_id=%s | sender=%s",
+            record.id, chat_id, sender_id[:8],
+        )
+        return record
+
+    def _find_by_chat_id() -> Optional[QuantImChannel]:
+        for ch in list_im_channels(status="active", channel_type=CHANNEL_FEISHU_APP):
+            cfg = ch.get("config") or {}
+            if cfg.get("is_p2p_virtual") is True and cfg.get("inbound_chat_id") == chat_id:
+                return QuantImChannel.get_by_id(ch["id"])
+        return None
+
+    # 1) 按 chat_id 查已有虚拟通道（重命名后仍能命中）
+    matched = _find_by_chat_id()
+    if matched is not None:
+        logger.debug("[p2p-channel] 命中已注册虚拟通道 | id=%d | chat_id=%s", matched.id, chat_id)
+        return _sync_sender(matched).to_dict()
+
+    # 2) 没命中：新建
     name = f"{_P2P_VIRTUAL_CHANNEL_NAME_PREFIX}{chat_id}"
+    config = {
+        "inbound_chat_id": chat_id,
+        "receive_id": sender_id,
+        "receive_id_type": "open_id",
+        "is_p2p_virtual": True,
+    }
     try:
-        record = QuantImChannel.get_or_none(QuantImChannel.name == name)
-        if record is not None:
-            # 命中已存在：返回它的 dict（上层继续用）
-            logger.debug("[p2p-channel] 命中已注册虚拟通道 | name=%s | id=%d", name, record.id)
-            return record.to_dict()
-        config = {
-            "inbound_chat_id": chat_id,
-            "receive_id": sender_id,
-            "receive_id_type": "open_id",
-            "is_p2p_virtual": True,
-        }
         record = QuantImChannel.create(
             name=name,
             channel_type=CHANNEL_FEISHU_APP,
@@ -162,13 +190,21 @@ def _ensure_p2p_virtual_channel(chat_id: str, sender_id: str) -> Optional[dict]:
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
-        logger.info("[p2p-channel] 自动注册虚拟通道 | id=%d | name=%s | sender=%s", record.id, name, sender_id[:8])
+        logger.info(
+            "[p2p-channel] 自动注册虚拟通道 | id=%d | name=%s | sender=%s",
+            record.id, name, sender_id[:8],
+        )
         return record.to_dict()
     except IntegrityError:
-        # 极端并发：name 唯一约束撞上
-        logger.warning("[p2p-channel] 并发创建虚拟通道被唯一约束拦截，重读 | name=%s", name)
-        record = QuantImChannel.get_or_none(QuantImChannel.name == name)
-        return record.to_dict() if record else None
+        # 3) 并发兜底：name UNIQUE 撞了，按 chat_id 重读 + 回写 sender_id
+        logger.warning(
+            "[p2p-channel] name 冲突，按 chat_id 重读兜底 | name=%s | chat_id=%s",
+            name, chat_id,
+        )
+        matched = _find_by_chat_id()
+        if matched is not None:
+            return _sync_sender(matched).to_dict()
+        return None
     except Exception as exc:
         logger.exception("[p2p-channel] 自动注册虚拟通道失败 | name=%s | error=%s", name, exc)
         return None

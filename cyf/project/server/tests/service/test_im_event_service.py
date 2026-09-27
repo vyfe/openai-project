@@ -34,11 +34,21 @@ def _parsed(text, *, sender_id=P2P_SENDER, chat_id=P2P_CHAT, chat_type="p2p", me
 
 
 def _p2p_virtual_channels():
-    return list(
-        QuantImChannel.select().where(
-            QuantImChannel.name.startswith("p2p:")
-        )
-    )
+    """查出所有标记为 ``is_p2p_virtual`` 的通道（不再依赖 name 前缀）。
+
+    name 已经被用户重命名也无所谓——只要 ``config.is_p2p_virtual`` 为真
+    就视为虚拟通道。这才是"逻辑上的虚拟通道集合"。
+    """
+    import json as _json
+    result = []
+    for ch in QuantImChannel.select():
+        try:
+            cfg = _json.loads(ch.config_json or "{}")
+        except Exception:
+            continue
+        if cfg.get("is_p2p_virtual") is True:
+            result.append(ch)
+    return result
 
 
 def _build_sdk_data(message_id, chat_id, chat_type, text, sender_open_id):
@@ -80,6 +90,69 @@ class TestEnsureP2pVirtualChannel:
     def test_empty_chat_or_sender_returns_none(self):
         assert _ensure_p2p_virtual_channel("", P2P_SENDER) is None
         assert _ensure_p2p_virtual_channel(P2P_CHAT, "") is None
+
+    def test_rename_then_re_register_does_not_create_duplicate(self):
+        """回归用例：用户给虚拟通道重命名后，再次私聊不应重复注册。
+
+        旧实现以 ``name == "p2p:{chat_id}"`` 作为查找键，重命名后这条记录
+        对去重逻辑"不可见"，下一次私聊会再 create 一条，导致同一 chat_id
+        下出现多条等价 IM 通道记录。修复后查找键改为
+        ``config.inbound_chat_id``，重命名不影响去重。
+        """
+        from service.quant.im_channel_service import update_im_channel
+
+        first = _ensure_p2p_virtual_channel(P2P_CHAT, P2P_SENDER)
+        assert first is not None
+        original_id = first["id"]
+
+        # 用户在 UI 上把 name 改了
+        renamed = update_im_channel(original_id, name="我的私聊通道")
+        assert renamed["name"] == "我的私聊通道"
+        assert renamed["id"] == original_id
+
+        # 再次私聊：应命中已有记录，而不是 create 一条新的
+        second = _ensure_p2p_virtual_channel(P2P_CHAT, P2P_SENDER)
+        assert second is not None
+        assert second["id"] == original_id
+        assert second["name"] == "我的私聊通道"
+        # DB 里只有一条虚拟通道
+        assert len(_p2p_virtual_channels()) == 1
+
+    def test_sender_id_change_is_synced_back(self):
+        """回归用例：同一 chat_id 下 sender_id 变化应被回写到 receive_id。
+
+        旧实现命中已存在记录时直接 return，receive_id 会停留在第一次注册时
+        的旧值，导致 reply 发到错误的飞书账号。
+        """
+        new_sender = "ou_test_p2p_sender_changed"
+        first = _ensure_p2p_virtual_channel(P2P_CHAT, P2P_SENDER)
+        assert first["config"]["receive_id"] == P2P_SENDER
+
+        # 同 chat_id，新 sender_id 到达
+        second = _ensure_p2p_virtual_channel(P2P_CHAT, new_sender)
+        assert second is not None
+        assert second["id"] == first["id"]
+        # 关键断言：receive_id 必须已更新为新 sender_id
+        assert second["config"]["receive_id"] == new_sender
+        assert second["config"]["receive_id_type"] == "open_id"
+        # DB 里仍只有一条记录
+        assert len(_p2p_virtual_channels()) == 1
+
+    def test_rename_and_sender_id_change_combined(self):
+        """组合回归：重命名 + sender_id 变化同时发生，仍只命中一条记录且 sender_id 已更新。"""
+        from service.quant.im_channel_service import update_im_channel
+
+        first = _ensure_p2p_virtual_channel(P2P_CHAT, P2P_SENDER)
+        assert first is not None
+        update_im_channel(first["id"], name="量化助手私聊")
+
+        new_sender = "ou_test_p2p_sender_combo"
+        second = _ensure_p2p_virtual_channel(P2P_CHAT, new_sender)
+        assert second is not None
+        assert second["id"] == first["id"]
+        assert second["name"] == "量化助手私聊"
+        assert second["config"]["receive_id"] == new_sender
+        assert len(_p2p_virtual_channels()) == 1
 
 
 class TestResolveP2pAccess:

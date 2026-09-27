@@ -95,6 +95,16 @@ export function useStrategyIde() {
       if (indRes?.data) indicators.value = indRes.data as IndicatorSpec[]
       if (fnRes?.data) expressionMeta.value = fnRes.data as ExpressionMeta
       if (tmplRes?.data) templates.value = tmplRes.data as StrategyTemplate[]
+      // 新建空策略（indicators 为空且未加载模板）→ 默认启用 catalog 里全部指标，
+      // 写入 params 默认值。这样用户点开 IDE 就能直接看到 ma_5 / boll_lower_20 等输出可用。
+      if (form.rule_config.indicators.length === 0 && indicators.value.length > 0) {
+        const defaults = indicators.value.map(spec => {
+          const params: Record<string, any> = {}
+          for (const p of spec.params) params[p.name] = p.default
+          return { key: spec.key, params }
+        })
+        form.rule_config = { ...form.rule_config, indicators: defaults }
+      }
     } finally {
       loading.meta = false
     }

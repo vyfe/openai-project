@@ -8,6 +8,7 @@
       :placeholder="placeholder"
       class="quant-code-input expression-input__textarea"
       @input="onInput"
+      @focus="emit('focus', props.ruleId ?? null)"
     />
     <div v-if="errorText" class="expression-input__error">
       <el-icon><WarningFilled /></el-icon>
@@ -27,9 +28,10 @@ const props = defineProps<{
   error?: string
   rows?: number
   placeholder?: string
+  ruleId?: string | null
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [v: string] }>()
+const emit = defineEmits<{ 'update:modelValue': [v: string]; focus: [ruleId: string | null] }>()
 
 const text = ref(props.modelValue || '')
 

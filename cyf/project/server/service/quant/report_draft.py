@@ -113,10 +113,10 @@ def _build_template_draft(
     signal_lines = _top_signal_lines(bundle)
     draft = {
         "draft_version": REPORT_DRAFT_VERSION,
-        "title": f"{strategy['name']} · {run['trade_date']} 测试报告",
+        "title": f"{strategy['name']} · {run['trade_date']} 观测报告",
         "summary": [
             f"本次扫描 {run['symbols_total']} 个标的，通过 {run['signals_total']} 个。",
-            "当前报告为结构化测试报告，数值均来源于 AnalysisBundle，不依赖自由生成。",
+            "当前报告为结构化观测报告，数值均来源于 AnalysisBundle，不依赖自由生成。",
         ],
         "market_view": market_view,
         "signal_highlights": signal_lines or ["本次没有通过信号，建议检查数据是否完整或规则是否过严。"],
@@ -132,7 +132,7 @@ def _build_template_draft(
         "custom_sections": [],
         "footer_notes": footer_notes,
         "prompt_version": (bundle.get("prompt_version") or "template-v1"),
-        "disclaimer": "数值字段禁止由 LLM 自由生成；当前为模板化测试报告。",
+        "disclaimer": "数值字段禁止由 LLM 自由生成；当前为模板化观测报告。",
         "llm_status": llm_status,
         "model_name": bundle.get("model_name") or DEFAULT_REPORT_MODEL_NAME,
     }

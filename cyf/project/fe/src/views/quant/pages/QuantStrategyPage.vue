@@ -146,6 +146,7 @@
                 :indicator-outputs="ide.expandedIndicatorOutputs.value"
                 @update="(p) => ide.updateRule(rule.id, p)"
                 @remove="ide.removeRule(rule.id)"
+                @expr-focus="(ruleId) => (focusedRuleId = ruleId)"
               />
             </div>
 
@@ -375,18 +376,32 @@ function onAddRule() {
   ide.addRule()
 }
 
+// 当前焦点规则 id：用户点击哪条规则的表达式输入框，就往那里插入
+const focusedRuleId = ref<string | null>(null)
+
+function pickInsertTarget(): { id: string; expr: string } | null {
+  const rules = ide.form.rule_config.rules
+  if (!rules.length) return null
+  // 1) 优先：当前焦点规则
+  const focused = focusedRuleId.value
+        ? rules.find((r: any) => r.id === focusedRuleId.value)
+        : null
+  // 2) fallback：第一条规则
+  return focused ?? rules[0]
+}
+
 function onInsertExpr(text: string) {
-  // 帮用户把模板/示例片段拼到第一条规则；前后补空格（单次更新避免连续 emit 读到旧值）
-  if (!ide.form.rule_config.rules.length) {
+  // 把模板/示例片段拼到当前焦点规则；前后补空格（单次更新避免连续 emit 读到旧值）
+  const target = pickInsertTarget()
+  if (!target) {
     ide.addRule({ expr: text, label: '新规则' })
     return
   }
-  const first = ide.form.rule_config.rules[0]
-  const cur = first.expr || ''
+  const cur = target.expr || ''
   const sep = cur && !/[\s(]$/.test(cur) ? ' ' : ''
   let next = `${cur}${sep}${text}`
   if (!next.endsWith(' ')) next += ' '
-  ide.updateRule(first.id, { expr: next })
+  ide.updateRule(target.id, { expr: next })
 }
 
 function onGateUpdate(patch: any) {

@@ -317,6 +317,10 @@ function emitLabel(v: string) { emit('update', { label: v }) }
 function emitWeight(v: number | undefined) { emit('update', { weight: Number(v) || 1 }) }
 function emitExpr(v: string) { emit('update', { expr: v }) }
 
+function onExprFocus(ruleId: string | null) {
+  emit('expr-focus', ruleId)
+}
+
 function formatValue(v: any): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'number') {

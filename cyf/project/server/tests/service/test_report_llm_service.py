@@ -56,7 +56,7 @@ def _sample_bundle() -> dict:
 def _well_formed_draft() -> dict:
     """完全合规的 ReportDraft，所有数字都来自 _sample_bundle()。"""
     return {
-        "title": "均线突破 · 2026-09-02 测试报告",
+        "title": "均线突破 · 2026-09-02 观测报告",
         "summary": [
             "本次扫描 100 个标的，通过 3 个。",
             "数值均来源于 AnalysisBundle。",

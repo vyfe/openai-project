@@ -1,4 +1,4 @@
-"""LLM 改写量化测试报告 ReportDraft。
+"""LLM 改写量化观测报告 ReportDraft。
 
 复用 service/host_service.get_client_for_user + openai SDK，与 expr_llm_service 同模式。
 依赖：

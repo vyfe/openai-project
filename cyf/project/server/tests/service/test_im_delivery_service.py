@@ -41,10 +41,10 @@ class TestFeishuContentCard:
     """feishu_content_card 构造的 JSON 必须能被飞书接受：wide_screen_mode + plain_text header + markdown elements。"""
 
     def test_basic_schema(self):
-        payload = json.loads(feishu_content_card("测试报告", "# 标题\n\n- 条目 1\n- 条目 2"))
+        payload = json.loads(feishu_content_card("观测报告", "# 标题\n\n- 条目 1\n- 条目 2"))
         assert payload["config"] == {"wide_screen_mode": True}
         assert payload["header"]["title"]["tag"] == "plain_text"
-        assert payload["header"]["title"]["content"] == "测试报告"
+        assert payload["header"]["title"]["content"] == "观测报告"
         assert isinstance(payload["elements"], list) and len(payload["elements"]) == 1
         elem = payload["elements"][0]
         assert elem["tag"] == "markdown"
@@ -90,13 +90,13 @@ class TestSendFeishuCard:
             "service.quant.im_delivery_service.require_feishu_client",
             return_value=_fake_client(),
         ):
-            result = send_feishu_card(CHANNEL, "测试报告", "# 标题\n\n正文")
+            result = send_feishu_card(CHANNEL, "观测报告", "# 标题\n\n正文")
         assert result["message_type"] == "interactive"
         # request_payload 应当走 msg_type='interactive'
         assert result["request_payload"]["msg_type"] == "interactive"
         # content 应当是 JSON 字符串，能解析成卡片 schema
         content_dict = json.loads(result["request_payload"]["content"])
-        assert content_dict["header"]["title"]["content"] == "测试报告"
+        assert content_dict["header"]["title"]["content"] == "观测报告"
         assert content_dict["elements"][0]["tag"] == "markdown"
 
     def test_missing_receive_id_raises(self):
@@ -151,11 +151,11 @@ class TestSendChannelContent:
             "service.quant.im_delivery_service.require_feishu_client",
             return_value=_fake_client(),
         ) as fake_require:
-            result = send_channel_content(CHANNEL, "# 标题\n\n正文", title="测试报告")
+            result = send_channel_content(CHANNEL, "# 标题\n\n正文", title="观测报告")
         assert result["message_type"] == "interactive"
         fake_require.assert_called_once()
         content_dict = json.loads(result["request_payload"]["content"])
-        assert content_dict["header"]["title"]["content"] == "测试报告"
+        assert content_dict["header"]["title"]["content"] == "观测报告"
         # markdown 内容里的 # 标题直接由飞书 markdown 渲染，不会在 plain_text header 重复
         assert content_dict["elements"][0]["content"] == "# 标题\n\n正文"
 

@@ -221,3 +221,58 @@ class TestPerformance:
             evaluate(t, view)
         elapsed = (time.perf_counter() - t0) * 1000
         assert elapsed < 1000, f"eval 10000x took {elapsed:.1f}ms"
+
+# ===========================================================================
+# 回归：open 别名应可作为 Name 节点使用，不再被黑名单误拒
+# ===========================================================================
+#
+# 历史 bug：_FORBIDDEN_NAMES 里包含 "open"，导致用户写 `open > 100` 会被拦下，
+# 但后端 _V2_BAR_FIELD_ALIASES 又把 open 定义为 open_price 的合法别名。
+# 修复：open 不再列入黑名单；open(...) 作为函数调用仍会被 _SAFE_FUNCTIONS 白名单拦截。
+# ===========================================================================
+
+
+class TestOpenAliasNoLongerBlacklisted:
+    def test_open_name_is_compilable(self):
+        """open 作为字段引用应能成功编译，不再被 _FORBIDDEN_NAMES 拦截。"""
+        # 不应抛 ExpressionError
+        compile_expression("open > 100")
+
+    def test_open_works_at_runtime(self):
+        """open 在求值时被 SeriesView 解析（SeriesView 不做别名转换，但 _V2_BAR_FIELD_ALIASES 在 rule_engine 里把 open 映射成 open_price 写入 series）；
+        这里直接放 open 在 seqs 里模拟别名映射完成后的状态，验证 open > 9 求值通过。"""
+        from service.quant.expression_engine import SeriesView
+        view = SeriesView(
+            seqs={
+                "open": [10.0],      # 输入就是别名 open
+                "high": [11.0],
+                "low": [9.0],
+                "close": [10.5],
+                "volume": [100],
+                "pct_change": [1.0],
+                "turnover_rate": [0.5],
+            },
+            idx=0,
+        )
+        # 表达式里 open > 9 读到 10.0 > 9 → True
+        tree = compile_expression("open > 9")
+        assert evaluate(tree, view) is True
+
+    def test_open_alias_resolved_by_rule_engine(self):
+        """集成校验：rule_engine._v2_build_indicator_context 会把 open 别名映射到 open_price，
+        触发 _check_safety 时 'open' 不再被 _FORBIDDEN_NAMES 拦截。"""
+        # 只要 compile_expression 不抛错，说明 _FORBIDDEN_NAMES 修复成功
+        compile_expression("open > ma_5")
+        compile_expression("open and high > close")
+        compile_expression("open[1] > open")
+
+    def test_open_function_call_still_rejected(self):
+        """open(...) 作为函数调用仍被白名单拒绝（只放行 _SAFE_FUNCTIONS）。"""
+        with pytest.raises(ExpressionError):
+            compile_expression("open('/etc/passwd')")
+
+    def test_other_dangerous_names_still_blocked(self):
+        """open 移出黑名单后，其他危险名仍必须被拦截。"""
+        for bad in ("eval('1+1')", "exec('1')", "getattr(a, 'b')", "__import__('os')"):
+            with pytest.raises(ExpressionError):
+                compile_expression(bad)

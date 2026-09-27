@@ -93,7 +93,7 @@ class TestExecuteAnalysisReportFeishuChain:
     def test_runs_strategy_creates_report_and_pushes_via_card(self, fake_run):
         strategy_id = 10
         strategy_run = _fake_strategy_run(run_id=200, strategy_id=strategy_id, signals_total=3)
-        report = _fake_report(report_id=500, run_id=200, strategy_id=strategy_id, title="均线突破 · 2026-09-01 测试报告")
+        report = _fake_report(report_id=500, run_id=200, strategy_id=strategy_id, title="均线突破 · 2026-09-01 观测报告")
         channel = _fake_channel(channel_id=1)
 
         with patch(
@@ -131,7 +131,7 @@ class TestExecuteAnalysisReportFeishuChain:
         title_arg = call_args.kwargs["title"]
         markdown_arg = call_args.kwargs["markdown"]
         assert channel_arg["channel_id"] == 1
-        assert title_arg == "均线突破 · 2026-09-01 测试报告"
+        assert title_arg == "均线突破 · 2026-09-01 观测报告"
         # markdown 是 report 的 final_markdown，飞书会用 markdown 渲染
         assert "# 均线突破" in markdown_arg
         assert "- **信号 1**" in markdown_arg

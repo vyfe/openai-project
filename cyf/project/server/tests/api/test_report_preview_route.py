@@ -28,7 +28,7 @@ def fake_preview_result():
         },
         "draft": {
             "draft_version": "report-draft-v1",
-            "title": "均线突破 · 2026-09-02 测试报告",
+            "title": "均线突破 · 2026-09-02 观测报告",
             "summary": ["本次扫描 100 个标的，通过 3 个。"],
             "market_view": ["本次信号样本平均涨跌幅 2.1%，平均换手 1.5%。"],
             "signal_highlights": ["平安银行 得分 2.5，收盘 12.34，涨跌幅 2.1%：规则通过"],
@@ -39,7 +39,7 @@ def fake_preview_result():
             "llm_status": "success",
             "model_name": "gpt-5.6-luna",
         },
-        "markdown": "# 均线突破 · 2026-09-02 测试报告\n\n## 摘要\n\n- 本次扫描 100 个标的，通过 3 个。",
+        "markdown": "# 均线突破 · 2026-09-02 观测报告\n\n## 摘要\n\n- 本次扫描 100 个标的，通过 3 个。",
         "meta": {
             "prompt_template_id": 1,
             "prompt_version": "v1",

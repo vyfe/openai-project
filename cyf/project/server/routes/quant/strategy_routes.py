@@ -342,9 +342,9 @@ def quant_report_generate():
     try:
         params = _parse_report_request(get_request_data())
         result = create_report_for_run(**params)
-        return success_response(data=result, msg="测试报告生成成功")
+        return success_response(data=result, msg="观测报告生成成功")
     except Exception as exc:
-        return error_response(f"生成测试报告失败: {exc}")
+        return error_response(f"生成观测报告失败: {exc}")
 
 
 @bp.route("/report/preview", methods=["POST"])

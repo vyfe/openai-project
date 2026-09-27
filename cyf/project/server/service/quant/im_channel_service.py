@@ -83,8 +83,21 @@ def create_im_channel(
     return record.to_dict()
 
 
+# 系统标记字段白名单（``is_`` / ``_`` 开头），不应被前端 update payload 覆盖
+# 也即：normalize_channel_config 是白名单归一化，会丢掉这些字段，
+# 这里在规范化之前提取出来，规范化后合并回去，保证 _ensure_p2p_virtual_channel
+# 等后端自动写入的标记不会因为前端改名/编辑通道而被清掉。
+_CONFIG_PRESERVED_FLAG_KEYS = lambda cfg: {
+    k: v for k, v in (cfg or {}).items() if k.startswith("is_") or k.startswith("_")
+}
+
+
 def update_im_channel(channel_id: int, **updates) -> dict:
     record = QuantImChannel.get_by_id(channel_id)
+    # 提取 DB 现存 config 里的系统标记字段（防止被前端 payload 覆盖）
+    existing_config = json_loads(record.config_json, {}) or {}
+    preserved_flags = _CONFIG_PRESERVED_FLAG_KEYS(existing_config)
+
     next_channel_type = normalize_channel_type(updates.get("channel_type", record.channel_type))
     next_config = json_loads(updates.get("config", record.config_json), {}) if "config" in updates else json_loads(record.config_json, {})
     if "name" in updates:
@@ -92,7 +105,10 @@ def update_im_channel(channel_id: int, **updates) -> dict:
     if "channel_type" in updates:
         record.channel_type = next_channel_type
     if "config" in updates or "channel_type" in updates:
-        record.config_json = json.dumps(normalize_channel_config(next_channel_type, config=next_config), ensure_ascii=False)
+        normalized = normalize_channel_config(next_channel_type, config=next_config)
+        # 把系统标记字段合并回去
+        normalized.update(preserved_flags)
+        record.config_json = json.dumps(normalized, ensure_ascii=False)
     if "status" in updates:
         record.status = str(updates["status"] or "active").strip() or "active"
     if "mention_list" in updates:

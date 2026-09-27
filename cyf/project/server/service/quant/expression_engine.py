@@ -66,7 +66,9 @@ _ALLOWED_NODES: tuple[type, ...] = (
 
 _FORBIDDEN_NAMES: tuple[str, ...] = (
     "__import__", "eval", "exec", "compile", "globals", "locals",
-    "open", "input", "getattr", "setattr", "delattr", "vars", "dir",
+    # "open" 不再列入黑名单 —— 它是 _V2_BAR_FIELD_ALIASES 里的合法别名（open → open_price）。
+    # 之前误列导致用户写 open 表达式会被拦下，需要用 open_price 完整名绕开。已修复。
+    "input", "getattr", "setattr", "delattr", "vars", "dir",
     "class", "lambda", "yield", "await", "import",
 )
 

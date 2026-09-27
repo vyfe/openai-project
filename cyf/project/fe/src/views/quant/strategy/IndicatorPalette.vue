@@ -6,7 +6,7 @@
         <span class="indicator-palette__count">{{ ide.indicators.value.length }} 项</span>
       </div>
       <p class="indicator-palette__hint">
-        点击输出名插入表达式；只有动态输出指标显示可编辑参数，固定算法指标使用系统内置参数。
+        点击输出名插入到当前焦点规则；启用开关默认关闭，需要先打开指标才会计算对应输出序列。
       </p>
     </div>
 

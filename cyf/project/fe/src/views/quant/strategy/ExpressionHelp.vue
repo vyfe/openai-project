@@ -53,10 +53,12 @@
       <div class="expression-help__caveats">
         <strong>几个容易踩的坑：</strong>
         <ul>
+          <li><code>open</code> 不能用 —— 后端因与 Python 内置函数名冲突把它加入了黑名单。用 <code>open_price</code> 完整名替代（别名 <code>open</code> 暂时未生效）。</li>
           <li>变量名区分大小写：<code>close</code> 和 <code>CLOSE</code> 不是同一个。</li>
           <li>取前 1 根用 <code>x[1]</code> 或 <code>prev(x)</code>；下标必须是非负整数。</li>
           <li>字符串字面量要带双引号：<code>td_signal == "buy_setup_complete"</code>。</li>
           <li>复合门控（gate.mode=expr）只能引用规则 id，例如 <code>r1 and (r2 or r3)</code>。</li>
+          <li>所有指标输出（<code>ma_5</code> / <code>boll_lower_20</code> / <code>macd_dif</code> 等）都要先在「指标」面板里把对应指标启用，否则求值时序列为空。</li>
         </ul>
       </div>
     </div>
@@ -77,18 +79,26 @@ const emit = defineEmits<{ insert: [text: string] }>()
  *   "cross_up(${a}, ${b})"            → 点击插入 "cross_up(${a}, ${b})"
  *   "td_signal == \"${signal}\""      → 点击插入 "td_signal == \"${signal}\""
  */
+// 模板与后端 expression_engine.py / rule_engine.py 严格对齐。
+// - bar 字段别名见后端 _V2_BAR_FIELD_ALIASES
+// - 「禁用」见后端 _FORBIDDEN_NAMES
+// - 「白名单函数」见后端 _SAFE_FUNCTIONS
 const groups = [
   {
-    title: 'bar 字段（直接可用，无需替换）',
+    title: 'bar 字段（直接可用，无需前缀）',
     items: [
-      { tpl: 'close > ${threshold}', hint: '收盘价阈值；可用 open/high/low', note: 'threshold 填数字' },
-      { tpl: 'pct_change >= ${pct}', hint: '涨跌幅（百分比单位，如 2 表示 2%）', note: 'pct 填数字' },
-      { tpl: 'turnover_rate >= ${pct}', hint: '换手率（百分比单位）' },
-      { tpl: 'volume > ${vol}', hint: '成交量阈值' }
+      { tpl: 'close > ${threshold}', hint: '收盘价（可用别名 close）', note: 'threshold 填数字' },
+      { tpl: 'high > ${threshold}', hint: '最高价（可用别名 high）' },
+      { tpl: 'low > ${threshold}', hint: '最低价（可用别名 low）' },
+      { tpl: 'vol > ${vol}', hint: '成交量（可用别名 vol）' },
+      { tpl: 'amt > ${amount}', hint: '成交额（可用别名 amt）' },
+      { tpl: 'pct >= ${pct}', hint: '涨跌幅 %，如 2 表示 2%（可用别名 pct）' },
+      { tpl: 'turnover >= ${pct}', hint: '换手率 %（可用别名 turnover）' },
+      { tpl: 'close[1] < ${threshold}', hint: '下标访问前 1 根 close，0=当前、1=前 1 根', note: '等价于 prev(close)' }
     ]
   },
   {
-    title: 'MA / 均线（变量名要带窗口数字）',
+    title: 'MA 均线（需先在「指标」中启用 ma 指标）',
     items: [
       { tpl: 'close > ma_${window}', hint: '站上 N 日线', note: 'window 填 5/10/20/60 等' },
       { tpl: 'close < ma_${window}', hint: '跌破 N 日线' },
@@ -96,38 +106,48 @@ const groups = [
     ]
   },
   {
-    title: '量能 / 区间',
+    title: 'BOLL / MACD / KDJ（需先启用对应指标）',
     items: [
-      { tpl: 'vol_ratio_${window} >= ${ratio}', hint: '量比阈值', note: 'ratio 如 1.2' },
-      { tpl: 'period_return_${window} >= ${pct}', hint: 'N 日涨幅阈值', note: 'pct 百分比单位' },
-      { tpl: 'volume > avg(volume, ${n})', hint: '成交量大于近 n 根均值' }
+      { tpl: 'close < boll_lower_${window}', hint: 'BOLL 下轨：boll_lower_20 等', note: '需启用 boll' },
+      { tpl: 'macd_dif > macd_dea', hint: 'MACD 金叉：当前 DIF > DEA', note: '需启用 macd' },
+      { tpl: 'cross_up(${k}, ${d}) and ${k} < 30', hint: 'KDJ 超卖金叉（K<30 是 KDJ 输出）', note: '需启用 kdj' }
     ]
   },
   {
-    title: '突破 / 区间',
+    title: '量比 / 区间涨幅（需先启用对应指标）',
     items: [
-      { tpl: 'close > rolling_high_${window}', hint: '突破前 N 日最高（自动排除当日）' },
-      { tpl: 'close < rolling_low_${window}', hint: '跌破前 N 日最低' }
+      { tpl: 'vol_ratio_${window} >= ${ratio}', hint: '量比阈值，如 vol_ratio_5 ≥ 1.2', note: '需启用 vol_ratio' },
+      { tpl: 'period_return_${window} >= ${pct}', hint: 'N 日涨幅阈值（百分比单位）', note: '需启用 period_return' },
+      { tpl: 'vol > avg(vol, ${n})', hint: '成交量大于近 n 根均值', note: 'avg 会在序列上下文里求均值' }
     ]
   },
   {
-    title: '指标信号',
+    title: '突破 / 区间（需先启用 rolling_high_low 指标）',
     items: [
-      { tpl: 'cross_up(${a}, ${b})', hint: 'a 上穿 b（金叉）', note: '常用于 MACD/KDJ' },
-      { tpl: 'cross_down(${a}, ${b})', hint: 'a 下穿 b（死叉）' },
-      { tpl: 'cross_up(${k}, ${d}) and ${k} < 30', hint: 'KDJ 超卖金叉（K<30）' },
-      { tpl: 'td_signal == "${signal}"', hint: 'TD 序列特定信号', note: 'signal: buy_setup_complete / sell_setup_complete / bottom_divergence' },
-      { tpl: 'td_signal == "bottom_divergence" or bottom_divergence', hint: '底背离（任一信号触发即可）' }
+      { tpl: 'close > rolling_high_${window}', hint: '突破前 N 日最高（自动排除当日）', note: '如 rolling_high_20' },
+      { tpl: 'close < rolling_low_${window}', hint: '跌破前 N 日最低', note: '如 rolling_low_20' }
     ]
   },
   {
-    title: '白名单函数',
+    title: 'TD 序列 / 底背离（需先启用 td_sequential / bottom_structure）',
     items: [
-      { tpl: 'prev(${x})', hint: 'x 的前 1 根值' },
-      { tpl: 'ref(${x}, ${n})', hint: 'x 的前 n 根值' },
-      { tpl: 'avg(${x}, ${n})', hint: '当前及之前 n-1 根均值' },
+      { tpl: 'td_signal == "${signal}"', hint: 'TD 信号枚举', note: 'signal: buy_setup_complete / sell_setup_complete 等' },
+      { tpl: 'bottom_divergence', hint: '底背离信号触发', note: '需启用 bottom_structure' }
+    ]
+  },
+  {
+    title: '白名单函数（后端仅允许这些）',
+    items: [
+      { tpl: 'prev(${x})', hint: 'x 的前 1 根值，等价 x[1]' },
+      { tpl: 'ref(${x}, ${n})', hint: 'x 的前 n 根值，n 必须是常量' },
+      { tpl: 'avg(${x}, ${n})', hint: 'x 最近 n 根（含当前）的均值' },
       { tpl: 'abs(${x})', hint: '绝对值' },
-      { tpl: 'min(${a}, ${b}) / max(${a}, ${b})', hint: '极值，跳过 None' }
+      { tpl: 'min(${a}, ${b})', hint: '极小值，跳过 None' },
+      { tpl: 'max(${a}, ${b})', hint: '极大值，跳过 None' },
+      { tpl: 'cross_up(${a}, ${b})', hint: 'a 上穿 b（当前 a>b 且前一根 a≤b）' },
+      { tpl: 'cross_down(${a}, ${b})', hint: 'a 下穿 b' },
+      { tpl: 'any_(${a}, ${b})', hint: '任一为真（注意下划线，避免与 Python any 冲突）' },
+      { tpl: 'all_(${a}, ${b})', hint: '全部为真' }
     ]
   }
 ]

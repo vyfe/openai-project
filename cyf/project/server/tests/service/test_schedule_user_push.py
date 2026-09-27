@@ -58,7 +58,7 @@ def _create_report(content: str, report_key: str = "test_report") -> int:
         run_id=None,
         trade_date=datetime(2026, 9, 26).date(),
         report_type="test_report",
-        title="测试报告",
+        title="观测报告",
         prompt_version="v1",
         summary="[1] 摘要要点 A",
         market_view="市场整体震荡。",
@@ -84,7 +84,7 @@ def _create_report(content: str, report_key: str = "test_report") -> int:
     return record.id
 
 
-_SAMPLE_REPORT = """# 测试报告
+_SAMPLE_REPORT = """# 观测报告
 
 ## 摘要
 - [1] 摘要要点 A
@@ -122,7 +122,7 @@ class TestFilterReportBySymbols:
     def test_no_holdings_keeps_global_sections_only(self):
         out = filter_report_by_symbols(_SAMPLE_REPORT, set())
         # 保留：标题、摘要、市场观察、风险提示、契约说明
-        assert "# 测试报告" in out
+        assert "# 观测报告" in out
         assert "## 摘要" in out
         assert "## 市场观察" in out
         assert "## 风险提示" in out
