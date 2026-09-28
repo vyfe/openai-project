@@ -110,7 +110,7 @@
             </el-form>
             <el-form label-position="top">
               <el-form-item label="金额">
-                <el-input-number v-model="workbench.operationForm.amount" :min="0" :precision="2" :step="1000" class="quant-full-width" />
+                <el-input-number v-model="workbench.operationForm.amount" :min="0" :precision="2" :step="1000" disabled class="quant-full-width" />
               </el-form-item>
             </el-form>
           </div>

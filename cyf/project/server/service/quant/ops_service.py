@@ -155,8 +155,15 @@ def create_operation_record(
     return result_dict
 
 
-def update_operation_record(record_id: int, **updates) -> dict:
-    record = QuantOperationRecord.get_by_id(record_id)
+def _get_owned_operation(record_id: int, created_by: Optional[str]) -> QuantOperationRecord:
+    query = QuantOperationRecord.select().where(QuantOperationRecord.id == record_id)
+    if created_by is not None:
+        query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
+    return query.get()
+
+
+def update_operation_record(record_id: int, created_by: Optional[str] = None, **updates) -> dict:
+    record = _get_owned_operation(record_id, created_by)
     old_status = record.status
 
     if "strategy_id" in updates:
@@ -201,22 +208,29 @@ def update_operation_record(record_id: int, **updates) -> dict:
 
     record.updated_at = datetime.now()
     record.save()
-    # 状态变更触发持仓联动
+    # 持仓联动：先同步已有流水，再处理状态转换，保证同次修改的数量/价格一致。
     new_status = record.status
-    if "status" in updates and old_status != new_status:
-        try:
+    status_changed = "status" in updates and old_status != new_status
+    price_or_quantity_changed = any(key in updates for key in ("price", "quantity"))
+    try:
+        synced = 0
+        if price_or_quantity_changed:
+            synced = _sync_position_entries(record)
+        if status_changed:
             _apply_position_change(record, from_status=old_status, to_status=new_status)
-        except Exception as exc:
-            import logging
-            logging.getLogger("quant.ops").warning(
-                "operation_update_position_sync_failed | operation_id=%s | error=%s",
-                record_id, exc,
-            )
+        elif price_or_quantity_changed and synced == 0:
+            _backfill_missing_position_entry(record)
+    except Exception as exc:
+        import logging
+        logging.getLogger("quant.ops").warning(
+            "operation_update_position_sync_failed | operation_id=%s | error=%s",
+            record_id, exc,
+        )
     return record.to_dict()
 
 
-def delete_operation_record(record_id: int) -> bool:
-    record = QuantOperationRecord.get_by_id(record_id)
+def delete_operation_record(record_id: int, created_by: Optional[str] = None) -> bool:
+    record = _get_owned_operation(record_id, created_by)
     record.delete_instance()
     return True
 
@@ -225,6 +239,34 @@ def delete_operation_record(record_id: int) -> bool:
 def _reverse_side(side: str) -> str:
     """动作反向映射（用于反向计提）。"""
     return {"buy": "sell", "sell": "buy", "add": "reduce", "reduce": "add"}.get(side, "sell")
+
+
+def _sync_position_entries(record) -> int:
+    """同步已生成的持仓流水，并返回受影响的行数。"""
+    from service.quant.position_service import sync_position_entries_by_operation
+
+    # watch 动作本就不写持仓
+    if str(record.action or "").strip().lower() == "watch":
+        return 0
+    if not str(record.created_by or "").strip():
+        return 0
+
+    return sync_position_entries_by_operation(
+        record.id,
+        created_by=record.created_by,
+        price=record.price,
+        quantity=record.quantity,
+    )
+
+
+def _backfill_missing_position_entry(record) -> None:
+    """已执行操作此前因数量无效而未生成流水时，在数量有效后补建。"""
+    if str(record.action or "").strip().lower() == "watch":
+        return
+    if not str(record.created_by or "").strip():
+        return
+    if str(record.status or "").strip().lower() == "executed":
+        _apply_position_change(record, from_status=None, to_status="executed")
 
 
 def _apply_position_change(record, *, from_status, to_status):

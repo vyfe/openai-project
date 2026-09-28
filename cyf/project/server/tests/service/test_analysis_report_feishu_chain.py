@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -59,16 +60,21 @@ def _fake_channel(channel_id: int = 1) -> dict:
 
 
 def _patched_quant_report_record(report: dict):
-    """Patch service.quant.im_delivery_service.QuantReportRecord.get_by_id，让它返回 fake report。
+    """Patch 让两处 QuantReportRecord.get_by_id 都返回 fake record。
 
-    send_report_to_channel 内部会查 DB 取 title/final_markdown。集成测试不应该
-    写真实 record，改为 patch Model 让它返回构造好的 to_dict()。
+    im_delivery_service 是模块级 import，patch 模块属性即可。
+    schedule_user_push_service 是函数内 import（`from quant.entities import QuantReportRecord`），
+    所以要 patch quant.entities 模块属性，让函数调用时取到 fake model。
     """
     fake_record = MagicMock()
     fake_record.to_dict.return_value = report
+    fake_record.final_markdown = report.get("final_markdown", "")
     fake_model = MagicMock()
     fake_model.get_by_id.return_value = fake_record
-    return patch("service.quant.im_delivery_service.QuantReportRecord", fake_model)
+    stack = ExitStack()
+    stack.enter_context(patch("service.quant.im_delivery_service.QuantReportRecord", fake_model))
+    stack.enter_context(patch("quant.entities.QuantReportRecord", fake_model))
+    return stack
 
 
 @pytest.fixture

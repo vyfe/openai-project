@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Optional
 
 from peewee import fn
 
@@ -89,13 +90,13 @@ def _build_risk_tips(tasks: list[dict], latest_signals: list[dict], operations: 
     return tips[:4]
 
 
-def get_dashboard_overview() -> dict:
+def get_dashboard_overview(created_by: Optional[str] = None) -> dict:
     latest_trade_date = QuantDailyBar.select(fn.MAX(QuantDailyBar.trade_date)).scalar()
     active_strategy_count = QuantStrategy.select().where(QuantStrategy.status == "active").count()
     today = _today_text()
 
     tasks = list_tasks(limit=8)
-    operations = list_operation_records(limit=8)
+    operations = list_operation_records(created_by=created_by, limit=8)
     backtests = list_backtest_runs(limit=6)
     latest_runs = [
         item.to_dict()
@@ -115,7 +116,10 @@ def get_dashboard_overview() -> dict:
         ).iterator()
     ]
 
-    today_operations = QuantOperationRecord.select().where(QuantOperationRecord.trade_date == date.fromisoformat(today)).count()
+    today_operation_query = QuantOperationRecord.select().where(QuantOperationRecord.trade_date == date.fromisoformat(today))
+    if created_by is not None:
+        today_operation_query = today_operation_query.where(QuantOperationRecord.created_by == str(created_by).strip())
+    today_operations = today_operation_query.count()
     success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success").count()
     memory_files = list_memory_files(limit=6)
 

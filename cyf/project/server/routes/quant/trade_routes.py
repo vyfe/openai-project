@@ -39,9 +39,9 @@ def quant_positions_journal(user, password):
 @bp.route("/positions/journal/<int:entry_id>", methods=["GET"])
 @require_auth
 def quant_position_get(user, password, entry_id):
-    del user, password
+    del password
     try:
-        return success_response(data=get_position_entry(entry_id))
+        return success_response(data=get_position_entry(entry_id, created_by=user))
     except Exception as exc:
         return error_response(f"获取持仓流水失败: {exc}")
 
@@ -74,12 +74,12 @@ def quant_position_create(user, password):
 @bp.route("/positions/update", methods=["POST"])
 @require_auth
 def quant_position_update(user, password):
-    del user, password
+    del password
     try:
         data = get_request_data()
         entry_id = int(data.get("id"))
         updates = {key: data.get(key) for key in ("strategy_id", "run_id", "operation_id", "symbol", "side", "price", "quantity", "occurred_at", "source", "reason", "remark") if key in data}
-        return success_response(data=update_position_entry(entry_id, **updates), msg="持仓流水更新成功")
+        return success_response(data=update_position_entry(entry_id, created_by=user, **updates), msg="持仓流水更新成功")
     except Exception as exc:
         return error_response(f"更新持仓流水失败: {exc}")
 
@@ -87,10 +87,10 @@ def quant_position_update(user, password):
 @bp.route("/positions/delete", methods=["POST"])
 @require_auth
 def quant_position_delete(user, password):
-    del user, password
+    del password
     try:
         data = get_request_data()
-        delete_position_entry(int(data.get("id")))
+        delete_position_entry(int(data.get("id")), created_by=user)
         return success_response(msg="持仓流水删除成功")
     except Exception as exc:
         return error_response(f"删除持仓流水失败: {exc}")
@@ -99,7 +99,7 @@ def quant_position_delete(user, password):
 @bp.route("/operations/list", methods=["GET"])
 @require_auth
 def quant_operations_list(user, password):
-    del user, password
+    del password
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
     status = str(request.args.get("status", "")).strip() or None
@@ -119,6 +119,7 @@ def quant_operations_list(user, password):
                 result_status=result_status,
                 date_from=date_from,
                 date_to=date_to,
+                created_by=user,
                 limit=limit,
             )
         )
@@ -129,9 +130,9 @@ def quant_operations_list(user, password):
 @bp.route("/operations/get/<int:record_id>", methods=["GET"])
 @require_auth
 def quant_operations_get(user, password, record_id):
-    del user, password
+    del password
     try:
-        return success_response(data=get_operation_record(record_id))
+        return success_response(data=get_operation_record(record_id, created_by=user))
     except Exception as exc:
         return error_response(f"获取操作记录失败: {exc}")
 
@@ -175,7 +176,7 @@ def quant_operations_create(user, password):
 @bp.route("/operations/update", methods=["POST"])
 @require_auth
 def quant_operations_update(user, password):
-    del user, password
+    del password
     try:
         data = get_request_data()
         record_id = int(data.get("id"))
@@ -204,7 +205,7 @@ def quant_operations_update(user, password):
         }
         if "tags" in data:
             updates["tags"] = parse_json_list(data.get("tags")) if isinstance(data.get("tags"), str) else data.get("tags")
-        return success_response(data=update_operation_record(record_id, **updates), msg="操作记录更新成功")
+        return success_response(data=update_operation_record(record_id, created_by=user, **updates), msg="操作记录更新成功")
     except Exception as exc:
         return error_response(f"更新操作记录失败: {exc}")
 
@@ -212,11 +213,11 @@ def quant_operations_update(user, password):
 @bp.route("/operations/delete", methods=["POST"])
 @require_auth
 def quant_operations_delete(user, password):
-    del user, password
+    del password
     try:
         data = get_request_data()
         record_id = int(data.get("id"))
-        delete_operation_record(record_id)
+        delete_operation_record(record_id, created_by=user)
         return success_response(msg="操作记录删除成功")
     except Exception as exc:
         return error_response(f"删除操作记录失败: {exc}")

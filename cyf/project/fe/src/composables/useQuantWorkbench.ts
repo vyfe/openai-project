@@ -431,6 +431,18 @@ function createQuantWorkbench() {
     tagsText: ''
   })
 
+  // 金额由「成交价 × 数量」推导，任一项变化即重算，避免手填金额与成交价对不上
+  watch(
+    () => [operationForm.price, operationForm.quantity],
+    ([price, quantity]) => {
+      if (price === null || quantity === null) {
+        operationForm.amount = null
+        return
+      }
+      operationForm.amount = Math.round(price * quantity * 100) / 100
+    }
+  )
+
   const backtestForm = reactive({
     strategyId: null as number | null,
     dateRange: ['', ''] as [string, string],

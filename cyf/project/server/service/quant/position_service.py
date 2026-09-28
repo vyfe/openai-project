@@ -70,8 +70,15 @@ def list_position_journal(
     return [item.to_dict() for item in query.iterator()]
 
 
-def get_position_entry(entry_id: int) -> dict:
-    return QuantPositionJournal.get_by_id(entry_id).to_dict()
+def _get_owned_position(entry_id: int, created_by: Optional[str]) -> QuantPositionJournal:
+    query = QuantPositionJournal.select().where(QuantPositionJournal.id == entry_id)
+    if created_by is not None:
+        query = query.where(QuantPositionJournal.created_by == str(created_by).strip())
+    return query.get()
+
+
+def get_position_entry(entry_id: int, created_by: Optional[str] = None) -> dict:
+    return _get_owned_position(entry_id, created_by).to_dict()
 
 
 def create_position_entry(
@@ -178,8 +185,8 @@ def _create_new_position_backfill_task(symbol: str, created_by: str = "") -> dic
     )
 
 
-def update_position_entry(entry_id: int, **updates) -> dict:
-    record = QuantPositionJournal.get_by_id(entry_id)
+def update_position_entry(entry_id: int, created_by: Optional[str] = None, **updates) -> dict:
+    record = _get_owned_position(entry_id, created_by)
     if "strategy_id" in updates:
         record.strategy_id = _to_int(updates["strategy_id"])
     if "run_id" in updates:
@@ -210,10 +217,36 @@ def update_position_entry(entry_id: int, **updates) -> dict:
     return record.to_dict()
 
 
-def delete_position_entry(entry_id: int) -> bool:
-    record = QuantPositionJournal.get_by_id(entry_id)
-    record.delete_instance()
+def delete_position_entry(entry_id: int, created_by: Optional[str] = None) -> bool:
+    _get_owned_position(entry_id, created_by).delete_instance()
     return True
+
+
+def sync_position_entries_by_operation(
+    operation_id: int,
+    *,
+    created_by: str,
+    price,
+    quantity,
+) -> int:
+    """操作记录改价/改量后同步它已生成的持仓流水，使持仓成本价实时跟随。
+
+    正向与反向流水一并更新，避免打破 buy/sell 的数量对冲关系。
+    零数量操作不代表有效持仓，删除其自动生成流水。
+    """
+    if not operation_id or not str(created_by or "").strip():
+        return 0
+    criteria = (
+        (QuantPositionJournal.operation_id == int(operation_id))
+        & (QuantPositionJournal.created_by == str(created_by).strip())
+        & (QuantPositionJournal.source.in_(("operation_record", "operation_revoked")))
+    )
+    normalized_quantity = _to_int(quantity, default=0) or 0
+    if normalized_quantity <= 0:
+        return QuantPositionJournal.delete().where(criteria).execute()
+    return QuantPositionJournal.update(
+        price=_to_float(price), quantity=normalized_quantity, updated_at=datetime.now()
+    ).where(criteria).execute()
 
 
 def list_position_summary(strategy_id: Optional[int] = None, created_by: Optional[str] = None) -> list[dict]:

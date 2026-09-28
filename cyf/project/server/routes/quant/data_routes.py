@@ -43,8 +43,8 @@ bp = Blueprint("quant_data_routes", __name__, url_prefix="/never_guess_my_usage/
 @bp.route("/dashboard/overview", methods=["GET"])
 @require_auth
 def quant_dashboard_overview(user, password):
-    del user, password
-    return success_response(data=get_dashboard_overview())
+    del password
+    return success_response(data=get_dashboard_overview(created_by=user))
 
 
 @bp.route("/providers", methods=["GET"])
