@@ -43,7 +43,7 @@ def get_message_rules() -> List[MessageRule]:
 
 
 # ---- 内置规则：当前时间回显（priority 极高，兜底） ----
-@register_message_handler(r"^[时间|几点|现在几点].*", priority=15)
+@register_message_handler(r"^(?:时间|几点|现在几点|几点了).*", priority=15)
 def _time_query_handler(text: str, parsed: dict) -> Optional[tuple[str, str]]:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return "time_query", f"⏰ 当前时间：{now}"

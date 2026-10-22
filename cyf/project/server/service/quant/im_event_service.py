@@ -22,7 +22,9 @@ from service.quant.binding_service import get_username_by_feishu, is_feishu_boun
 from service.quant.im_channel_service import list_im_channels
 from service.quant.im_delivery_service import reply_feishu_text as _reply_feishu_text, render_position_summary_markdown
 from service.quant.im_helpers import CHANNEL_FEISHU_APP, json_loads as _json_loads, to_bool as _to_bool, truncate_text as _truncate_text
+from service.quant.im_help_text import bind_in_group_notice, group_bind_guide, help_text, p2p_bind_guide
 from service.quant.im_operation_service import handle_operation_command
+from service.quant.im_pool_service import handle_pool_command
 from service.quant.im_rules import _message_rules, register_message_handler  # noqa: F401
 from service.quant.position_service import create_position_entry
 
@@ -212,13 +214,7 @@ def _ensure_p2p_virtual_channel(chat_id: str, sender_id: str) -> Optional[dict]:
 
 def _p2p_bind_guide_text() -> str:
     """私聊未绑定用户的 bind 引导文案。"""
-    return (
-        "👋 欢迎使用量化助手！\n\n"
-        "您还未绑定慧聊账号，请先绑定：\n\n"
-        "  /bind {用户名} {密码}\n\n"
-        "示例：/bind admin mypassword123\n\n"
-        "绑定后回复「帮助」可查看完整命令列表。"
-    )
+    return p2p_bind_guide()
 
 
 def _resolve_p2p_access(parsed: dict) -> tuple[Optional[dict], str]:
@@ -251,62 +247,8 @@ def _resolve_p2p_access(parsed: dict) -> tuple[Optional[dict], str]:
     return None, "unbound_guide"
 
 
-_HELP_HINT_INSTRUMENT = (
-    "提示：股票识别支持「代码」(如 600519、002837、600519.SH) 或「股票名」(如 贵州茅台)，"
-    "前提是已在「数据中心」加入股票池；不在池中会报错并拒绝。"
-)
-
-
 def _feishu_help_text() -> str:
-    return "\n".join(
-        [
-            "═══════════════════════════════",
-            "量化助手 · 命令一览",
-            "═══════════════════════════════",
-            "通用规则：",
-            "  · 分隔符「,」「，」「空格」任选，可混合",
-            "  · 股票可填代码或名称（须先加入股票池）",
-            "",
-            "【基础命令】",
-            "1. 帮助 — 查看本说明",
-            "2. 持仓 — 返回当前持仓快照",
-            "3. 报告 — 返回最近一份量化报告",
-            "",
-            "【登记交易】直接入库，无需二次确认",
-            "4. 买,股票,数量,价格,备注",
-            "   示例：买,贵州茅台,100,1688,突破年线",
-            "5. 卖,股票,数量,价格,备注",
-            "   示例：卖,002837,200,12,止损",
-            "",
-            "【已执行】动作前缀加「已」= 状态自动为「已执行」",
-            "   已买/已卖/已加仓/已减仓/已观察",
-            "   示例：已买,贵州茅台,100,1688,突破年线  ≡ 买,贵州茅台,100,1688,突破年线,已执行",
-            "",
-            "【自定义交易日】在「价格」前加 8 位日期 YYYYMMDD",
-            "6. 买,股票,日期,数量,价格,备注",
-            "   示例：买,002837,20260920,200,12,补仓",
-            "   日期不是今天时，自动写入操作记录（QuantOperationRecord），",
-            "   便于「操作历史」查询。",
-            "",
-            "【可选字段】在「备注」之后追加，依次识别：",
-            "  状态：草稿/已执行/已结束/已取消（默认草稿）",
-            "  标签：用 / 或 , 分隔多个，如 趋势仓/观察仓",
-            "  完整示例：买,002837,200,12,20260920,补仓,已执行,趋势仓/观察仓",
-            "  注：显式指定的状态会覆盖「已X」自动标记",
-            "      如：已买,X,100,10,备注,已结束 → status=已结束（不是已执行）",
-            "",
-            "【查询】",
-            "7. 操作历史 [过滤] — 按过滤条件查本人操作记录",
-            "   过滤：今天 / 近7天 / YYYYMMDD / 股票代码 / 状态 / 动作",
-            "   示例：操作历史 近7天 002837",
-            "",
-            "【账号绑定】（仅私聊）",
-            "8. /bind {用户名} {密码} — 绑定飞书账号到慧聊用户",
-            "   /unbind — 解绑    /whoami — 查询当前绑定",
-            "",
-            _HELP_HINT_INSTRUMENT,
-        ]
-    )
+    return help_text()
 
 
 def _latest_report_text() -> str:
@@ -344,11 +286,8 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
     if not side:
         return None
     # 股票池校验（精确匹配 symbol/code/name/custom_name）
-    try:
-        from service.quant.im_operation_service import _resolve_symbol_in_pool
-        instrument = _resolve_symbol_in_pool(tokens[1])
-    except ValueError:
-        raise
+    from service.quant.im_operation_service import _require_bound_user, _resolve_symbol_in_pool
+    instrument = _resolve_symbol_in_pool(tokens[1])
     symbol = instrument["symbol"]
     quantity = _parse_number_token(tokens[2], as_int=True)
     if not quantity or quantity <= 0:
@@ -366,21 +305,45 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
         source="feishu_im",
         reason="飞书对话录入",
         remark=remark,
-        created_by=f"feishu:{sender_id}",
+        # 必须用绑定后的用户名：持仓查询/汇总按 created_by=username 过滤，
+        # 写 feishu:{sender_id} 会让飞书登记的持仓在「持仓」命令里查不到
+        created_by=_require_bound_user({"sender_id": sender_id}),
     )
     return entry
+
+
+# 群聊未绑定时仍放行的只读命令：这几条不触碰任何用户私有数据
+_GROUP_PUBLIC_COMMANDS = {"帮助", "菜单", "说明", "help", "时间", "几点", "现在几点", "报告", "最新报告", "日报", "report", "latestreport"}
+
+
+def _is_group_chat(parsed: dict) -> bool:
+    return str(parsed.get("chat_type") or "").lower() not in ("p2p", "private")
 
 
 def _route_feishu_command(text: str, parsed: dict, event_record_id: int) -> tuple[str, str]:
     command_text = str(text or "").strip()
     if not command_text:
         return "help", _feishu_help_text()
+
+    # 群聊未绑定：除只读命令外一律引导去私聊绑定，避免后面各命令抛「未绑定」这种
+    # 用户看不懂的错，也避免群里有人拿别人的口径试命令
+    if _is_group_chat(parsed) and not is_feishu_bound(parsed.get("sender_id") or ""):
+        if _P2P_BIND_CMD_RE.match(command_text):
+            return "bind_in_group", bind_in_group_notice()
+        normalized = command_text.lower().replace(" ", "").lstrip("/")
+        if normalized not in _GROUP_PUBLIC_COMMANDS:
+            return "group_unbound_guide", group_bind_guide()
+        # 只读命令继续往下走正常流程
+
     for rule in _message_rules:
         if rule.pattern.search(command_text):
             result = rule.handler(command_text, parsed)
             if result is not None:
                 logger.debug("[rule-engine] 命中规则 | name=%s | text=%s", rule.name, command_text[:60])
                 return result
+    pool_result = handle_pool_command(command_text, parsed)
+    if pool_result is not None:
+        return pool_result
     operation_result = handle_operation_command(command_text, parsed, event_record_id)
     if operation_result is not None:
         return operation_result
@@ -390,7 +353,7 @@ def _route_feishu_command(text: str, parsed: dict, event_record_id: int) -> tupl
     if compact in ("持仓", "持仓摘要", "仓位", "position", "positions"):
         created_by = get_username_by_feishu(parsed.get("sender_id", "") or "") or ""
         if not created_by:
-            return "auth_error", "请先在私聊中完成飞书账号绑定，再查询持仓。"
+            return "auth_error", "请先私聊机器人发送 /bind 完成绑定，再查询持仓。"
         return "position_summary", render_position_summary_markdown(created_by=created_by)
     if compact in ("报告", "最新报告", "日报", "report", "latestreport"):
         return "latest_report", _latest_report_text()

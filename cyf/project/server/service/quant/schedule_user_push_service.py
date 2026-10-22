@@ -12,7 +12,7 @@ from typing import Optional
 
 from service.quant.channel_user_resolver import resolve_channel_user
 from service.quant.im_channel_service import load_channel
-from service.quant.im_delivery_service import send_feishu_text
+from service.quant.im_delivery_service import send_channel_content
 from service.quant.position_service import list_position_summary
 
 
@@ -22,15 +22,52 @@ _MEMORY_SECTION = "## 记忆引用"
 _KEEP_SECTIONS = {"## 摘要", "## 市场观察", "## 风险提示", "## 契约说明"}
 
 
+def _deliver(channel: dict, report: dict, content: str, title: str) -> dict:
+    """推一份报告并落审计记录。
+
+    成功/失败都要返回一条 delivery：失败的 status='failed'，调用方据此
+    统计「推了几条」而不是「成功几条」，否则失败会静默消失、无从排查。
+    """
+    from service.quant.im_delivery_service import create_delivery_record
+
+    try:
+        result = send_channel_content(channel, content, title=title)
+        return create_delivery_record(
+            report_id=report.get("id"),
+            run_id=report.get("run_id"),
+            channel_id=channel.get("channel_id"),
+            channel_type=channel.get("channel_type") or "feishu_app",
+            channel_target=channel.get("channel_target") or "",
+            message_type=result.get("message_type") or "interactive",
+            status="success",
+            request_payload=result.get("request_payload"),
+            response_payload=result.get("response_payload"),
+            sent_at=datetime.now(),
+        )
+    except Exception as exc:
+        return create_delivery_record(
+            report_id=report.get("id"),
+            run_id=report.get("run_id"),
+            channel_id=channel.get("channel_id") if channel else None,
+            channel_type=(channel.get("channel_type") or "feishu_app") if channel else "feishu_app",
+            channel_target=(channel.get("channel_target") or "") if channel else "",
+            message_type="interactive",
+            status="failed",
+            error_message=str(exc),
+            sent_at=datetime.now(),
+        )
+
+
 def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> list[dict]:
     """单人级 demo：复用同一份报告，按 channel 绑定用户的持仓过滤标的。
 
-    返回每个 channel 的推送结果。
+    返回每个 channel 的推送结果。``delivery`` 恒为一条审计记录（成功或失败）。
     """
     from quant.entities import QuantReportRecord
 
-    report = QuantReportRecord.get_by_id(report_id)
-    base_markdown = report.final_markdown or ""
+    report = QuantReportRecord.get_by_id(report_id).to_dict()
+    base_markdown = report.get("final_markdown") or ""
+    report_title = str(report.get("title") or "量化报告").strip() or "量化报告"
 
     results = []
     for cid in (channel_ids or []):
@@ -43,12 +80,11 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
             # 群聊 / 无绑定用户：推全量报告（保持现有行为）
             try:
                 channel = load_channel(channel_id=int(cid))
-                delivery = send_feishu_text(channel=channel, content=base_markdown)
             except Exception as exc:
                 results.append({
                     "channel_id": cid,
                     "username": None,
-                    "delivery": None,
+                    "delivery": _deliver(None, report, base_markdown, report_title),
                     "filter_applied": False,
                     "error": str(exc),
                 })
@@ -56,7 +92,8 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
             results.append({
                 "channel_id": cid,
                 "username": None,
-                "delivery": delivery,
+                # 走 interactive 卡片：飞书渲染 markdown，而不是把源码当纯文本甩出来
+                "delivery": _deliver(channel, report, base_markdown, report_title),
                 "filter_applied": False,
             })
             continue
@@ -68,7 +105,7 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
             results.append({
                 "channel_id": cid,
                 "username": user_info["username"],
-                "delivery": None,
+                "delivery": _deliver(None, report, base_markdown, report_title),
                 "filter_applied": True,
                 "error": f"position_query_failed: {exc}",
             })
@@ -88,12 +125,11 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
 
         try:
             channel = load_channel(channel_id=int(cid))
-            delivery = send_feishu_text(channel=channel, content=content)
         except Exception as exc:
             results.append({
                 "channel_id": cid,
                 "username": user_info["username"],
-                "delivery": None,
+                "delivery": _deliver(None, report, content, report_title),
                 "filter_applied": True,
                 "held_symbols": sorted(held_symbols),
                 "error": str(exc),
@@ -103,7 +139,7 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
         results.append({
             "channel_id": cid,
             "username": user_info["username"],
-            "delivery": delivery,
+            "delivery": _deliver(channel, report, content, report_title),
             "filter_applied": True,
             "held_symbols": sorted(held_symbols),
         })

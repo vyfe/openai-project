@@ -18,17 +18,16 @@ from service.quant.indicator_service import (
 )
 from service.quant import indicator_registry as ireg
 from service.quant.name_refresh_service import refresh_instrument_names
-from service.quant.position_service import enqueue_position_backfill_task
+from service.quant.position_service import DEFAULT_BACKFILL_DAYS, enqueue_position_backfill_task
 from service.quant.provider_factory import list_supported_providers
 from service.quant.query_service import fetch_daily_bars, fetch_minute_bars, fetch_weekly_bars
 from service.quant.common import (
-    infer_exchange,
-    normalize_code,
     normalize_symbol,
     parse_trade_date,
     parse_trade_datetime,
 )
 from service.quant.symbol_search_service import search_symbols_fallback
+from service.quant.instrument_pool_service import upsert_instrument
 from service.quant.instrument_display_service import (
     clear_custom_name as clear_instrument_custom_name,
     list_instruments_with_display_name,
@@ -109,7 +108,7 @@ def quant_data_backfill(user, password):
         result = enqueue_position_backfill_task(
             symbols=symbols,
             created_by=user,
-            lookback_days=int(data.get("lookback_days", 730) or 730),
+            lookback_days=int(data.get("lookback_days", DEFAULT_BACKFILL_DAYS) or DEFAULT_BACKFILL_DAYS),
             provider=str(data.get("provider", "auto")).strip() or "auto",
             adjust_flag=str(data.get("adjust_flag", "qfq")).strip() or "qfq",
             lease_seconds=int(data.get("lease_seconds", 600) or 600),
@@ -146,55 +145,13 @@ def quant_symbol_upsert():
         raw_symbol = str(data.get("symbol") or data.get("code") or "").strip()
         if not raw_symbol:
             return error_response("symbol 不能为空")
-
-        symbol = normalize_symbol(raw_symbol)
-        code = normalize_code(symbol)
-        exchange = str(data.get("exchange") or infer_exchange(symbol)).strip().upper()
-        name = str(data.get("name") or "").strip()
-        source = str(data.get("source") or "manual").strip() or "manual"
-        now = datetime.now()
-        payload = {
-            "symbol": symbol,
-            "code": code,
-            "exchange": exchange,
-            "market": "A_SHARE",
-            "name": name,
-            "source": source,
-            "status": "active",
-            "created_at": now,
-            "updated_at": now,
-        }
-        QuantInstrument.insert(payload).on_conflict(
-            conflict_target=[QuantInstrument.symbol],
-            update={
-                QuantInstrument.code: code,
-                QuantInstrument.exchange: exchange,
-                QuantInstrument.market: "A_SHARE",
-                QuantInstrument.name: name,
-                QuantInstrument.source: source,
-                QuantInstrument.status: "active",
-                QuantInstrument.updated_at: now,
-            },
-        ).execute()
-        saved = QuantInstrument.get(QuantInstrument.symbol == symbol)
-        # 返回 dict 同步带 custom_name + display_name，前端保存后无需再查一遍
-        from service.quant.instrument_display_service import resolve_display_name
-        saved_name = saved.name or ""
-        saved_custom = saved.custom_name or ""
-        return success_response(
-            data={
-                "symbol": saved.symbol,
-                "code": saved.code,
-                "exchange": saved.exchange,
-                "market": saved.market,
-                "name": saved_name,
-                "custom_name": saved_custom,
-                "display_name": resolve_display_name(saved.symbol, saved_custom, saved_name),
-                "source": saved.source,
-                "status": saved.status,
-            },
-            msg="股票池已更新",
+        saved = upsert_instrument(
+            raw_symbol,
+            name=str(data.get("name") or "").strip(),
+            source=str(data.get("source") or "manual").strip() or "manual",
+            exchange=str(data.get("exchange") or "").strip(),
         )
+        return success_response(data=saved, msg="股票池已更新")
     except Exception as exc:
         return error_response(f"保存股票失败: {exc}")
 

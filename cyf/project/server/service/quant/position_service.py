@@ -7,6 +7,9 @@ from quant.entities import QuantDailyBar, QuantPositionJournal
 from service.quant.common import normalize_symbol
 from service.quant.task_dispatch_service import create_fetch_bars_task
 
+# 日线回补默认窗口：约 6 个月，覆盖常见中期均线/趋势判断所需的历史
+DEFAULT_BACKFILL_DAYS = 180
+
 
 def _parse_occurred_at(value) -> datetime:
     if isinstance(value, datetime):
@@ -134,9 +137,9 @@ def create_position_entry(
     return record.to_dict()
 
 
-def _build_backfill_window(lookback_days: int = 730) -> tuple[str, str]:
+def _build_backfill_window(lookback_days: int = DEFAULT_BACKFILL_DAYS) -> tuple[str, str]:
     end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=max(30, int(lookback_days or 730)))
+    start_date = end_date - timedelta(days=max(30, int(lookback_days or DEFAULT_BACKFILL_DAYS)))
     return start_date.isoformat(), end_date.isoformat()
 
 
@@ -144,7 +147,7 @@ def enqueue_position_backfill_task(
     *,
     symbols: list[str],
     created_by: str = "",
-    lookback_days: int = 730,
+    lookback_days: int = DEFAULT_BACKFILL_DAYS,
     provider: str = "auto",
     adjust_flag: str = "qfq",
     lease_seconds: int = 600,
@@ -180,7 +183,7 @@ def _create_new_position_backfill_task(symbol: str, created_by: str = "") -> dic
     return enqueue_position_backfill_task(
         symbols=[symbol],
         created_by=created_by,
-        lookback_days=730,
+        lookback_days=DEFAULT_BACKFILL_DAYS,
         note="backfill:new_position",
     )
 

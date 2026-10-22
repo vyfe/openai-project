@@ -60,15 +60,14 @@ def _fake_channel(channel_id: int = 1) -> dict:
 
 
 def _patched_quant_report_record(report: dict):
-    """Patch 让两处 QuantReportRecord.get_by_id 都返回 fake record。
+    """Patch QuantReportRecord.get_by_id，让它返回 fake record。
 
-    im_delivery_service 是模块级 import，patch 模块属性即可。
-    schedule_user_push_service 是函数内 import（`from quant.entities import QuantReportRecord`），
-    所以要 patch quant.entities 模块属性，让函数调用时取到 fake model。
+    两处都要覆盖：im_delivery_service 是模块级 import（patch 模块属性），
+    schedule_user_push_service 是函数内 import（patch 源模块 quant.entities 才对）。
+    生产代码统一走 .to_dict() 取 title/final_markdown，所以只需配好 to_dict。
     """
     fake_record = MagicMock()
     fake_record.to_dict.return_value = report
-    fake_record.final_markdown = report.get("final_markdown", "")
     fake_model = MagicMock()
     fake_model.get_by_id.return_value = fake_record
     stack = ExitStack()
@@ -109,7 +108,7 @@ class TestExecuteAnalysisReportFeishuChain:
             "service.quant.schedule_execution_service.create_report_for_run",
             return_value=report,
         ), patch(
-            "service.quant.im_delivery_service.load_channel",
+            "service.quant.schedule_user_push_service.load_channel",
             return_value=channel,
         ), _patched_quant_report_record(report), patch(
             "service.quant.im_delivery_service.send_feishu_card",
@@ -161,7 +160,7 @@ class TestExecuteAnalysisReportFeishuChain:
             "service.quant.schedule_execution_service.create_report_for_run",
             return_value=report,
         ), patch(
-            "service.quant.im_delivery_service.load_channel",
+            "service.quant.schedule_user_push_service.load_channel",
             side_effect=lambda channel_id=None: channels[channel_id - 1],
         ), _patched_quant_report_record(report), patch(
             "service.quant.im_delivery_service.send_feishu_card",
@@ -212,7 +211,7 @@ class TestExecuteAnalysisReportFeishuChain:
             "service.quant.schedule_execution_service.create_report_for_run",
             return_value=report,
         ), patch(
-            "service.quant.im_delivery_service.load_channel",
+            "service.quant.schedule_user_push_service.load_channel",
             side_effect=lambda channel_id=None: channels[channel_id - 1],
         ), _patched_quant_report_record(report), patch(
             "service.quant.im_delivery_service.send_feishu_card",

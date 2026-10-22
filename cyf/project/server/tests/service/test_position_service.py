@@ -1,10 +1,14 @@
 """position_service 集成测试 — 验证持仓流水 CRUD 和汇总逻辑。"""
 
-from datetime import datetime
+from datetime import date, datetime
+from unittest.mock import patch
 
 import pytest
 
 from service.quant.position_service import (
+    DEFAULT_BACKFILL_DAYS,
+    _build_backfill_window,
+    _create_new_position_backfill_task,
     create_position_entry,
     list_position_journal,
     list_position_summary,
@@ -135,3 +139,31 @@ class TestDeletePositionEntry:
         delete_position_entry(entry["id"])
         result = list_position_journal()
         assert len(result) == 0
+
+
+class TestBackfillWindow:
+    """日线回补默认窗口 = 6 个月。"""
+
+    def test_default_lookback_is_180_days(self):
+        assert DEFAULT_BACKFILL_DAYS == 180
+
+    def test_window_spans_about_six_months(self):
+        start, end = _build_backfill_window()
+        span = (date.fromisoformat(end) - date.fromisoformat(start)).days
+        assert 175 <= span <= 180
+
+    def test_explicit_lookback_overrides(self):
+        start, end = _build_backfill_window(30)
+        span = (date.fromisoformat(end) - date.fromisoformat(start)).days
+        assert span == 30
+
+    def test_new_position_backfill_uses_default(self):
+        with patch(
+            "service.quant.position_service.create_fetch_bars_task",
+            return_value={"id": 1},
+        ) as spy:
+            _create_new_position_backfill_task("600519.SH", "test_admin")
+        assert spy.call_args.kwargs["end_date"] == datetime.now().date().isoformat()
+        start = date.fromisoformat(spy.call_args.kwargs["start_date"])
+        span = (datetime.now().date() - start).days
+        assert 175 <= span <= 180

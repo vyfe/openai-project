@@ -1,6 +1,6 @@
 import configparser
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -63,6 +63,13 @@ class Settings:
     web_search_max_page_chars: int = 4000
     web_search_max_context_chars: int = 16000
     web_search_max_download_bytes: int = 1048576
+    # MiniMax 语音使用独立凭据，不回退到聊天 API Key。
+    minimax_api_key: str = field(default="", repr=False)
+    minimax_region: str = "cn"
+    minimax_key_kind: str = "token_plan"
+    minimax_model: str = "speech-2.8-hd"
+    minimax_timeout_seconds: int = 180
+    minimax_storage_dir: str = "voice_data"
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -143,6 +150,12 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         web_search_max_page_chars=int(tools_conf.get("web_search_max_page_chars", "4000")),
         web_search_max_context_chars=int(tools_conf.get("web_search_max_context_chars", "16000")),
         web_search_max_download_bytes=int(tools_conf.get("web_search_max_download_bytes", "1048576")),
+        minimax_api_key=os.environ.get("MINIMAX_API_KEY", "").strip() or _get_str(conf, "minimax", "api_key").strip(),
+        minimax_region=_get_str(conf, "minimax", "region", "cn"),
+        minimax_key_kind=_get_str(conf, "minimax", "key_kind", "token_plan"),
+        minimax_model=_get_str(conf, "minimax", "model", "speech-2.8-hd"),
+        minimax_timeout_seconds=int(_get_str(conf, "minimax", "timeout_seconds", "180")),
+        minimax_storage_dir=_get_str(conf, "minimax", "storage_dir", "voice_data"),
     )
 
 

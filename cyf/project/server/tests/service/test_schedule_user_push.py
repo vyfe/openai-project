@@ -179,8 +179,8 @@ class TestPushReportFilteredPerChannel:
         report_id = _create_report(_SAMPLE_REPORT)
 
         with patch(
-            "service.quant.schedule_user_push_service.send_feishu_text",
-            return_value={"message_type": "text", "request_payload": {}, "response_payload": {"code": 0}},
+            "service.quant.schedule_user_push_service.send_channel_content",
+            return_value={"message_type": "interactive", "request_payload": {}, "response_payload": {"code": 0}},
         ) as mock_send:
             results = push_report_filtered_per_channel([channel.id], report_id)
 
@@ -190,8 +190,8 @@ class TestPushReportFilteredPerChannel:
         assert result["username"] == "test_admin"
         assert "600519.SH" in result["held_symbols"]
         # 推送内容应包含持仓 + 报告（过滤后）
-        _, kwargs = mock_send.call_args
-        sent_content = kwargs["content"]
+        # send_channel_content(channel, content, title=...) — content 是第 2 个位置参数
+        sent_content = mock_send.call_args.args[1]
         assert "test_admin 当前持仓" in sent_content
         assert "## 信号概览" in sent_content
         assert "600519.SH 出现买入信号" in sent_content
@@ -208,8 +208,8 @@ class TestPushReportFilteredPerChannel:
         report_id = _create_report(_SAMPLE_REPORT)
 
         with patch(
-            "service.quant.schedule_user_push_service.send_feishu_text",
-            return_value={"message_type": "text", "request_payload": {}, "response_payload": {"code": 0}},
+            "service.quant.schedule_user_push_service.send_channel_content",
+            return_value={"message_type": "interactive", "request_payload": {}, "response_payload": {"code": 0}},
         ) as mock_send:
             results = push_report_filtered_per_channel([channel.id], report_id)
 
@@ -218,8 +218,8 @@ class TestPushReportFilteredPerChannel:
         assert result["filter_applied"] is False
         assert result["username"] is None
         # 内容应等于原报告
-        _, kwargs = mock_send.call_args
-        sent_content = kwargs["content"]
+        # send_channel_content(channel, content, title=...) — content 是第 2 个位置参数
+        sent_content = mock_send.call_args.args[1]
         assert sent_content == _SAMPLE_REPORT
 
     def test_user_with_no_positions_gets_market_only(
@@ -231,14 +231,14 @@ class TestPushReportFilteredPerChannel:
         report_id = _create_report(_SAMPLE_REPORT)
 
         with patch(
-            "service.quant.schedule_user_push_service.send_feishu_text",
-            return_value={"message_type": "text", "request_payload": {}, "response_payload": {"code": 0}},
+            "service.quant.schedule_user_push_service.send_channel_content",
+            return_value={"message_type": "interactive", "request_payload": {}, "response_payload": {"code": 0}},
         ) as mock_send:
             results = push_report_filtered_per_channel([channel.id], report_id)
 
         assert len(results) == 1
-        _, kwargs = mock_send.call_args
-        sent_content = kwargs["content"]
+        # send_channel_content(channel, content, title=...) — content 是第 2 个位置参数
+        sent_content = mock_send.call_args.args[1]
         # "无持仓" 前缀
         assert "当前无持仓" in sent_content
         # 信号/动作/记忆引用段应被过滤掉
@@ -275,8 +275,8 @@ class TestPushReportFilteredPerChannel:
         # 但 list_position_summary 是按 created_by 过滤的，所有人都会拿到全部持仓
         # 所以实际推送内容会一样（测试只验证过滤逻辑路径都被触发）
         with patch(
-            "service.quant.schedule_user_push_service.send_feishu_text",
-            return_value={"message_type": "text", "request_payload": {}, "response_payload": {"code": 0}},
+            "service.quant.schedule_user_push_service.send_channel_content",
+            return_value={"message_type": "interactive", "request_payload": {}, "response_payload": {"code": 0}},
         ):
             results = push_report_filtered_per_channel(
                 [channel_a.id, channel_b.id, channel_c.id], report_id

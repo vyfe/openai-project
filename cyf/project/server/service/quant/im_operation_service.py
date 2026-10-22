@@ -170,10 +170,8 @@ def _resolve_symbol_in_pool(symbol_or_name: str) -> dict:
             break
 
     if not record:
-        raise ValueError(
-            f"❌ 股票「{raw}」不在股票池中。\n"
-            f"请在「数据中心」页面添加，或使用已加入股票池的股票代码/名称。"
-        )
+        from service.quant.im_help_text import not_in_pool
+        raise ValueError(not_in_pool(raw))
     return {
         "symbol": record.symbol,
         "code": record.code,
@@ -285,21 +283,15 @@ def _parse_position_payload(text: str) -> dict:
 
 
 def _operation_usage() -> str:
-    return (
-        "用法（分隔符「,」「，」「空格」任选）：\n"
-        "  简版（默认今天）：买,002837,200,12,突破年线\n"
-        "  带日期（8 位）：买,002837,20260920,200,12,突破年线\n"
-        "  完整字段：买,002837,200,12,20260920,突破年线,已执行,趋势仓/观察仓\n"
-        "提示：日期格式 YYYYMMDD；状态可选 草稿/已执行/已结束/已取消；"
-        "标签用 / , 、 分隔多个。"
-    )
+    from service.quant.im_help_text import operation_usage
+    return operation_usage()
 
 
 def _require_bound_user(parsed: dict) -> str:
     sender_id = str(parsed.get("sender_id") or "").strip()
     username = get_username_by_feishu(sender_id) if sender_id else None
     if not username:
-        raise ValueError("当前飞书账号尚未绑定量化用户，请先在私聊中完成绑定")
+        raise ValueError("当前飞书账号尚未绑定慧聊用户，请私聊机器人发送 /bind 用户名 密码 完成绑定")
     return username
 
 
