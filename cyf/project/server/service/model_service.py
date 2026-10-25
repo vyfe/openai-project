@@ -1,5 +1,4 @@
 import time
-from datetime import datetime, timedelta
 
 from conf.runtime import runtime_state
 from model.db import db
@@ -87,14 +86,6 @@ def get_grouped_models(logger=None):
         if logger:
             logger.error(f"获取分组模型列表失败: {exc}")
         return {}
-
-
-def seconds_until_next(hour: int, minute: int = 0) -> int:
-    now = datetime.now()
-    target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if target <= now:
-        target += timedelta(days=1)
-    return max(1, int((target - now).total_seconds()))
 
 
 def get_runtime_state_snapshot() -> dict:

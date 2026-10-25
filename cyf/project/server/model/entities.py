@@ -3,7 +3,7 @@ import json
 import secrets
 from datetime import datetime
 
-from peewee import BooleanField, CharField, DateField, DateTimeField, IntegerField, Model, TextField
+from peewee import BooleanField, CharField, DateField, DateTimeField, FloatField, IntegerField, Model, TextField
 
 from model.db import db
 
@@ -149,4 +149,62 @@ class Notification(BaseModel):
         }
 
 
-ALL_MODELS = [Log, Dialog, ModelMeta, SystemPrompt, TestLimit, User, Notification]
+class VoiceAccountState(BaseModel):
+    scope = CharField(primary_key=True)
+    state_json = TextField(default="{}")
+
+    class Meta:
+        table_name = "voice_account_state"
+
+
+class VoiceReading(BaseModel):
+    id = CharField(primary_key=True)
+    scope = CharField(index=True)
+    title = CharField()
+    source_text = TextField()
+    voice_id = CharField()
+    model = CharField()
+    speed = FloatField(default=0.9)
+    volume = FloatField(default=1)
+    pitch = IntegerField(default=0)
+    emotion = CharField(default="")
+    status = CharField(default="generating")
+    audio_url = TextField(null=True)
+    url_expires_at = DateTimeField(null=True)
+    duration_seconds = FloatField(null=True)
+    usage_characters = IntegerField(null=True)
+    usage_voice_count = IntegerField(default=0)
+    size = IntegerField(default=0)
+    error_message = TextField(null=True)
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    class Meta:
+        table_name = "voice_reading"
+        indexes = ((("scope", "created_at"), False),)
+
+
+class MusicTrack(BaseModel):
+    id = CharField(primary_key=True)
+    scope = CharField(index=True)
+    title = CharField()
+    prompt = TextField(null=True)
+    lyrics = TextField(null=True)
+    model = CharField()
+    instrumental = BooleanField(default=False)
+    lyrics_optimizer = BooleanField(default=False)
+    status = CharField(default="generating")
+    cover_feature_id = TextField(null=True)
+    reference_duration = FloatField(null=True)
+    audio_url = TextField(null=True)
+    url_expires_at = DateTimeField(null=True)
+    duration_seconds = FloatField(null=True)
+    size = IntegerField(default=0)
+    error_message = TextField(null=True)
+    created_at = DateTimeField(default=datetime.utcnow)
+
+    class Meta:
+        table_name = "music_track"
+        indexes = ((("scope", "created_at"), False),)
+
+
+ALL_MODELS = [Log, Dialog, ModelMeta, SystemPrompt, TestLimit, User, Notification, VoiceAccountState, VoiceReading, MusicTrack]

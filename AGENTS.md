@@ -438,6 +438,8 @@ HTTP ──► routes/  (Flask Blueprint)
 /login       Login.vue                  公开
 /chat        Chat-New.vue               需登录
 /admin       Admin.vue                  需 admin（7 个 Tab）
+/studio      StudioLayout.vue + 子页面   需 admin
+  ├ voice（音色与语音） / music（音乐创作）
 /quant       QuantLayout.vue + 子页面    需 admin
   ├ overview / data / industry / strategy / runs / operations
   ├ backtest / scheduler / ai-memory / im-positions
@@ -447,6 +449,10 @@ HTTP ──► routes/  (Flask Blueprint)
 
 ### 4.2 模块拆分
 
+- **声音工作台**：独立功能页 `/studio`（外壳 `views/studio/StudioLayout.vue`，与量化工作台同级），左侧分区导航含“音色与语音”与“音乐创作”，入口在聊天页用户菜单。面板组件在 `components/studio/`，样式统一在 `styles/studio.css`（类名 `studio-` 前缀），两个面板的忙碌态/错误/播放器逻辑收敛到 `composables/useStudioPage.ts`，API 客户端基座在 `services/minimaxApi.ts`。
+- **音色管理**：`/studio/voice`，面板 `components/studio/VoiceStudio.vue`，子组件在 `components/studio/voice/`，API 客户端为 `services/voiceApi.ts`。后端 `routes/voice_routes.py` 注册 `voice_bp`，前缀 `/never_guess_my_usage/voice`；两个蓝图共用 `routes/minimax_endpoint.py` 的鉴权与错误封装，`service/minimax_client.py` 调官方接口，`service/minimax_voice_service.py` 管理台账与音频，`service/minimax_audio.py` 落盘音频，`model/repositories/minimax_repository.py` 存台账与记录。`Settings.minimax_*` 为唯一配置来源，读取 `[minimax]`；`MINIMAX_API_KEY` 优先，不回退到聊天凭据。复用平台 SQLite 的 `voice_account_state`、`voice_reading`，保存音色台账、故事正文、生成参数及临时音频链接/24 小时过期时间；MP3 备份在被忽略的 `voice_data/`，按密钥和区域隔离。付费调用禁止自动重试，未激活音色需保留本地台账；备份失败仅重试下载，不能自动重新合成。**两套凭据**：复刻/音色查询/删除走 `[minimax_music]` 的计费密钥（Token Plan 无复刻权限），T2A 合成走 `[minimax]` 的语音密钥；`MiniMaxVoiceService` 持有 `client`（合成）与 `clone_client`（复刻）两个客户端，音色台账按复刻凭据指纹分组。**音色保活**：复刻音色 7 天未正式调用会被官方删除，`service/minimax_keepalive.py` 的每日定时器在到期前 1 天用 `clone_client` 合成一句日期播报续期（只取链接、不落本地音频、不进合成记录），保活设置存在 `voice_account_state` 台账。**音色费用**：复刻音色首次使用一次性收「音色费用」，只走账户余额、不走订阅额度（Token Plan 余额为 0 时报官方 1008）；`synthesize` 对台账中未激活的自定义音色改用 `clone_client`，遇到 1008 再换 `clone_client` 重试一次。
+
+- **音乐创作**：`/studio/music`，面板 `components/studio/MusicStudio.vue`，子组件 `components/studio/music/MusicComposer.vue`，API 客户端为 `services/musicApi.ts`。后端 `routes/music_routes.py` 注册 `music_bp`，前缀 `/never_guess_my_usage/music`，复用管理员鉴权；`service/minimax_music_service.py` 调 `/v1/music_generation`（文本生音乐 `music-3.0`、`music-2.6`；参考音频翻唱 `music-cover` 走 `/v1/music_cover_preprocess` 两步流程），生成参数、临时音频链接/24 小时过期时间和本地 MP3 备份写入 SQLite 的 `music_track`，文件落在被忽略的 `voice_data/<凭据指纹>/music/`。风格描述必填（纯音乐时），带人声时需歌词或开启自动写词；翻唱需 6 秒–6 分钟参考音频（≤20 MB），先提取 ASR 歌词再改词生成。付费调用同样禁止自动重试，备份失败仅重试下载，不自动重新生成。共用的凭据目录与文件锁在 `service/minimax_store.py`。音乐走独立的 `[minimax_music]` 配置段（`MINIMAX_MUSIC_API_KEY` 优先），`api_key` 留空则沿用 `[minimax]` 的语音凭据；独立密钥按凭据指纹单独隔离记录与音频。新用户密钥调用音乐接口会返回官方业务码 `2153`（音乐接口不再面向新用户提供），需使用历史付费账号密钥。
 - **聊天**：`components/chat/` 下 5 个组件（`ChatContent`、`ChatSidebar`、`ChatToolbar`、`InputArea`、`UserSettings`）+ `types.ts`。
 - **Admin**：`components/admin/` 下 7 个表格组件 + `views/Admin.vue` 用 Tab 切换。
 - **量化**：`views/quant/pages/` 下 10 个独立页面 + `QuantLayout.vue` 公共壳。
@@ -629,6 +635,9 @@ npm run test:coverage                  # 覆盖率
 ## 10. 参考文档索引
 
 ### 10.1 项目级（`doc/`）
+
+- `doc/minimax-voice-management.md` —— MiniMax 音色配置、复刻/激活、后台操作与 API。
+- `doc/minimax-music-management.md` —— MiniMax 音乐创作配置、生成流程、记录保存与 API。
 
 - `doc/frontend-claude-gpt-style-refactor-playbook.md` —— 前端 Claude/GPT 风格重构手册
 - `doc/multi-provider-refactoring-plan.md` —— 多 LLM Provider 重构计划

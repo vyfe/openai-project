@@ -85,6 +85,7 @@ export const getValidAccessToken = async (forceRefresh = false): Promise<string 
 type ClientOptions = {
   requireAuthByDefault?: boolean
   publicPathPrefixes?: string[]
+  retryAuthOnFailure?: boolean
 }
 
 const isPublicPath = (path: string, publicPathPrefixes: string[]) => {
@@ -93,7 +94,8 @@ const isPublicPath = (path: string, publicPathPrefixes: string[]) => {
 
 export const createApiClient = ({
   requireAuthByDefault = true,
-  publicPathPrefixes = []
+  publicPathPrefixes = [],
+  retryAuthOnFailure = true
 }: ClientOptions = {}): AxiosInstance => {
   const client = axios.create({
     baseURL: API_BASE_URL,
@@ -130,7 +132,7 @@ export const createApiClient = ({
       const responseMsg = (error.response?.data as any)?.msg || ''
       const isAuthError = status === 401 || String(responseMsg).includes('令牌')
 
-      if (!originalRequest || originalRequest._retry || !isAuthError) {
+      if (!retryAuthOnFailure || !originalRequest || originalRequest._retry || !isAuthError) {
         return Promise.reject(error)
       }
 

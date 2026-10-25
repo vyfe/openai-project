@@ -118,7 +118,9 @@ def _register_request_logging(app: Flask):
         user_var.set("")
         client_ip_var.set(request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip())
         user_agent_var.set(request.headers.get("User-Agent", ""))
-        raw_body = request.get_data(cache=True, as_text=True) or ""
+        g.sensitive_request = request.path.startswith(("/never_guess_my_usage/voice/", "/never_guess_my_usage/music/"))
+        # 语音与音乐请求含原始录音、正文、歌词或临时音频链接，只记录访问元数据。
+        raw_body = "" if g.sensitive_request else (request.get_data(cache=True, as_text=True) or "")
         request_body_var.set(raw_body[:4096])
         g.request_id = request_id
 
@@ -129,7 +131,7 @@ def _register_request_logging(app: Flask):
             duration_ms = int((time.time() - getattr(g, "request_started_at", time.time())) * 1000)
             status_var.set(str(response.status_code))
             duration_ms_var.set(str(duration_ms))
-            if _runtime_level() <= logging.DEBUG:
+            if _runtime_level() <= logging.DEBUG and not getattr(g, "sensitive_request", False):
                 if not response.is_streamed:
                     raw_response = response.get_data(as_text=True) or ""
                     if raw_response:

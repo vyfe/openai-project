@@ -8,7 +8,9 @@ from model.entities import ALL_MODELS, ModelMeta, User
 from quant.db import init_quant_db
 from quant.entities import QUANT_MODELS
 from service.host_service import start_blacklist_cleanup_thread
-from service.model_service import invalidate_model_cache, seconds_until_next
+from service.minimax_keepalive import start_keepalive_scheduler
+from service.model_service import invalidate_model_cache
+from service.time_utils import seconds_until_next
 
 
 def initialize_database():
@@ -64,6 +66,7 @@ def bootstrap_runtime(logger):
     runtime_state.build_clients()
     start_blacklist_cleanup_thread()
     start_model_meta_scheduler(logger)
+    start_keepalive_scheduler(logger)
     _start_feishu_ws_async(logger)
 
 

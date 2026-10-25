@@ -27,6 +27,25 @@ const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
+      path: '/studio',
+      name: 'Studio',
+      component: () => import('@/views/studio/StudioLayout.vue'),
+      redirect: '/studio/voice',
+      meta: { requiresAuth: true, requiresAdmin: true },
+      children: [
+        {
+          path: 'voice',
+          name: 'StudioVoice',
+          component: () => import('@/views/studio/pages/VoiceStudioPage.vue')
+        },
+        {
+          path: 'music',
+          name: 'StudioMusic',
+          component: () => import('@/views/studio/pages/MusicStudioPage.vue')
+        }
+      ]
+    },
+    {
       path: '/quant',
       name: 'Quant',
       component: () => import('@/views/quant/QuantLayout.vue'),

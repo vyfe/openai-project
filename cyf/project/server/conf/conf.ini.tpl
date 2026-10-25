@@ -83,3 +83,30 @@ web_search_max_sources=5
 web_search_max_page_chars=4000
 web_search_max_context_chars=16000
 web_search_max_download_bytes=1048576
+
+[minimax]
+# 独立语音凭据。MINIMAX_API_KEY 环境变量优先；不回退到 [api]/[claude]。
+api_key=<填入你的 MiniMax API Key>
+# cn（中国站）或 intl（国际站），须与密钥所属站点一致。
+region=cn
+# 仅标记密钥类型，实际语音权限以 MiniMax 返回为准；不自动切换计费方式。
+key_kind=token_plan
+model=speech-2.8-hd
+# 范围 10–240 秒。
+timeout_seconds=180
+# 相对后端目录；保存 MP3、正文导出和文件锁。台账与音频链接复用现有 SQLite。
+storage_dir=voice_data
+
+[minimax_music]
+# 音乐生成与音色复刻使用的计费凭据；留空则沿用上面的 [minimax] 语音凭据。
+# Token Plan 密钥只能合成语音、不能创建音色，复刻需要这里的计费密钥。
+# 环境变量 MINIMAX_MUSIC_API_KEY 优先于本段。
+api_key=
+# 留空沿用 [minimax].region；cn（中国站）或 intl（国际站）。
+region=
+# 仅标记密钥类型，不改变请求端点或权益。
+key_kind=token_plan
+# 文本生音乐模型，可选 music-3.0、music-2.6。
+model=music-3.0
+# 留空沿用 [minimax].timeout_seconds；范围 10–240 秒。
+timeout_seconds=

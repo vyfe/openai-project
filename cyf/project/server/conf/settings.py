@@ -70,6 +70,15 @@ class Settings:
     minimax_model: str = "speech-2.8-hd"
     minimax_timeout_seconds: int = 180
     minimax_storage_dir: str = "voice_data"
+    # 音乐接口可使用独立凭据（单独计费）；未配置时回退到上面的语音凭据。
+    minimax_music_api_key: str = field(default="", repr=False)
+    minimax_music_region: str = "cn"
+    minimax_music_key_kind: str = "token_plan"
+    minimax_music_model: str = "music-3.0"
+    minimax_music_timeout_seconds: int = 180
+    # 音色复刻与音色查询链路使用音乐计费凭据（Token Plan 密钥无复刻权限）；未配置时沿用语音凭据。
+    minimax_clone_api_key: str = field(default="", repr=False)
+    minimax_clone_region: str = "cn"
 
 
 def _get_bool(conf: configparser.ConfigParser, section: str, option: str, fallback: str = "false") -> bool:
@@ -97,6 +106,14 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         if item.strip()
     ]
     tools_conf = conf["tools"] if conf.has_section("tools") else {}
+
+    # 语音与音乐使用各自的 MiniMax 凭据；音乐段未配置时回退到 [minimax]，保持单密钥部署可用。
+    speech_key = os.environ.get("MINIMAX_API_KEY", "").strip() or _get_str(conf, "minimax", "api_key").strip()
+    music_key = os.environ.get("MINIMAX_MUSIC_API_KEY", "").strip() or _get_str(conf, "minimax_music", "api_key").strip()
+    music_region = _get_str(conf, "minimax_music", "region") or _get_str(conf, "minimax", "region", "cn")
+    music_timeout = _get_str(conf, "minimax_music", "timeout_seconds") or _get_str(conf, "minimax", "timeout_seconds", "180")
+    # 音色复刻/查询走音乐计费凭据；没配音乐密钥时退回语音密钥。
+    clone_key = music_key or speech_key
 
     return Settings(
         conf=conf,
@@ -150,12 +167,20 @@ def load_settings(conf_path: Optional[str] = None) -> Settings:
         web_search_max_page_chars=int(tools_conf.get("web_search_max_page_chars", "4000")),
         web_search_max_context_chars=int(tools_conf.get("web_search_max_context_chars", "16000")),
         web_search_max_download_bytes=int(tools_conf.get("web_search_max_download_bytes", "1048576")),
-        minimax_api_key=os.environ.get("MINIMAX_API_KEY", "").strip() or _get_str(conf, "minimax", "api_key").strip(),
+        minimax_api_key=speech_key,
         minimax_region=_get_str(conf, "minimax", "region", "cn"),
         minimax_key_kind=_get_str(conf, "minimax", "key_kind", "token_plan"),
         minimax_model=_get_str(conf, "minimax", "model", "speech-2.8-hd"),
         minimax_timeout_seconds=int(_get_str(conf, "minimax", "timeout_seconds", "180")),
         minimax_storage_dir=_get_str(conf, "minimax", "storage_dir", "voice_data"),
+        # 音乐接口可单独配一套计费密钥；为空时沿用语音凭据。
+        minimax_music_api_key=music_key,
+        minimax_music_region=music_region,
+        minimax_music_key_kind=_get_str(conf, "minimax_music", "key_kind", "token_plan"),
+        minimax_music_model=_get_str(conf, "minimax_music", "model", "music-3.0"),
+        minimax_music_timeout_seconds=int(music_timeout),
+        minimax_clone_api_key=clone_key,
+        minimax_clone_region=music_region,
     )
 
 
