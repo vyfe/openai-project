@@ -1,4 +1,5 @@
 import { API_BASE_URL, createApiClient, getValidAccessToken } from '@/services/httpClient'
+import { normalizeFileMarkers, serializeChatDialog } from '@/services/backendUrl'
 
 const api = createApiClient({
   requireAuthByDefault: true,
@@ -45,11 +46,11 @@ export const chatAPI = {
   sendChat: (model: string, message: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, maxResponseTokens?: number, systemPromptId?: number, roleSetting?: any, enabledTools?: string[]) => {
     const data: any = {
       model,
-      dialog: message
+      dialog: normalizeFileMarkers(message)
     }
     if (dialogMode === 'multi' && dialog) {
       data.dialog_mode = 'multi'
-      data.dialog = JSON.stringify(dialog)
+      data.dialog = serializeChatDialog(dialog)
     }
     if (dialogTitle) data.dialog_title = dialogTitle
     if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
@@ -75,11 +76,11 @@ export const chatAPI = {
   ): Promise<void> => {
     const data: any = {
       model,
-      dialog: message
+      dialog: normalizeFileMarkers(message)
     }
     if (dialogMode === 'multi' && dialog) {
       data.dialog_mode = 'multi'
-      data.dialog = JSON.stringify(dialog)
+      data.dialog = serializeChatDialog(dialog)
     }
     if (dialogTitle) data.dialog_title = dialogTitle
     if (maxResponseTokens) data.max_response_tokens = maxResponseTokens
@@ -172,11 +173,11 @@ export const chatAPI = {
   sendImageGeneration: (model: string, prompt: string, dialogMode: string = 'single', dialog?: any, dialogTitle?: string, imageSize?: string, dialogId?: number, systemPromptId?: number, roleSetting?: any) => {
     const data: any = {
       model,
-      dialog: prompt
+      dialog: normalizeFileMarkers(prompt)
     }
     if (dialogMode === 'multi' && dialog) {
       data.dialog_mode = 'multi'
-      data.dialog = JSON.stringify(dialog)
+      data.dialog = serializeChatDialog(dialog)
     }
     if (dialogTitle) data.dialog_title = dialogTitle
     if (imageSize) data.size = imageSize

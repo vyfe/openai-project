@@ -197,3 +197,7 @@ server {
 ## 8. 许可证
 
 仅作个人/团队内部使用，未声明开源许可。
+
+### EdgeOne 前端托管
+
+前端可独立部署到 EdgeOne Makers，后端和数据保留在原服务器。构建根目录为 `cyf/project/fe`，API 与文件地址分别通过 `VITE_API_BASE_URL`、`VITE_FILE_BASE_URL` 配置；详见 [部署计划](doc/frontend-edgeone-deployment-plan.md)。

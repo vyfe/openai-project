@@ -462,7 +462,7 @@ HTTP ──► routes/  (Flask Blueprint)
 ### 4.3 API 与认证
 
 - `services/httpClient.ts` 提供 `createApiClient({ requireAuthByDefault, publicPathPrefixes })`。
-- `API_BASE_URL`：开发 `http://localhost:39997`，生产 `${protocol}//${window.location.hostname}`。
+- `API_BASE_URL`：优先读取 `VITE_API_BASE_URL`；默认开发 `http://localhost:39997`、生产 `window.location.origin`。独立托管文件入口由 `VITE_FILE_BASE_URL` 指定，地址处理统一在 `services/backendUrl.ts`。
 - **JWT 自动刷新**：拦截器在请求前调用 `getValidAccessToken()`，剩 30s 内提前刷新；401 后 `originalRequest._retry` 标记再重试一次。
 - **公开路径白名单**：通过 `publicPathPrefixes`（如 `login`、`token/refresh`、`test`、`download`）跳过鉴权。
 - **SSE 取消**：聊天页用浏览器原生 `AbortController` 调 `/split_stream_cancel`。
@@ -666,3 +666,5 @@ npm run test:coverage                  # 覆盖率
 
 - `README.md` —— 用户/部署者入口；包含 nginx 反代示例。
 - `cyf/project/fe/nginx.conf.tpl` —— 前端 Nginx 模板。
+- `doc/frontend-edgeone-deployment-plan.md` —— EdgeOne 前端托管、独立 API、DNS 切换与回滚。
+- `cyf/project/fe/nginx-api.conf.tpl` —— 独立 HTTPS API 与文件入口模板。

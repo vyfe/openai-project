@@ -281,6 +281,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
+import { normalizeFileUrl } from '@/services/backendUrl'
 import { FormData } from '@/utils/main'
 import InputArea from './InputArea.vue'
 import ChatToolbar from './ChatToolbar.vue'
@@ -2043,17 +2044,7 @@ const handleSendMessage = async (message: string, file?: File, imageSize?: strin
       if (typeof aiResponse === 'object') {
         // 优先检查直接的url字段
         if (aiResponse.url) {
-          imageUrl = aiResponse.url;
-          // 构建完整URL
-          if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
-            if (imageUrl.startsWith(':')) {
-              imageUrl = window.location.protocol + '//' + window.location.host + imageUrl;
-            } else if (imageUrl.startsWith('/')) {
-              imageUrl = window.location.protocol + '//' + window.location.host + imageUrl;
-            } else {
-              imageUrl = window.location.protocol + '//' + window.location.host + '/' + imageUrl;
-            }
-          }
+          imageUrl = normalizeFileUrl(aiResponse.url);
           responseContent = aiResponse.desc || '图片已生成';
 
           // 检查并更新对话ID（如果后端返回了新的对话ID）
@@ -2482,23 +2473,7 @@ const extractFileUrls = (content: string): string[] => {
   patterns.forEach(({ regex }) => {
     let match;
     while ((match = regex.exec(content)) !== null) {
-      let url = match[1];
-      
-      // 处理相对路径 - 如果不是完整的http(s) URL，则添加当前页面的protocol和host
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        if (url.startsWith(':')) {
-          // 处理 :4567/download/xxx 格式
-          url = window.location.protocol + '//' + window.location.host + url;
-        } else if (url.startsWith('/')) {
-          // 处理 /download/xxx 格式
-          url = window.location.protocol + '//' + window.location.host + url;
-        } else {
-          // 其他相对路径，添加当前host
-          url = window.location.protocol + '//' + window.location.host + '/' + url;
-        }
-      }
-      
-      urls.push(url);
+      urls.push(normalizeFileUrl(match[1]));
     }
   });
 

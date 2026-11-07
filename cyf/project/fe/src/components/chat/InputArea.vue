@@ -119,6 +119,7 @@ import {
   Search
 } from '@element-plus/icons-vue'
 import { fileAPI } from '@/services/api'
+import { normalizeFileUrl } from '@/services/backendUrl'
 import { Props, FileUploadResponse } from '@/components/chat/types'
 
 // 提取的文件接口
@@ -368,15 +369,7 @@ const handleFileChange = async (file: any) => {
     if (response && typeof response === 'object' && 'content' in response && response.content) {
       // 文件上传成功，将URL添加到已上传文件列表
       uploadedFile.value = fileToUpload
-      // 如果后端返回的content是相对路径或缺少host，则补充完整URL
-      let fullUrl = response.content
-      if (response.content.startsWith(':')) {
-        // 如果返回以冒号开头（如 :4567/download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.content
-      } else if (response.content.startsWith('/')) {
-        // 如果返回以斜杠开头（如 /download/xxx.png），则添加当前页面的protocol和host
-        fullUrl = window.location.protocol + '//' + window.location.host + response.content
-      }
+      const fullUrl = normalizeFileUrl(response.content)
       // 添加到已上传文件列表（不在输入框中插入标记）
       uploadedFiles.value.push({
         url: fullUrl,
@@ -459,20 +452,6 @@ const extractFileMarkers = (content: string) => {
     markers.push({ rawMarker: match[0], rawUrl })
   }
   return markers
-}
-
-const normalizeFileUrl = (url: string): string => {
-  if (!url) return ''
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
-  }
-  if (url.startsWith(':')) {
-    return window.location.protocol + '//' + window.location.host + url
-  }
-  if (url.startsWith('/')) {
-    return window.location.protocol + '//' + window.location.host + url
-  }
-  return window.location.protocol + '//' + window.location.host + '/' + url
 }
 
 const getFileNameFromUrl = (url: string) => {

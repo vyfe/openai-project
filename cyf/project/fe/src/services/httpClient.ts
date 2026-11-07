@@ -1,17 +1,9 @@
 import axios, { type AxiosError, type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { API_BASE_URL } from './backendUrl'
+export { API_BASE_URL, getApiBaseUrl } from './backendUrl'
 
 const TOKEN_EXPIRE_AHEAD_SECONDS = 30
-
-export const getApiBaseUrl = () => {
-  if (import.meta.env.DEV) {
-    return 'http://localhost:39997'
-  }
-  const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
-  return `${protocol}//${window.location.hostname}`
-}
-
-export const API_BASE_URL = getApiBaseUrl()
 
 let refreshPromise: Promise<string> | null = null
 
