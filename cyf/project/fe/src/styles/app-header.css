@@ -1,0 +1,255 @@
+/* 全局公共顶栏：聊天 / 管理 / 量化 / 声音工作台共用同一套骨架。
+   结构：左侧 = 页面级操作 + logo（可展开工作台菜单），中间 = 页面级主操作，
+   右侧 = 语言 / 主题 / 用户菜单。 */
+
+:root {
+  --app-header-bg: var(--bg-1);
+}
+
+.app-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(280px, auto);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 16px;
+  /* 不透明：各页面内容区底色不同，半透明会把页面色调透到导航区 */
+  background: var(--app-header-bg);
+  border-bottom: 1px solid var(--line-1);
+  box-shadow: none;
+}
+
+.app-header__left {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.app-header__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+.app-header__right {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* ── Logo：功能标识 + 工作台下拉入口 ─────────────────────────────── */
+
+.app-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 10px 4px 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+.app-logo--static {
+  cursor: default;
+}
+
+.app-logo:not(.app-logo--static):hover,
+.app-logo--open {
+  background: var(--bg-2);
+  border-color: var(--line-1);
+}
+
+/* 图标块统一主色：功能靠图标形状区分，底色保持一致 */
+.app-logo__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 17px;
+  flex: none;
+  background: var(--accent-1-soft);
+  color: var(--accent-1);
+}
+
+.app-logo__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-logo__caret {
+  font-size: 12px;
+  color: var(--text-2);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.app-logo--open .app-logo__caret {
+  transform: rotate(180deg);
+}
+
+/* 功能区分靠图标形状，不靠配色：图标块统一主色，避免各页顶栏色调不一 */
+
+/* ── 工作台下拉菜单 ─────────────────────────────────────────────── */
+
+.app-workspace-menu__label {
+  margin-right: var(--sp-4);
+}
+
+.app-workspace-menu__check {
+  color: var(--accent-1);
+}
+
+.app-workspace-menu__item--current {
+  font-weight: 600;
+}
+
+/* ── 头部按钮（迁自聊天页，保持类名以便页面内继续使用） ────────── */
+
+.header-icon-btn,
+.header-action-btn,
+.app-user-btn {
+  border-radius: 999px !important;
+  border: 1px solid var(--line-1) !important;
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  box-shadow: none !important;
+  transition: background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+
+.header-icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+}
+
+.header-action-btn {
+  padding: 8px 12px;
+}
+
+.app-user-btn {
+  padding: 8px 12px;
+}
+
+.app-user-btn__name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-icon-btn:hover,
+.header-action-btn:hover,
+.app-user-btn:hover {
+  background: var(--bg-2) !important;
+  border-color: var(--line-1) !important;
+  transform: none !important;
+}
+
+body.dark-theme .header-icon-btn,
+body.dark-theme .header-action-btn,
+body.dark-theme .app-user-btn {
+  background: var(--bg-1) !important;
+  color: var(--text-1) !important;
+  border-color: var(--line-1) !important;
+}
+
+body.dark-theme .header-icon-btn:hover,
+body.dark-theme .header-action-btn:hover,
+body.dark-theme .app-user-btn:hover {
+  background: var(--bg-2) !important;
+}
+
+.notification-button-wrapper {
+  position: relative;
+}
+
+.notification-dot {
+  box-shadow: 0 0 0 2px var(--bg-1);
+}
+
+/* ── 页面级返回按钮（工作台页面用） ─────────────────────────────── */
+
+.app-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.app-back-btn:hover {
+  background: var(--bg-2);
+}
+
+.app-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── 响应式 ─────────────────────────────────────────────────────── */
+
+@media (max-width: 1024px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "left right"
+      "center center";
+  }
+
+  .app-header__left { grid-area: left; }
+  .app-header__right { grid-area: right; }
+  .app-header__center {
+    grid-area: center;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+    gap: var(--sp-2);
+    padding: 8px 10px;
+  }
+
+  .app-logo {
+    font-size: 16px;
+    padding-right: 6px;
+  }
+
+  .app-logo__mark {
+    width: 26px;
+    height: 26px;
+    font-size: 15px;
+  }
+
+  .app-header__action-text {
+    display: none;
+  }
+
+  .header-action-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .app-user-btn {
+    padding: 6px 10px;
+  }
+}

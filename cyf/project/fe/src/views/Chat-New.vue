@@ -1,8 +1,8 @@
 <template>
   <div class="chat-container">
     <!-- 顶部导航栏 -->
-    <div class="chat-header chat-header-v2">
-      <div class="header-left-v2">
+    <AppHeader :title="t('chat.title')" :logo-icon="ChatDotRound" variant="chat">
+      <template #left>
         <el-button
           class="sidebar-toggle-btn header-icon-btn"
           :icon="formData.sidebarCollapsed ? Expand : Fold"
@@ -12,10 +12,9 @@
           :title="formData.sidebarCollapsed ? t('chat.expandSidebar') : t('chat.collapseSidebar')"
           @click="formData.sidebarCollapsed = !formData.sidebarCollapsed"
         />
-        <h2>{{ t('chat.title') }}</h2>
-      </div>
+      </template>
 
-      <div class="header-center-v2">
+      <template #center>
         <!-- 用量查询弹窗 -->
         <el-popover
           placement="bottom"
@@ -57,50 +56,8 @@
           <el-button :icon="Bell" circle :aria-label="t('chat.notifications')" :title="t('chat.notifications')" @click="openNotifications" class="header-icon-btn" />
           <span v-if="hasNewNotifications" class="notification-dot" />
         </div>
-      </div>
-
-      <div class="header-right header-right-v2">
-        <!-- 语言切换按钮 -->
-        <el-button
-          @click="toggleLanguage"
-          class="header-action-btn"
-          :icon="SwitchFilled"
-        >
-          {{ formData.isMobile ? '' : (currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')) }}
-        </el-button>
-
-        <el-button @click="toggleTheme" class="header-action-btn" :icon="formData.isDarkTheme ? Sunny : Moon">
-          {{ formData.isMobile ? '' : (formData.isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')) }}
-        </el-button>
-
-        <!-- 用户菜单 -->
-        <el-dropdown class="user-menu">
-          <el-button class="user-btn user-btn-v2" type="default">
-            <span class="user-name">{{ authStore.user }}</span>
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item v-if="authStore.isAdmin()" @click="goToAdmin" :icon="Setting">
-                {{ t('chat.adminPanel') }}
-              </el-dropdown-item>
-              <el-dropdown-item v-if="authStore.isAdmin()" @click="goToQuant" :icon="DataBoard">
-                量化工作台
-              </el-dropdown-item>
-              <el-dropdown-item v-if="authStore.isAdmin()" @click="goToStudio" :icon="Headset">
-                声音工作台
-              </el-dropdown-item>
-              <el-dropdown-item @click="showUserSettings = true" :icon="Setting">
-                {{ t('chat.userSettings') }}
-              </el-dropdown-item>
-              <el-dropdown-item @click="logout" :icon="SwitchButton">
-                {{ t('chat.logout') }}
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-    </div>
+      </template>
+    </AppHeader>
 
     <div class="chat-main">
       <!-- 侧边栏 -->
@@ -206,12 +163,6 @@
         </div>
       </div>
     </Teleport>
-
-    <!-- 用户设置弹窗 -->
-    <UserSettings
-      v-model="showUserSettings"
-      @password-updated="handlePasswordUpdated"
-    />
   </div>
 </template>
 
@@ -220,10 +171,10 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Headset, Loading, SwitchButton, Sunny, Moon, SwitchFilled, Bell, ArrowDown, Setting, DataBoard } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, Bell, ChatDotRound } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
-import UserSettings from '../components/chat/UserSettings.vue'
+import AppHeader from '@/components/layout/AppHeader.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
 import NotificationPanel from '../components/NotificationPanel.vue'
@@ -231,10 +182,10 @@ import { useNotifications } from '@/composables/useNotifications'
 import { useThemeManager } from '@/composables/useThemeManager'
 
 // 国际化和认证
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
-const { isDarkTheme, initThemeManager, setThemeManually } = useThemeManager()
+const { isDarkTheme, initThemeManager } = useThemeManager()
 
 type ChatTab = {
   key: string
@@ -306,13 +257,10 @@ const formData = reactive({
   activeRoleId: localStorage.getItem('activeRoleId') || 'default',
 })
 
-// 添加语言切换相关的响应式变量
-const currentLang = ref(locale.value)
+// 页面级浮层状态
 const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
 const showNotificationPanel = ref(false)
-const showUserSettings = ref(false)
-
 const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
 
 const getRoleStateFromForm = () => ({
@@ -604,50 +552,9 @@ const loadDialogHistory = async () => {
   }
 }
 
-// 切换主题
-const toggleTheme = () => {
-  setThemeManually(!isDarkTheme.value)
-}
-
-// 登出
-const logout = () => {
-  authStore.logout()
-  router.push('/login')
-  ElMessage.success(t('chat.logoutSuccess'))
-}
-
-// 跳转到管理面板
-const goToAdmin = () => {
-  router.push('/admin')
-}
-
-const goToQuant = () => {
-  router.push('/quant')
-}
-
-const goToStudio = () => {
-  router.push('/studio')
-}
-
-// 处理密码更新后的行为
-const handlePasswordUpdated = () => {
-  // 密码更新成功后，让用户退出登录
-  setTimeout(() => {
-    logout()
-  }, 1000) // 给用户一点时间看到成功的消息
-}
-
 // 处理点击通知面板外部区域关闭面板
 const handleNotificationBackdropClick = () => {
   closeNotifications()
-}
-
-// 切换语言
-const toggleLanguage = () => {
-  const newLocale = currentLang.value === 'zh' ? 'en' : 'zh'
-  locale.value = newLocale
-  currentLang.value = newLocale
-  localStorage.setItem('locale', newLocale)
 }
 
 // 获取用量信息
@@ -697,9 +604,6 @@ onMounted(() => {
   if (!authStore.isAuthenticated()) {
     router.push('/login')
   }
-
-  // 初始化当前语言
-  currentLang.value = locale.value
 
   // 设置角色预设
   formData.rolePresets = [
@@ -863,89 +767,6 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   background: var(--bg-app-gradient);
 }
 
-.chat-header.chat-header-v2 {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(280px, auto);
-  align-items: center;
-  gap: var(--sp-3);
-  padding: 10px 16px;
-  background: var(--overlay-1);
-  border-bottom: 1px solid var(--line-1);
-  box-shadow: none;
-}
-
-.header-left-v2 {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  min-width: 0;
-}
-
-.header-left-v2 h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-  letter-spacing: 0;
-  background: none;
-  -webkit-text-fill-color: initial;
-  text-shadow: none;
-}
-
-.header-left-v2 h2::after {
-  display: none;
-}
-
-.header-center-v2 {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.header-right-v2 {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.header-icon-btn,
-.header-action-btn,
-.user-btn-v2 {
-  border-radius: 999px !important;
-  border: 1px solid var(--line-1) !important;
-  background: var(--bg-1) !important;
-  color: var(--text-1) !important;
-  box-shadow: none !important;
-  transition: background-color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
-}
-
-.header-icon-btn {
-  width: 34px;
-  height: 34px;
-  padding: 0 !important;
-}
-
-.header-action-btn {
-  padding: 8px 12px;
-}
-
-.header-icon-btn:hover,
-.header-action-btn:hover,
-.user-btn-v2:hover {
-  background: var(--bg-2) !important;
-  border-color: var(--line-1) !important;
-  transform: none !important;
-}
-
-.notification-button-wrapper {
-  position: relative;
-}
-
-.notification-dot {
-  box-shadow: 0 0 0 2px var(--bg-1);
-}
-
 .chat-main {
   background: transparent;
 }
@@ -1041,13 +862,6 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   color: var(--text-2);
 }
 
-body.dark-theme .chat-header.chat-header-v2 {
-  border-bottom-color: var(--line-1);
-}
-
-body.dark-theme .header-icon-btn,
-body.dark-theme .header-action-btn,
-body.dark-theme .user-btn-v2,
 body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item),
 body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
   background: var(--bg-1) !important;
@@ -1055,51 +869,11 @@ body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
   border-color: var(--line-1) !important;
 }
 
-body.dark-theme .header-icon-btn:hover,
-body.dark-theme .header-action-btn:hover,
-body.dark-theme .user-btn-v2:hover,
 body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item:hover) {
   background: var(--bg-2) !important;
 }
 
-@media (max-width: 1024px) {
-  .chat-header.chat-header-v2 {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "left right"
-      "center center";
-  }
-
-  .header-left-v2 {
-    grid-area: left;
-  }
-
-  .header-right-v2 {
-    grid-area: right;
-  }
-
-  .header-center-v2 {
-    grid-area: center;
-    justify-content: flex-start;
-  }
-}
-
 @media (max-width: 768px) {
-  .chat-header.chat-header-v2 {
-    grid-template-columns: 1fr auto;
-    gap: var(--sp-2);
-    padding: 8px 10px;
-  }
-
-  .header-left-v2 h2 {
-    font-size: 16px;
-  }
-
-  .header-action-btn {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
   .chat-tabs-wrap {
     padding: 6px 8px 4px;
   }
@@ -1109,18 +883,6 @@ body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item:hover) {
     width: 124px;
     min-width: 124px;
     max-width: 124px;
-  }
-}
-
-/* 为移动端调整样式 */
-@media (max-width: 768px) {
-  .user-menu {
-    margin-left: 5px;
-  }
-
-  .user-btn {
-    padding: 6px 10px;
-    font-size: 12px;
   }
 }
 </style>

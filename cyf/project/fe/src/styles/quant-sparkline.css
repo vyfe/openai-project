@@ -44,8 +44,8 @@
   border: 1px solid var(--q-line);
   border-radius: 6px;
   background:
-    linear-gradient(90deg, rgba(23, 32, 34, 0.04) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(23, 32, 34, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--text-1) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--text-1) 4%, transparent) 1px, transparent 1px),
     var(--q-surface);
   background-size: 24px 24px;
 }

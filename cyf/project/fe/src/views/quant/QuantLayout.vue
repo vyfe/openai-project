@@ -1,30 +1,16 @@
 <template>
   <div class="quant-page min-h-screen" :class="{ dark: isDarkTheme, 'quant-dark': isDarkTheme, 'quant-page--overview': isOverview }">
-    <div class="quant-shell">
-      <header class="quant-header">
-        <div class="quant-header__left">
-          <button class="quant-back-btn" @click="goBack" aria-label="返回聊天">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
-          <div>
-            <div class="quant-eyebrow">A-SHARE OPERATIONS</div>
-            <h1 class="quant-title">量化工作台</h1>
-          </div>
-        </div>
-        <div class="quant-header__right">
-          <el-button class="quant-header-btn" text @click="goAdmin">
-            <el-icon><Setting /></el-icon>
-            管理台
-          </el-button>
-          <div class="quant-user-pill">
-            <el-icon><DataBoard /></el-icon>
-            <span>{{ authStore.user }}</span>
-          </div>
-        </div>
-      </header>
+    <AppHeader :title="t('chat.quantWorkbench')" :logo-icon="DataBoard" variant="quant">
+      <template #left>
+        <button class="app-back-btn" @click="goBack" aria-label="返回聊天" title="返回聊天">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        </button>
+      </template>
+    </AppHeader>
 
+    <div class="quant-shell">
       <section v-if="isOverview" class="quant-summary-grid" aria-label="量化工作台摘要">
         <article v-for="card in summaryCards" :key="card.title" class="quant-summary-card">
           <div class="quant-summary-card__icon">
@@ -78,15 +64,17 @@ import {
   Promotion,
   RefreshRight,
   Search,
-  Setting,
   TrendCharts,
   VideoPlay
 } from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
 import { useThemeManager } from '@/composables/useThemeManager'
+import AppHeader from '@/components/layout/AppHeader.vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { useAuthStore } from '@/stores/auth'
 import '@/styles/quant-workbench.css'
 
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -113,7 +101,6 @@ const navItems = computed(() =>
 )
 
 const goBack = () => router.push('/chat')
-const goAdmin = () => router.push('/admin')
 
 onMounted(async () => {
   initThemeManager()

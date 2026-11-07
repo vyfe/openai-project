@@ -188,6 +188,8 @@ export const enChat = {
   apiKeyPlaceholder: 'Leave blank to keep current',
   apiKeyHint: 'If left blank, the current API key will remain unchanged',
   adminPanel: 'Admin Panel',
+  quantWorkbench: 'Quant Workbench',
+  studioWorkbench: 'Audio Studio',
   selectAll: 'Select All',
   deselectAll: 'Deselect All',
   exportSelected: 'Export Selected',

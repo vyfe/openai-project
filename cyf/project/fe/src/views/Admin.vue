@@ -2,7 +2,8 @@
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '@/stores/auth'
+import AppHeader from '@/components/layout/AppHeader.vue'
+import { Setting } from '@element-plus/icons-vue'
 import ModelMetaTable from '@/components/admin/ModelMetaTable.vue'
 import SystemPromptTable from '@/components/admin/SystemPromptTable.vue'
 import UserTable from '@/components/admin/UserTable.vue'
@@ -14,7 +15,6 @@ import { useThemeManager } from '@/composables/useThemeManager'
 
 const { t } = useI18n()
 const router = useRouter()
-const authStore = useAuthStore()
 const activeTab = ref('models')
 const loadedTabs = ref(new Set<string>(['models']))
 const { isDarkTheme, initThemeManager } = useThemeManager()
@@ -45,28 +45,20 @@ watch(activeTab, (tab) => {
 <template>
   <div class="admin-page min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col" :class="{ dark: isDarkTheme, 'admin-dark': isDarkTheme }">
     <!-- Header -->
-    <header class="admin-header bg-white dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm">
-      <div class="admin-header__inner max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-        <div class="flex items-center gap-4">
-          <button
-            @click="goBack"
-            class="admin-back-button p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            aria-label="返回聊天"
-            title="返回聊天"
-          >
-            <svg class="w-5 h-5 " fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-          </button>
-          <h1 class="text-2xl font-bold text-amber-700 dark:text-emerald-400">
-            {{ t('admin.title') }}
-          </h1>
-        </div>
-        <div class="admin-header__user text-sm">
-          {{ authStore.user }}
-        </div>
-      </div>
-    </header>
+    <AppHeader :title="t('admin.title')" :logo-icon="Setting" variant="admin">
+      <template #left>
+        <button
+          @click="goBack"
+          class="app-back-btn"
+          aria-label="返回聊天"
+          title="返回聊天"
+        >
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+        </button>
+      </template>
+    </AppHeader>
 
     <!-- Content -->
     <main class="admin-main flex-1 p-4 sm:p-6 lg:p-8">
