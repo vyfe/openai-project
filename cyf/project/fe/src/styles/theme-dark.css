@@ -33,6 +33,14 @@ html.dark,
   --el-bg-color: var(--bg-1);
   --el-bg-color-page: var(--bg-0);
   --el-fill-color-light: var(--bg-2);
+  /* Element Plus 暗色变量表未引入，填充色会停留在亮色值，
+     导致表格行底/斑马纹在暗色下仍是白底。统一映射到项目 token。 */
+  --el-fill-color: var(--bg-2);
+  --el-fill-color-lighter: color-mix(in srgb, var(--bg-1) 88%, var(--text-1));
+  --el-fill-color-extra-light: var(--bg-0);
+  --el-fill-color-dark: var(--bg-0);
+  --el-fill-color-darker: var(--bg-0);
+  --el-fill-color-blank: var(--bg-1);
   --el-border-color: var(--line-1);
   --el-border-color-light: color-mix(in srgb, var(--line-1) 80%, black);
   --el-text-color-primary: var(--text-1);

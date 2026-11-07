@@ -497,7 +497,18 @@ HTTP ──► routes/  (Flask Blueprint)
   diff <(ls /tmp/b1/assets) <(ls /tmp/b2/assets)   # 应无输出
   ```
 
+  > 两次构建必须带**相同的 `VITE_*` 环境变量**，否则 `VITE_API_BASE_URL` 一个有值一个为空，产物哈希必然不同（会误判成构建不确定）。
+
   详见 [`doc/frontend-edgeone-deployment-plan.md`](doc/frontend-edgeone-deployment-plan.md) §3.1。
+
+### 4.7 主题与明暗切换
+
+应用的明暗由 `useThemeManager` 控制（`.dark` class 挂在 `html` 与 `body`），**与操作系统配色无关**。改主题相关的样式时注意两条：
+
+- **Tailwind v4 的 `dark:` 变体默认是 `prefers-color-scheme`**（跟随系统），`tailwind.config.js` 里的 `darkMode: 'class'` 在 v4 已失效（v4 不读该文件）。已用 `@custom-variant dark (&:where(.dark, .dark *));` 改为跟随应用主题。**项目有两份 Tailwind 入口**（`src/App.vue` 与 `src/styles/chat.css`），**两处都要声明**，否则其中一份仍是系统策略。
+- **Element Plus 的暗色变量表没有引入**（未引 `element-plus/theme-chalk/dark/css-vars.css`），`--el-fill-color-*` 在暗色下会停留在冷白值，导致表格行底、斑马纹、输入框等在暗色下仍是白的。已在 `theme-dark.css` / `theme-light.css` 里把 `--el-fill-color-{blank,lighter,light,extra-light,dark,darker}` 映射到项目 token。**`theme-light.css` 用 `:root:root`** 提高特异性压过 Element Plus 自带的 `:root`（同特异性时靠加载顺序决胜，实测会输）。
+
+> ⚠️ `src/styles/admin.css` 里有约 124 条 `:deep(...)` 规则。该文件通过非 scoped 的 `<style>@import` 引入，`:deep()` 在非 scoped CSS 里是**无效选择器**，这些规则**从未生效**。改动 admin 页样式前不要依赖它们；需要启用时先把 `:deep()` 去掉再逐页回归。
 
 ---
 

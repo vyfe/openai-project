@@ -171,8 +171,24 @@ body.dark-theme .admin-tabs :deep(.el-tabs__item:not(.is-active)){
 }.admin-page .el-table td.el-table__cell{
   padding: 10px 12px;
   color: var(--text-1);
+  background: var(--bg-1);
   border-color: var(--line-1) !important;
   vertical-align: middle;
+}
+/* 斑马纹行：Element Plus 用 --el-fill-color-lighter，这里显式跟随项目 token */
+.admin-page .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell{
+  background: color-mix(in srgb, var(--bg-2) 55%, var(--bg-1));
+}
+/* API 密钥等代码块：原用冷灰 Tailwind 类，改用项目 token */
+.admin-page .admin-code-chip{
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-all;
 }.admin-page .el-table .cell{
   line-height: 1.5;
 }.admin-page .el-table__body tr:hover > td{

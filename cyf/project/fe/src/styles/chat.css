@@ -1,3 +1,6 @@
 @import "tailwindcss";
+/* 本文件是第二份 Tailwind 入口（Chat-New.vue 的样式），不继承 App.vue 里的
+   @custom-variant，需单独声明：让 dark: 跟随应用的 .dark class 而不是系统配色。 */
+@custom-variant dark (&:where(.dark, .dark *));
 @import "./chat-responsive.css";
 @import "./chat-dark.css";

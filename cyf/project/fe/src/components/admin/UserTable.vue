@@ -196,9 +196,7 @@ onMounted(() => {
       <el-table-column prop="username" :label="t('admin.username')" min-width="120" />
       <el-table-column prop="api_key_masked" :label="t('admin.apiKey')" min-width="200">
         <template #default="{ row }">
-          <code class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
-            {{ row.api_key_masked || '-' }}
-          </code>
+          <code class="admin-code-chip">{{ row.api_key_masked || '-' }}</code>
         </template>
       </el-table-column>
       <el-table-column prop="role" :label="t('admin.role')" width="100">

@@ -21,6 +21,10 @@ onMounted(() => {
 
 <style>
 @import "tailwindcss";
+/* Tailwind v4 的 dark 变体默认是 prefers-color-scheme（跟随操作系统），
+   与应用自己的明暗切换脱节：系统为深色时 dark: 样式永远生效，切到亮色也不变。
+   改为跟随 .dark class（由 useThemeManager 挂在 html/body 上）。 */
+@custom-variant dark (&:where(.dark, .dark *));
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

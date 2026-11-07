@@ -3,6 +3,16 @@ body {
   color-scheme: light;
 }
 
+/* Element Plus 的填充色默认是冷白（#ffffff / #fafafa），与项目暖色 token
+   不一致，表格行底、斑马纹、空状态都会偏冷。统一映射到项目 token。
+   用 :root:root 提高特异性，压过 Element Plus 自带的 :root 定义。 */
+:root:root {
+  --el-fill-color-blank: var(--bg-1);
+  --el-fill-color-extra-light: var(--bg-0);
+  --el-fill-color-lighter: color-mix(in srgb, var(--bg-0) 72%, var(--bg-1));
+  --el-fill-color-light: var(--bg-2);
+}
+
 body {
   margin: 0;
   padding: 0;
