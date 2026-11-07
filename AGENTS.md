@@ -530,8 +530,9 @@ HTTP ──► routes/  (Flask Blueprint)
 ### 5.3 首次运行前
 
 - `start-prod.sh` 默认无执行权限：先 `chmod +x start-prod.sh start-prod-quant`。
-- `cyf/project/server/conf/conf.ini` 从 `conf.ini.tpl` 拷贝后填实际 `api_key` / `api_host` / `quant.feishu_*` 等。
+- `cyf/project/server/conf/conf.ini` 从 `conf.ini.tpl` 拷贝后填实际 `api_key` / `api_host` / `quant.ths_api_key` / `quant.feishu_*` 等。
 - `start-prod-quant` 的 Agent 登录凭据不再内置于脚本：优先读环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD`，其次读服务器受控文件 `$HOME/openai-project/.quant-credentials`（每行 `KEY=VALUE`，权限 600）；两者都缺失时脚本明确报错退出。首次切换需在服务器创建该文件，调度 Worker 不需要凭据。
+- 该文件同样走「模板 → 复制 → 填值」模式：仓库根目录 [`.quant-credentials.tpl`](.quant-credentials.tpl) 是只有占位符的模板，部署时 `cp .quant-credentials.tpl .quant-credentials` 后填入实际账号并 `chmod 600`。与 `conf.ini.tpl` 一样，模板入库、实际文件由 `.gitignore` 拦截。
 
 ---
 

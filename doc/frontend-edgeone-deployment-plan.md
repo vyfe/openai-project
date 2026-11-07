@@ -146,15 +146,16 @@ VITE_API_BASE_URL=https://api.chat-h.cc VITE_FILE_BASE_URL=https://api.chat-h.cc
    ```
 
 5. 脚本更新后端并启动 `/home/lighthouse/.local/bin/uwsgi`，监听 `127.0.0.1:39997`。检查本机和公网 `/health` JSON，确认 `service=openai-project`、`status=ok`；按改动检查对应业务。
-6. 量化采集与调度是独立进程；仅在相关代码变更时按现有 `start-prod-quant` 流程更新和重启。脚本中的 Agent 登录凭据已外置，更新脚本前先在服务器准备受控文件（权限 600）：
+6. 量化采集与调度是独立进程；仅在相关代码变更时按现有 `start-prod-quant` 流程更新和重启。脚本中的 Agent 登录凭据已外置，与 `conf.ini` 一样走「模板 → 复制 → 填值」；更新脚本前先在服务器项目根目录准备受控文件（权限 600）：
 
    ```bash
-   printf 'QUANT_LOGIN_USER=%s\nQUANT_LOGIN_PASSWORD=%s\n' '<用户名>' '<密码>' \
-     > /home/lighthouse/openai-project/.quant-credentials
-   chmod 600 /home/lighthouse/openai-project/.quant-credentials
+   cd /home/lighthouse/openai-project
+   cp .quant-credentials.tpl .quant-credentials   # 模板随代码分发，只有占位符
+   $EDITOR .quant-credentials                      # 填 QUANT_LOGIN_USER / QUANT_LOGIN_PASSWORD
+   chmod 600 .quant-credentials
    ```
 
-   也可用环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD` 覆盖；两者都缺失时 `start-prod-quant --agent` 会明确报错退出，不会静默使用内置账号。调度 Worker 不需要凭据。确认任务与数据库状态后结束发布。
+   模板文件为仓库根目录 `.quant-credentials.tpl`，实际凭据文件由 `.gitignore` 拦截不入库。也可用环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD` 覆盖；两者都缺失时 `start-prod-quant --agent` 会明确报错退出，不会静默使用内置账号。调度 Worker 不需要凭据。确认任务与数据库状态后结束发布。
 
 宝塔已有部署类 Shell 任务本轮保持原状态；本轮未切换后端发布方式。`start-prod.sh --frontend-only` 和整包 `--all` 保留给原服务器静态站部署，当前 EdgeOne 前端由 Git 构建发布。
 

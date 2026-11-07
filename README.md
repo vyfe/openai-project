@@ -110,14 +110,21 @@ $EDITOR cyf/project/server/conf/conf.ini
 
 #### 部署（在生产服务器）
 
+生产密钥和运行凭据**不入库**，全部由运维在服务器上手工填写。以下模板随代码一起分发，部署时复制并填值。
+
 ```bash
 # 解压
 tar -xzf openai-full-prod.tar.gz
 cd dist
 
-# 写好配置
+# 写好配置一：后端主配置
 cp cyf/project/server/conf/conf.ini.tpl cyf/project/server/conf/conf.ini
-$EDITOR cyf/project/server/conf/conf.ini    # api_key / api_host / quant.feishu_*
+$EDITOR cyf/project/server/conf/conf.ini    # api_key / api_host / quant.ths_api_key / quant.feishu_*
+
+# 写好配置二：量化 Agent 登录凭据（放在项目根目录，供 start-prod-quant 读取）
+cp .quant-credentials.tpl .quant-credentials
+$EDITOR .quant-credentials                  # QUANT_LOGIN_USER / QUANT_LOGIN_PASSWORD
+chmod 600 .quant-credentials
 
 # 启动（首次运行需 chmod）
 chmod +x start-prod.sh start-prod-quant
@@ -126,6 +133,9 @@ nohup ./start-prod-quant --all --restart > start-prod-quant.out 2>&1 &   # 量�
 ```
 
 生产依赖：`python3` + `uwsgi` + `nginx`。
+
+> `.quant-credentials` 只被 `--agent` 需要；只跑调度 Worker 时可以不建。
+> 缺失时 `start-prod-quant --agent` 会明确报错退出，不会静默使用内置账号。
 
 ### 4.3 Nginx 配置
 
@@ -185,6 +195,27 @@ server {
 
 完整 Key 清单与默认值见 [`AGENTS.md` 第 6 节](./AGENTS.md#6-配置说明cyfprojectserverconfconfini)。
 
+除 `conf.ini` 外，服务器上还有一份**量化 Agent 登录凭据**文件，同样走「模板 → 复制 → 填值」的模式：
+
+| 文件 | 模板 | 用途 | 生效者 |
+| --- | --- | --- | --- |
+| `$HOME/openai-project/.quant-credentials` | 仓库根目录 [`.quant-credentials.tpl`](./.quant-credentials.tpl) | `start-prod-quant --agent` 登录后端认领采集任务 | 量化采集 Agent |
+
+```bash
+cp .quant-credentials.tpl .quant-credentials
+$EDITOR .quant-credentials     # QUANT_LOGIN_USER / QUANT_LOGIN_PASSWORD
+chmod 600 .quant-credentials
+```
+
+内容是两行 `KEY=VALUE`：
+
+```
+QUANT_LOGIN_USER=<平台登录用户名>
+QUANT_LOGIN_PASSWORD=<平台登录密码>
+```
+
+账号与 `conf.ini` 的 `[common] users` 或 DB 用户表是同一套，**不是** API key。可用环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD` 覆盖文件内容。
+
 ---
 
 ## 6. 关键运行注意
@@ -207,6 +238,7 @@ server {
 - SQL 后门必须保持关闭（生产由运维侧审计 `enable_sql_execute` 配置）。
 - `cyf/project/*/conf/conf.ini` 与 `cyf/project/*/conf/key.*` 已在 `.gitignore` 内，禁止提交。
 - `cyf/project/*/conf/conf.ini.tpl` 只放占位符；生产密钥一律留在服务器配置或环境变量。量化数据库备份（`*.db.bak*`）、`.priv` 私钥文件同样禁止提交。
+- `.quant-credentials`（量化 Agent 登录凭据）已在 `.gitignore` 内；模板 `.quant-credentials.tpl` 只含占位符，可入库。
 - 飞书回调需校验 `feishu_verification_token` 与 `feishu_encrypt_key`。
 
 ---
