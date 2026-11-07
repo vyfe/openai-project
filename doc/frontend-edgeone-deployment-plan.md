@@ -47,7 +47,9 @@
 
 构建变量已配置到生产及预览环境。`VITE_*` 会进入公开浏览器代码，仅放公开服务地址；生产密钥、配置和数据库保留在服务器。修改环境变量后重新部署才生效。默认项目域名在中国大陆需要有效期 3 小时的预览链接，日常使用自定义域名。
 
-缓存与路由由 `edgeone.json` 管理：HTML `Cache-Control: no-cache`，带哈希的 `/assets/*` 为 `public, max-age=31536000, immutable`；Vue 嵌套路由回退到 `/index.html`。API 子域独立于 EdgeOne，Nginx 设置 `private, no-store`。
+缓存与路由由 `edgeone.json` 管理：HTML `Cache-Control: no-cache`，带哈希的 `/assets/*` 为 `public, max-age=600, must-revalidate`；Vue 嵌套路由回退到 `/index.html`。API 子域独立于 EdgeOne，Nginx 设置 `private, no-store`。
+
+> `/assets/*` 的缓存刻意不用一年期 + `immutable`，原因见 §3.1「SPA 回退与静态资源缓存冲突」。
 
 ### Spaceship DNS
 
@@ -101,12 +103,43 @@ bash -n /usr/local/sbin/openai-server-cert-renew
 
 随后在宝塔点击原任务“执行”，检查日志。2026-11-07 16:12:43 已执行成功：原批量检查结束，API 证书超过 30 天，本次无需签发。EdgeOne 公网证书和服务器 API 证书分别在各自控制台管理。
 
+### 3.1 SPA 回退与静态资源缓存冲突（务必了解）
+
+EdgeOne Makers 的 SPA fallback 语义是**先匹配静态资源，匹配不到才回退 `/index.html`**（[官方说明](https://pages.edgeone.ai/document/edgeone-json)）。因此正常情况下 `/assets/*.js` 直接命中文件，不会拿到 HTML。
+
+问题出在**部署切换的窗口期**：新旧资源不是原子切换的那几十秒里，某个 `/assets/xxx.js` 可能尚未就位 → 请求 miss → 回退到 `index.html` → 响应是 **200 + `Content-Type: text/html`**。
+
+而 headers 规则是**按请求路径匹配**的，EdgeOne 无法区分「静态文件命中」和「回退响应」。如果 `/assets/*` 规则带了 `max-age=31536000, immutable`，这份 **HTML 会被浏览器当成那个 JS 文件缓存下来**，且 `immutable` 让浏览器不再发起条件请求 —— 之后无论服务器和 CDN 是否正常，普通刷新都无法恢复，只能清站点缓存。
+
+典型症状：
+
+```
+Failed to load module script: Expected a JavaScript-or-Wasm module script
+but the server responded with a MIME type of "text/html".
+```
+
+排查顺序：**先确认服务器侧是否正常**（`curl -I https://chat-h.cc/assets/<文件名>` 看 `Content-Type`）。若服务器返回 `application/javascript`，问题就在浏览器本地缓存，清站点缓存即可恢复。
+
+因此 `/assets/*` 的缓存策略刻意不用一年期 + `immutable`，改为 `public, max-age=600, must-revalidate`：Vite 产物带内容哈希，内容永不变，靠 ETag 协商仍能拿到 304；而窗口期 miss 的回退最多影响 10 分钟，浏览器会自动重新校验恢复。代价是每 10 分钟一次条件请求，性能损失可忽略。
+
+调整 `edgeone.json` 后需重新部署才生效。每次部署后用自检脚本确认：
+
+```bash
+bash cyf/project/fe/verify-deploy.sh https://chat-h.cc
+```
+
+脚本会逐个校验首页引用的静态资源的 HTTP 状态与 MIME 类型，并探测缺失资源回退的 `Cache-Control`，任一项不达标即退出码非 0。
+
 ## 4. 后续前端开发与发布
 
 1. 本机按常规功能分支开发。未配置 `VITE_*` 时，开发默认使用 `http://localhost:39997`；需要连接生产 API 时在本地忽略文件 `.env.local` 设置公开地址。
 2. 在 `cyf/project/fe` 执行 `npm ci`、`npm run test`、`npm run build`。新增附件路径复用 `backendUrl.ts`；后端调用复用现有 API 客户端。
 3. 审核通过后，将功能提交集成到 `codex/edgeone-frontend-deploy` 并 push。该分支是当前正式发布入口；合并前核对目标分支和生产变更范围。
-4. 在 EdgeOne“构建部署”确认对应 commit 构建成功并成为生产部署，再访问 `https://chat-h.cc`；新代码由浏览器重新请求 HTML 后加载。
+4. 在 EdgeOne“构建部署”确认对应 commit 构建成功并成为生产部署，再访问 `https://chat-h.cc`；新代码由浏览器重新请求 HTML 后加载。部署完成后跑一次自检脚本，确认所有静态资源 MIME 正确、缓存策略符合预期：
+
+   ```bash
+   bash cyf/project/fe/verify-deploy.sh https://chat-h.cc
+   ```
 5. 验证范围按改动选择：登录/API、SSE、上传下载或对应业务页。API/附件地址配置变化时必须重新构建。
 
 本机模拟 EdgeOne 构建：
@@ -164,6 +197,7 @@ VITE_API_BASE_URL=https://api.chat-h.cc VITE_FILE_BASE_URL=https://api.chat-h.cc
 | 现象 | 优先检查 |
 | --- | --- |
 | 静态页打不开、刷新嵌套路由失败 | EdgeOne 最新生产部署、域名状态、`edgeone.json` 的 SPA 回退 |
+| 报 “Expected a JavaScript-or-Wasm module script … MIME type of text/html” | 先 `curl -I` 目标资源的 `Content-Type`：服务器正常则是浏览器缓存了回退 HTML，清站点缓存；详见 §3.1 |
 | 新版本未出现 | 生产 commit、环境变量是否重建、HTML 响应与浏览器刷新 |
 | 登录/模型/API 报错 | `api.chat-h.cc/health`、JWT、浏览器 CORS、Nginx 和后端日志 |
 | 流式输出延迟或中断 | API Nginx `proxy_buffering off`、上游响应、后端日志 |

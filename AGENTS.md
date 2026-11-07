@@ -671,3 +671,4 @@ npm run test:coverage                  # 覆盖率
 - `cyf/project/fe/nginx.conf.tpl` —— 前端 Nginx 模板。
 - `doc/frontend-edgeone-deployment-plan.md` —— 当前 EdgeOne/API 架构、各平台配置、宝塔续签、前后端发布及回滚手册。
 - `cyf/project/fe/nginx-api.conf.tpl` —— 独立 HTTPS API 与文件入口模板。
+- `cyf/project/fe/verify-deploy.sh` —— 线上前端部署自检：静态资源 MIME 类型与缓存策略。
