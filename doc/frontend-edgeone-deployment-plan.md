@@ -21,7 +21,7 @@
 ### GitHub 与代码
 
 - 仓库：`vyfe/openai-project`，EO Makers GitHub App 仅授权该仓库。
-- EdgeOne 当前生产分支：`codex/edgeone-frontend-deploy`。推送到该分支会触发生产构建，`master` 当前不作为生产来源。
+- EdgeOne 当前生产分支：`codex/edgeone-frontend-deploy`。推送到该分支会自动触发构建流水线，在 EdgeOne“构建部署”点击发布后生效；`master` 当前不作为生产来源。
 - `services/backendUrl.ts` 统一 API 和文件地址；Axios、令牌刷新、SSE、上传和附件渲染共用配置。
 - 显示附件和发送模型上下文时，将旧 `:4567/download/`、`chat-h.cc:4567/download/` 改为新文件入口，历史数据保留原内容。
 - `package-lock.json` 下载地址统一为 npm 官方 registry，保留依赖版本和 integrity。首次云构建因内网 registry 不可达失败，修复后构建成功。
@@ -134,8 +134,8 @@ bash cyf/project/fe/verify-deploy.sh https://chat-h.cc
 
 1. 本机按常规功能分支开发。未配置 `VITE_*` 时，开发默认使用 `http://localhost:39997`；需要连接生产 API 时在本地忽略文件 `.env.local` 设置公开地址。
 2. 在 `cyf/project/fe` 执行 `npm ci`、`npm run test`、`npm run build`。新增附件路径复用 `backendUrl.ts`；后端调用复用现有 API 客户端。
-3. 审核通过后，将功能提交集成到 `codex/edgeone-frontend-deploy` 并 push。该分支是当前正式发布入口；合并前核对目标分支和生产变更范围。
-4. 在 EdgeOne“构建部署”确认对应 commit 构建成功并成为生产部署，再访问 `https://chat-h.cc`；新代码由浏览器重新请求 HTML 后加载。部署完成后跑一次自检脚本，确认所有静态资源 MIME 正确、缓存策略符合预期：
+3. 审核通过后，将功能提交集成到 `codex/edgeone-frontend-deploy` 并 push。push 会自动触发 EdgeOne 构建流水线；该分支是当前正式发布入口，合并前核对目标分支和生产变更范围。
+4. 在 EdgeOne“构建部署”确认对应 commit 的流水线构建成功，再点击**发布**使其成为生产部署，然后访问 `https://chat-h.cc`；新代码由浏览器重新请求 HTML 后加载。发布完成后跑一次自检脚本，确认所有静态资源 MIME 正确、缓存策略符合预期：
 
    ```bash
    bash cyf/project/fe/verify-deploy.sh https://chat-h.cc

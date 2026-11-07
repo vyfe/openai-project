@@ -91,7 +91,7 @@ $EDITOR cyf/project/server/conf/conf.ini
 
 - 正式前端：[https://chat-h.cc](https://chat-h.cc)，托管于 EdgeOne Makers（全球，不含中国大陆）；Spaceship 根域 CNAME 已接入 EdgeOne，HTTPS 正常。
 - API 与附件：[https://api.chat-h.cc](https://api.chat-h.cc)，由新加坡原服务器提供；数据库、量化与音频继续在原服务器。
-- 前端生产分支为 `codex/edgeone-frontend-deploy`，推送后由 EdgeOne 自动构建 `cyf/project/fe`；`VITE_API_BASE_URL` 和 `VITE_FILE_BASE_URL` 均为 `https://api.chat-h.cc`。
+- 前端生产分支为 `codex/edgeone-frontend-deploy`，push 后由 EdgeOne 自动构建 `cyf/project/fe`（再在控制台点击发布）；`VITE_API_BASE_URL` 和 `VITE_FILE_BASE_URL` 均为 `https://api.chat-h.cc`。
 - 后端继续用原服务器发布流程，执行 `start-prod.sh --backend-only --restart`；前端与后端分别发布。
 - 服务器证书由宝塔原“续签Let's Encrypt证书”计划任务每日执行统一脚本；主站证书由 EdgeOne 托管续期。
 

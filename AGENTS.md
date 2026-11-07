@@ -509,9 +509,9 @@ HTTP ──► routes/  (Flask Blueprint)
 
 ### 5.2 生产环境
 
-当前生产分离部署：前端 `chat-h.cc` 由 EdgeOne Makers 项目 `makers-ewkduzmpajma` 发布，生产分支 `codex/edgeone-frontend-deploy`、构建根目录 `cyf/project/fe`；两个 `VITE_*_BASE_URL` 均为 `https://api.chat-h.cc`。Spaceship 根域 CNAME 已指向 EdgeOne，免费证书已部署并启用 HTTP 到 HTTPS 的 301 跳转。`preview.chat-h.cc` 关联同一生产环境。API、数据库、附件、量化与音频继续由新加坡原服务器运行。
+当前生产分离部署：前端 `chat-h.cc` 由 EdgeOne Makers 项目 `makers-ewkduzmpajma` 发布，生产分支 `codex/edgeone-frontend-deploy`、构建根目录 `cyf/project/fe`；两个 `VITE_*_BASE_URL` 均为 `https://api.chat-h.cc`。push 到该分支自动触发构建流水线，在 EdgeOne 控制台点击发布后生效。Spaceship 根域 CNAME 已指向 EdgeOne，免费证书已部署并启用 HTTP 到 HTTPS 的 301 跳转。`preview.chat-h.cc` 关联同一生产环境。API、数据库、附件、量化与音频继续由新加坡原服务器运行。
 
-前端改动经测试后集成到生产分支并 push，在 EdgeOne 检查对应 commit 发布成功；后端使用下方 `--backend-only --restart`。完整 DNS、证书、宝塔任务、前后端发布和回滚步骤见 [`doc/frontend-edgeone-deployment-plan.md`](doc/frontend-edgeone-deployment-plan.md)。
+前端改动经测试后集成到生产分支并 push，在 EdgeOne 检查对应 commit 的流水线构建成功并点击发布；后端使用下方 `--backend-only --restart`。完整 DNS、证书、宝塔任务、前后端发布和回滚步骤见 [`doc/frontend-edgeone-deployment-plan.md`](doc/frontend-edgeone-deployment-plan.md)。
 
 ```bash
 # 在打包机
