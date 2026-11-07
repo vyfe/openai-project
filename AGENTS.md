@@ -48,7 +48,7 @@
 | **前端 Web** | `cyf/project/fe/` | Vue 3 + TS + Vite + Pinia + Element Plus + TailwindCSS + Vue I18n + highlight.js + KaTeX + marked |
 | **旧版桌面客户端** | `cyf/project/client/` | CustomTkinter，**已弃用**，仅留作参考 |
 
-启动端口：后端 `39997`、前端 `3000`（开发），生产由 Nginx 反代。
+启动端口：后端 `39997`、前端 `3000`（开发）。生产前端由 EdgeOne Makers 托管 `chat-h.cc`；`api.chat-h.cc` 由新加坡原服务器 Nginx 反代后端。
 
 ---
 
@@ -509,9 +509,13 @@ HTTP ──► routes/  (Flask Blueprint)
 
 ### 5.2 生产环境
 
+当前生产分离部署：前端 `chat-h.cc` 由 EdgeOne Makers 项目 `makers-ewkduzmpajma` 发布，生产分支 `codex/edgeone-frontend-deploy`、构建根目录 `cyf/project/fe`；两个 `VITE_*_BASE_URL` 均为 `https://api.chat-h.cc`。Spaceship 根域 CNAME 已指向 EdgeOne，免费证书已部署并启用 HTTP 到 HTTPS 的 301 跳转。`preview.chat-h.cc` 关联同一生产环境。API、数据库、附件、量化与音频继续由新加坡原服务器运行。
+
+前端改动经测试后集成到生产分支并 push，在 EdgeOne 检查对应 commit 发布成功；后端使用下方 `--backend-only --restart`。完整 DNS、证书、宝塔任务、前后端发布和回滚步骤见 [`doc/frontend-edgeone-deployment-plan.md`](doc/frontend-edgeone-deployment-plan.md)。
+
 ```bash
 # 在打包机
-./pack-prod.sh                        # 生成 dist/server.tar.gz + dist/fe.tar.gz
+./pack-prod.sh                        # 生成 dist/server.tar.gz + dist/fe.tar.gz（fe.tar.gz 已弃用，前端改由 EdgeOne 构建）
 ./full-pack-prod.sh                   # 生成 dist/openai-full-prod.tar.gz（一键部署包）
 
 # 在服务器（$HOME/openai-project）
@@ -519,13 +523,15 @@ HTTP ──► routes/  (Flask Blueprint)
 ./start-prod-quant --all --restart    # 启动量化子系统，nohup 后台
 ```
 
+> 前端已由 EdgeOne 从 Git 分支自动构建，`pack-prod.sh` 产出的 `fe.tar.gz` 与 `start-prod.sh --frontend-only` 仅保留给原服务器静态站回滚，日常发布不用。
+
 `start-prod.sh` 默认运行路径是 `$HOME/openai-project`（写死在脚本顶部）。后端依赖 `uwsgi` + `nginx`；Nginx 转发示例见 `README.md` 和 `cyf/project/fe/nginx.conf.tpl`。
 
 ### 5.3 首次运行前
 
 - `start-prod.sh` 默认无执行权限：先 `chmod +x start-prod.sh start-prod-quant`。
 - `cyf/project/server/conf/conf.ini` 从 `conf.ini.tpl` 拷贝后填实际 `api_key` / `api_host` / `quant.feishu_*` 等。
-- `start-prod-quant` 内置生产用户 `cyf` / `b199541d`，与生产 `conf.ini` 保持一致。
+- `start-prod-quant` 的 Agent 登录凭据不再内置于脚本：优先读环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD`，其次读服务器受控文件 `$HOME/openai-project/.quant-credentials`（每行 `KEY=VALUE`，权限 600）；两者都缺失时脚本明确报错退出。首次切换需在服务器创建该文件，调度 Worker 不需要凭据。
 
 ---
 
@@ -628,6 +634,7 @@ npm run test:coverage                  # 覆盖率
 - 生产部署时 `admin.enable_sql_execute` 必须保持 `false`，否则暴露 SQL 后门。
 - 飞书回调地址变更时同时更新 `quant.feishu_*` 与 `routes/quant/im_memory_routes.py` 中注册的路径。
 - 量化子系统 DB schema 变更必须走 `tools/quant_db_migrate.py`（见 §3.5.1）；禁止靠 peewee 自动建表补缺列。
+- **禁止把生产密钥写进仓库**：`conf/conf.ini.tpl` 只放占位符，同花顺 / MiniMax / 飞书 / OpenAI 等 Key 一律留在服务器 `conf/conf.ini` 或环境变量；量化数据库备份（`*.db.bak*`）、`.priv` 私钥文件不得提交（已在 `.gitignore` 中拦截）。历史提交里出现过的明文密码，**必须轮换密码**，仅删除文件无效。
 - `doc/` 与 `cyf/project/server/docs/` 下的 markdown 文件**不被** `.gitignore`，是有意保留的专题文档；改动时同步更新本文件"参考文档索引"小节。`.claude/` 已被 `.gitignore` 排除，本地仅保留 `settings.local.json`。
 
 ---
@@ -638,17 +645,12 @@ npm run test:coverage                  # 覆盖率
 
 - `doc/minimax-voice-management.md` —— MiniMax 音色配置、复刻/激活、后台操作与 API。
 - `doc/minimax-music-management.md` —— MiniMax 音乐创作配置、生成流程、记录保存与 API。
-
-- `doc/frontend-claude-gpt-style-refactor-playbook.md` —— 前端 Claude/GPT 风格重构手册
-- `doc/multi-provider-refactoring-plan.md` —— 多 LLM Provider 重构计划
-- `doc/quant/quant-mvp-runbook.md` —— 量化 MVP 运行手册
-- `doc/quant/a-share-data-integration-module.md` —— A 股数据集成模块
-- `doc/quant/strategy-rule-module.md` —— 策略规则引擎
-- `doc/quant/lightweight-ai-quant-design-evaluation.md` —— 轻量 AI 量化设计评估
-- `doc/quant/quant-data-collection-deploy.md` —— 数据采集部署
-- `doc/quant/feishu-setup-guide.md` —— 飞书自建应用配置
+- `doc/web-search-tool.md` —— 服务端本地网络搜索工具的工作方式与配置。
+- `doc/quant/data-sources-overview.md` —— 行情数据源总览（provider 能力对比与选型）。
 - `doc/quant/indicator-extension-playbook.md` —— 量化指标横向扩展开发指南（registry → compute → IDE/回测/测试 五步）
 - `doc/quant/report-feishu-delivery.md` —— 报告 → 飞书投递链路
+
+> 索引只列仓库内实际存在的文档；新增或删除 `doc/` 下文件时同步维护本节，避免死链。
 
 ### 10.2 后端专题（`cyf/project/server/docs/`）
 
@@ -666,5 +668,5 @@ npm run test:coverage                  # 覆盖率
 
 - `README.md` —— 用户/部署者入口；包含 nginx 反代示例。
 - `cyf/project/fe/nginx.conf.tpl` —— 前端 Nginx 模板。
-- `doc/frontend-edgeone-deployment-plan.md` —— EdgeOne 前端托管、独立 API、DNS 切换与回滚。
+- `doc/frontend-edgeone-deployment-plan.md` —— 当前 EdgeOne/API 架构、各平台配置、宝塔续签、前后端发布及回滚手册。
 - `cyf/project/fe/nginx-api.conf.tpl` —— 独立 HTTPS API 与文件入口模板。

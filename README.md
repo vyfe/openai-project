@@ -87,14 +87,28 @@ $EDITOR cyf/project/server/conf/conf.ini
 
 ## 4. 部署
 
-### 4.1 打包（在开发机）
+### 4.1 当前生产：EdgeOne 前端 + 独立 API
+
+- 正式前端：[https://chat-h.cc](https://chat-h.cc)，托管于 EdgeOne Makers（全球，不含中国大陆）；Spaceship 根域 CNAME 已接入 EdgeOne，HTTPS 正常。
+- API 与附件：[https://api.chat-h.cc](https://api.chat-h.cc)，由新加坡原服务器提供；数据库、量化与音频继续在原服务器。
+- 前端生产分支为 `codex/edgeone-frontend-deploy`，推送后由 EdgeOne 自动构建 `cyf/project/fe`；`VITE_API_BASE_URL` 和 `VITE_FILE_BASE_URL` 均为 `https://api.chat-h.cc`。
+- 后端继续用原服务器发布流程，执行 `start-prod.sh --backend-only --restart`；前端与后端分别发布。
+- 服务器证书由宝塔原“续签Let's Encrypt证书”计划任务每日执行统一脚本；主站证书由 EdgeOne 托管续期。
+
+平台配置、DNS、证书、发布检查和回滚步骤见 [EdgeOne 部署与运维手册](./doc/frontend-edgeone-deployment-plan.md)。
+
+### 4.2 原服务器分包/整包部署
+
+以下打包与同机 Nginx 流程保留给后端分包发布和原静态站恢复。
+
+#### 打包（在开发机）
 
 ```bash
 ./pack-prod.sh        # → dist/server.tar.gz + dist/fe.tar.gz
 ./full-pack-prod.sh   # → dist/openai-full-prod.tar.gz（一键部署包，含 start-prod.sh / start-prod-quant / requirements.txt）
 ```
 
-### 4.2 部署（在生产服务器）
+#### 部署（在生产服务器）
 
 ```bash
 # 解压
@@ -113,7 +127,9 @@ nohup ./start-prod-quant --all --restart > start-prod-quant.out 2>&1 &   # 量�
 
 生产依赖：`python3` + `uwsgi` + `nginx`。
 
-### 4.3 Nginx 反代示例
+### 4.3 Nginx 配置
+
+当前独立 API 站点使用 [`nginx-api.conf.tpl`](./cyf/project/fe/nginx-api.conf.tpl)，包含 CORS、SSE、文件下载和证书验证。以下为原服务器同机部署示例：
 
 ```nginx
 server {
@@ -177,7 +193,7 @@ server {
 - 生产 `admin.enable_sql_execute` 必须为 `false`。
 - 多进程 uWSGI 部署时注意 `runtime_state` 是模块级单例，共享状态已有锁保护（黑名单、流取消、模型元数据定时器）。
 - `start-prod.sh` 默认运行路径 `$HOME/openai-project`，需根据实际调整脚本顶部 `PROJECT_ROOT`。
-- `start-prod-quant` 内置生产账号 `cyf` / `b199541d`，与生产 `conf.ini` 的 `users` 保持一致。
+- `start-prod-quant` 的 Agent 登录凭据从环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD` 或服务器受控文件 `$HOME/openai-project/.quant-credentials`（权限 600）读取，不写入脚本；缺失时脚本明确报错退出。
 - 旧版 Tkinter 客户端（`cyf/project/client/`）与 `cyf/project/fe/server.js`（旧 Node 模拟后端）已弃用，仅作历史参考。
 - 详细测试规范、文件膨胀控制、AI 编程助手约定见 [`AGENTS.md`](./AGENTS.md)。
 
@@ -190,6 +206,7 @@ server {
 - 文件上传白名单硬编码在 `conf/runtime.py::RuntimeState.allowed_extensions`。
 - SQL 后门必须保持关闭（生产由运维侧审计 `enable_sql_execute` 配置）。
 - `cyf/project/*/conf/conf.ini` 与 `cyf/project/*/conf/key.*` 已在 `.gitignore` 内，禁止提交。
+- `cyf/project/*/conf/conf.ini.tpl` 只放占位符；生产密钥一律留在服务器配置或环境变量。量化数据库备份（`*.db.bak*`）、`.priv` 私钥文件同样禁止提交。
 - 飞书回调需校验 `feishu_verification_token` 与 `feishu_encrypt_key`。
 
 ---
@@ -197,7 +214,3 @@ server {
 ## 8. 许可证
 
 仅作个人/团队内部使用，未声明开源许可。
-
-### EdgeOne 前端托管
-
-前端可独立部署到 EdgeOne Makers，后端和数据保留在原服务器。构建根目录为 `cyf/project/fe`，API 与文件地址分别通过 `VITE_API_BASE_URL`、`VITE_FILE_BASE_URL` 配置；详见 [部署计划](doc/frontend-edgeone-deployment-plan.md)。

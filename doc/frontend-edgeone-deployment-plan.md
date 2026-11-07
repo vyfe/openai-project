@@ -1,79 +1,204 @@
-# 前端 EdgeOne 部署计划
+# 前端 EdgeOne 部署与运维手册
 
-> 更新：2026-11-07。前端适配与 GitHub 关联已完成，API 站点与 EdgeOne 发布正在执行。
+> 更新：2026-11-07。正式站 `chat-h.cc` 已切换到 EdgeOne Makers 并完成公网验证；API、附件与数据继续保留在新加坡原服务器。本文记录各平台现状与后续发布维护流程；README 为快速入口，AGENTS.md 为开发约定。
 
-## 现状与目标
+## 1. 生产架构与职责
 
-| 项目 | 当前 | 目标 |
+| 入口/组件 | 承载位置 | 运维职责 |
 | --- | --- | --- |
-| 前端 | `chat-h.cc` → 新加坡服务器 Nginx 静态文件 | `chat-h.cc` → EdgeOne Makers 静态托管/CDN |
-| API | 同域 `/never_guess_my_usage/` → `127.0.0.1:39997` | `https://api.chat-h.cc/never_guess_my_usage/` → 原 Flask |
-| 附件 | `https://chat-h.cc:4567/download/`，目录 `/home/www/downloads/` | `https://api.chat-h.cc/download/`，同一目录 |
-| 数据与任务 | 原服务器 SQLite、量化进程、音频文件 | 继续由原服务器运行 |
-| 发布 | 本机打包、传输到服务器 | GitHub 指定生产分支推送后自动构建 |
+| `https://chat-h.cc` | EdgeOne Makers 静态托管/CDN | 正式前端、SPA 路由、静态缓存、边缘 HTTPS |
+| `https://preview.chat-h.cc` | 同一 EdgeOne 项目的生产环境 | 本轮迁移验收入口，与正式域同步发布 |
+| `https://api.chat-h.cc/never_guess_my_usage/` | `43.134.239.126` → Nginx → `127.0.0.1:39997` | Flask API、JWT、SSE、文件上传 |
+| `https://api.chat-h.cc/download/` | 同一 Nginx → `/home/www/downloads/` | 现有附件的标准 HTTPS 下载入口 |
+| SQLite、量化、语音与音乐文件 | 原服务器 | 后端数据、调度、采集、飞书和音频落盘 |
+| DNS | Spaceship `launch1/launch2.spaceship.net` | 域名解析及验证记录 |
+| 服务器证书与计划任务 | 宝塔 | API 证书检查、续签、Nginx reload 和执行日志 |
 
-服务器公网地址为 `43.134.239.126`，地域新加坡；DNS 在 Spaceship，当前使用 `launch1.spaceship.net`、`launch2.spaceship.net`。域名未备案，EdgeOne 必须选择“全球可用区（不含中国大陆）”。大陆用户访问境外节点，实际提速需上线后实测。免费套餐和当前资源以控制台为准。
+服务器地域为新加坡。域名无 ICP 备案，EdgeOne 选择“全球可用区（不含中国大陆）”；大陆用户访问境外节点。前端加速覆盖 HTML/JS/CSS/字体等静态资源，聊天和文件流量经 API 子域访问原服务器。
 
-## 已实现的开发适配
+## 2. 本轮各平台变更
 
-- `services/backendUrl.ts`：统一读取公开构建变量 `VITE_API_BASE_URL`、`VITE_FILE_BASE_URL`；未设置时保留本机开发和同源生产行为。
-- Axios、令牌刷新、SSE 使用同一 API 地址；上传、图片、历史附件共用文件地址解析。
-- 旧 `:4567/download/` 和 `chat-h.cc:4567/download/` 在显示和发送模型上下文时改用新文件入口，保留原始历史记录。
-- `cyf/project/fe/edgeone.json`：Node 22.21.1、`npm ci`、`npm run build`、`dist`、SPA 回退；入口重新验证缓存，带哈希的 `/assets/` 缓存一年。
-- `cyf/project/fe/nginx-api.conf.tpl`：独立 API 站点、CORS 白名单、无缓存/无缓冲 SSE、50MB 请求体、HTTPS 文件路径、真实 `/health`。
+### GitHub 与代码
 
-API 密钥、数据库、生产配置及文件目录均不进入前端构建变量。`VITE_*` 会打入公开浏览器代码。
+- 仓库：`vyfe/openai-project`，EO Makers GitHub App 仅授权该仓库。
+- EdgeOne 当前生产分支：`codex/edgeone-frontend-deploy`。推送到该分支会触发生产构建，`master` 当前不作为生产来源。
+- `services/backendUrl.ts` 统一 API 和文件地址；Axios、令牌刷新、SSE、上传和附件渲染共用配置。
+- 显示附件和发送模型上下文时，将旧 `:4567/download/`、`chat-h.cc:4567/download/` 改为新文件入口，历史数据保留原内容。
+- `package-lock.json` 下载地址统一为 npm 官方 registry，保留依赖版本和 integrity。首次云构建因内网 registry 不可达失败，修复后构建成功。
+- `edgeone.json` 保存安装、构建、Node 版本、SPA 回退和缓存策略；`nginx-api.conf.tpl` 保存独立 API 配置；`renew-server-certs.sh` 保存服务器统一续签逻辑。
+- `server_pack.py` 打包时排除服务器私有的 `conf/conf.ini` 和 `.priv` 私钥文件；生产密钥通过服务器受控配置维护。
 
-## 关联和构建配置
+### EdgeOne Makers
 
-GitHub 仓库：`vyfe/openai-project`。EO Makers App 仅授权该仓库；本轮开发分支为 `codex/edgeone-frontend-deploy`，不要将旧 `master` 直接用作生产发布来源。
-
-| EdgeOne 配置 | 值 |
+| 配置 | 实际值 |
 | --- | --- |
+| 项目名 / ID | `openai-project` / `makers-ewkduzmpajma` |
+| [项目控制台](https://console.cloud.tencent.com/edgeone/makers/project/makers-ewkduzmpajma/index) | 构建部署、域名管理和项目设置 |
 | 根目录 | `cyf/project/fe` |
-| 框架 | Vite / Vue |
-| 安装命令 | `npm ci` |
-| 构建命令 | `npm run build` |
-| 输出目录 | `dist` |
-| Node.js | `22.21.1` |
+| 框架 / Node.js | Vite / Vue，`22.21.1` |
+| 安装 / 构建 / 输出 | `npm ci` / `npm run build` / `dist` |
 | 加速区域 | 全球可用区（不含中国大陆） |
 | `VITE_API_BASE_URL` | `https://api.chat-h.cc` |
 | `VITE_FILE_BASE_URL` | `https://api.chat-h.cc` |
+| 默认项目域名 | `openai-project-zeemrvrl.edgeone.dev` |
+| 正式 / 迁移验收域名 | `chat-h.cc` / `preview.chat-h.cc`，均关联生产环境 |
+| 正式域 HTTPS | EdgeOne 免费证书已部署；HTTP 到 HTTPS 强制 301 跳转 |
+| 首次成功部署 | `dpwnl5vp6syc`，提交 `e0aa76a` |
 
-变量分别配置到生产和预览环境；修改后需要重新构建。默认项目域名在中国大陆需要有效期 3 小时的预览链接，稳定验收使用自定义 `preview.chat-h.cc`。
+构建变量已配置到生产及预览环境。`VITE_*` 会进入公开浏览器代码，仅放公开服务地址；生产密钥、配置和数据库保留在服务器。修改环境变量后重新部署才生效。默认项目域名在中国大陆需要有效期 3 小时的预览链接，日常使用自定义域名。
 
-## 上线顺序
+缓存与路由由 `edgeone.json` 管理：HTML `Cache-Control: no-cache`，带哈希的 `/assets/*` 为 `public, max-age=31536000, immutable`；Vue 嵌套路由回退到 `/index.html`。API 子域独立于 EdgeOne，Nginx 设置 `private, no-store`。
 
-1. 在 Spaceship 添加 `api` A → `43.134.239.126`，先保持主域名解析不变。
-2. 原服务器添加 API 的 HTTP ACME 验证站点；为 `api.chat-h.cc` 签发独立证书，配置自动续期和续期后 Nginx reload。
-3. 备份现有 Nginx 配置，安装 API 模板；确认上传目录与生产配置一致。执行 Nginx 配置检查成功后 reload，保留原主站配置。
-4. 验证 API 的 HTTPS、真实 JSON 健康检查、精确 CORS 响应、允许/拒绝来源、上传下载、SSE 即时分块。新 API 无需公网开放 39997。
-5. EdgeOne 导入仓库并部署上述分支，绑定 `preview.chat-h.cc`，按平台提供的目标添加 CNAME 并启用免费 HTTPS。
-6. 测试登录/刷新令牌、聊天/取消、历史附件、管理员、量化、语音/音乐记录与下载。付费合成调用仅按用户明确授权执行；迁移验证优先复用已有记录。
-7. 全部验证通过后绑定 `chat-h.cc`，按控制台提示替换根域解析。切换期间已打开旧代码的浏览器需刷新。保持 API 子域直连服务器。
-8. 保留旧前端与 Nginx 主站至少 7 天；复查 DNS、证书和新部署自动发布。
+### Spaceship DNS
 
-## 验收与回滚
+| 主机记录 | 类型 | 值 | TTL / 用途 |
+| --- | --- | --- | --- |
+| `@` | CNAME | `chat-h.cc.pages.dnsoe6.com` | 1 分钟，正式站 |
+| `preview` | CNAME | `preview.chat-h.cc.pages.dnsoe5.com` | 1 分钟，迁移验收站 |
+| `api` | A | `43.134.239.126` | 1 分钟，API 直连原服务器 |
+| `_dnsauth` | CNAME | `chat-h.cc.eoacme0.com` | 30 分钟，EdgeOne 免费证书委派验证 |
+| `edgeonereclaim` | TXT | 平台已下发的 `reclaim-…` 值 | 正式域名归属验证，保留 |
+| `edgeonereclaim.preview` | TXT | 平台已下发的 `reclaim-…` 值 | 验收域名归属验证，保留 |
+| `_acme-challenge` | TXT | 原有验证值 | 原配置，保留 |
 
-- HTTP 返回 200 仅代表网络可达；`/health` 必须返回 `service=openai-project` 的 JSON。
-- 前端嵌套路由刷新正常；HTML 更新可见、哈希资产长期缓存；API 和私人音频无 CDN 缓存。
-- 允许来源只有一份 `Access-Control-Allow-Origin`，值为精确来源；未授权来源无该头。JWT 通过 Authorization，不依赖跨域 Cookie。
-- SSE 无缓冲且可取消；附件通过标准 HTTPS，旧会话附件继续可读。
-- 发生故障时恢复 Spaceship 原根域 A 记录 `43.134.239.126`，EdgeOne 可回滚到上一个成功部署。DNS 生效取决于 TTL 和递归缓存，无法承诺秒级回滚。
-- 切换根域后，旧主域证书的 HTTP 验证续期路径会变化；API 使用独立证书/续期任务，避免依赖根域回源。
+Spaceship 支持本次根域 CNAME 配置，并将根域查询展开为 A 记录；EdgeOne 域名详情对展平记录可能显示“请添加 CNAME”，平台说明该状态可忽略。应以 DNS 实际解析和 HTTP 响应验证接入：本轮 Spaceship 权威 DNS 与公共 DNS 均解析至 EdgeOne 节点 `43.174.246.112`、`43.174.247.112`，正式站响应头为 `Server: edgeone makers`。维护时保留平台下发的目标域名，节点 IP 由平台调度。
 
-## 当前执行状态
+本次已将根域原 A 记录 `43.134.239.126` 替换为 EdgeOne CNAME `chat-h.cc.pages.dnsoe6.com`，名称服务器继续使用 Spaceship。`api` A 记录仍指向 `43.134.239.126`，不随前端切换改变。变更后通过权威 DNS、公共 DNS 及正式域 HTTPS 实测；Chrome 根域访问跳转至 `/login`。已有递归缓存按原 TTL 失效。
 
-- 已确认腾讯云和 GitHub 账号；EO Makers 基础 GitHub 授权已通过。
-- EO Makers GitHub App 已安装，仅授权 `vyfe/openai-project`；Spaceship 已登录。
-- `api.chat-h.cc` A 记录已解析到 `43.134.239.126`，主域仍指向原服务器。
-- 前端测试、构建和本地启动验证完成；最终验证结果以本轮提交前记录为准。
-- 已通过 14 个文件共 129 项前端测试、生产构建与本地启动检查；API Nginx 模板语法检查通过。
-- EdgeOne 项目与生产 API 站点待发布，主域流量尚未切换。
+### 原服务器、Nginx 与宝塔
 
-## 官方资料
+- API vhost：`/www/server/panel/vhost/nginx/api.chat-h.cc.conf`，内容对应仓库 `cyf/project/fe/nginx-api.conf.tpl`。
+- API 80 端口保留 HTTP ACME 验证目录 `/www/wwwroot/api.chat-h.cc`，其它请求跳到 HTTPS；443 反代 Flask，SSE 无缓存/无缓冲、超时 900 秒、请求体上限 50MB。
+- CORS 固定允许 `https://chat-h.cc`、`https://preview.chat-h.cc`、`http://localhost:3000`；由 Nginx 统一输出精确来源，隐藏上游旧 CORS 头。JWT 使用 Authorization。
+- `/download/` 指向原上传目录 `/home/www/downloads/`；`/health` 返回真实后端 JSON。
+- API 证书：`/www/server/panel/vhost/letsencrypt/api.chat-h.cc/{fullchain,privkey}.pem`；`/www/server/panel/vhost/cert/api.chat-h.cc` 软链接到该目录，私钥权限 600。首次证书有效期至 `2027-02-05 06:47:19 GMT`。
+- 原主站配置 `/www/server/panel/vhost/nginx/other_llm_server.conf`、旧前端和数据保留。备份目录 `/home/lighthouse/edgeone-backup-20261107/`，包含原主站配置及本轮中间配置。
 
-- [构建配置](https://pages.edgeone.ai/document/build-guide)
+## 3. 证书与定时任务
+
+公网主站和预览站证书由 EdgeOne 免费托管，平台在到期前 15 天自动更新。正式域名通过 DNS 委派完成验证并部署，证书状态“已部署”，有效期至 `2027-02-05 07:59:59`；保留 `_dnsauth` 记录。本轮也在原站 `.well-known/pki-validation/fileauth.txt` 放置了首次文件验证材料；长期续签以 EdgeOne 当前委派配置为准。正式域已开启强制 HTTPS，选择 301 永久跳转；没有启用 HSTS，避免浏览器持久策略影响回滚。
+
+服务器证书统一在宝塔“计划任务 → 续签Let's Encrypt证书”管理：
+
+| 项目 | 配置 |
+| --- | --- |
+| 执行周期 / 用户 | 每天 21:39 / root，以宝塔面板显示时间为准 |
+| 任务命令 | `/usr/local/sbin/openai-server-cert-renew` |
+| 对应仓库脚本 | `cyf/project/fe/renew-server-certs.sh` |
+| 原批量续签命令 | `/www/server/panel/pyenv/bin/python3 -u /www/server/panel/class/acme_v2.py --renew=1` |
+| 任务日志 | `/www/server/cron/3ab48c27ec99cb9787749c362afae517.log`，也可直接在面板点击“日志” |
+
+脚本先执行原批量续签，再单独检查 API 手工 vhost 的证书。剩余有效期不足 30 天时，用宝塔已有 ACME 账户和 HTTP webroot 申请证书，校验证书、限制私钥权限、执行 Nginx 配置检查后 reload。加锁避免同时运行，批量续签失败仍执行 API 检查，并保留失败退出码。
+
+本轮新增的独立 `/etc/cron.d/openai-api-cert` 已移出运行目录，备份为 `edgeone-backup-20261107/openai-api-cert.cron.disabled`；原单域脚本备份为 `openai-api-cert-renew.previous`。后续周期修改和手动执行均从宝塔计划任务操作。
+
+维护脚本时，在服务器以 root 安装：
+
+```bash
+install -m 700 /path/to/renew-server-certs.sh /usr/local/sbin/openai-server-cert-renew
+bash -n /usr/local/sbin/openai-server-cert-renew
+```
+
+随后在宝塔点击原任务“执行”，检查日志。2026-11-07 16:12:43 已执行成功：原批量检查结束，API 证书超过 30 天，本次无需签发。EdgeOne 公网证书和服务器 API 证书分别在各自控制台管理。
+
+## 4. 后续前端开发与发布
+
+1. 本机按常规功能分支开发。未配置 `VITE_*` 时，开发默认使用 `http://localhost:39997`；需要连接生产 API 时在本地忽略文件 `.env.local` 设置公开地址。
+2. 在 `cyf/project/fe` 执行 `npm ci`、`npm run test`、`npm run build`。新增附件路径复用 `backendUrl.ts`；后端调用复用现有 API 客户端。
+3. 审核通过后，将功能提交集成到 `codex/edgeone-frontend-deploy` 并 push。该分支是当前正式发布入口；合并前核对目标分支和生产变更范围。
+4. 在 EdgeOne“构建部署”确认对应 commit 构建成功并成为生产部署，再访问 `https://chat-h.cc`；新代码由浏览器重新请求 HTML 后加载。
+5. 验证范围按改动选择：登录/API、SSE、上传下载或对应业务页。API/附件地址配置变化时必须重新构建。
+
+本机模拟 EdgeOne 构建：
+
+```bash
+cd cyf/project/fe
+npm ci
+npm run test
+VITE_API_BASE_URL=https://api.chat-h.cc VITE_FILE_BASE_URL=https://api.chat-h.cc npm run build
+```
+
+`preview.chat-h.cc` 当前是生产别名，与正式站同步发布。功能分支的隔离验收使用 EdgeOne 单次部署地址或项目预览环境；若新增固定验收域名，需同时配置 DNS、HTTPS 与 API CORS 白名单。以后调整生产分支时，先在项目设置更改并完成一次成功发布，再同步修改本文和 AGENTS.md。
+
+## 5. 后续后端开发与发布
+
+后端继续使用现有服务器分包发布，前端发布与后端重启各自独立：
+
+1. 激活已安装依赖的项目 Python 环境，在 `cyf/project/server` 执行 `python -m pytest -m "not api"`（本机也可用 `../../../.venv/bin/python -m pytest -m "not api"`）。涉及量化表列变更时先完成 AGENTS.md 规定的 DDL 与生产 soft 迁移。
+2. 发布前备份生产 `conf/conf.ini`、平台和量化数据库，以及本次涉及的附件/音频目录。备份可使用现有宝塔“db备份”任务；SQLite 在线备份使用其备份机制，或在停写窗口备份。
+3. 在后端目录执行 `python3 server_pack.py`，得到 `dist/server.tar.gz`；同时准备匹配版本的根目录 `requirements.txt` 和 `start-prod.sh`。打包脚本会自动排除服务器私有的 `conf/conf.ini` 和所有 `.priv` 私钥文件。发布前检查归档清单，确认 `conf/conf.ini`、私钥均未打入，且 `conf/uwsgi.ini` 等运行配置仍在包内；生产配置保留在服务器受控目录。产物仅在受控服务器发布通道传输。
+
+   ```bash
+   # 私有文件必须不在包内；运行配置必须在包内
+   if tar -tzf dist/server.tar.gz | grep -qE '(^|/)(conf\.ini|[^/]+\.priv)$'; then
+     echo '❌ 私有文件被打包，终止发布'
+   else
+     echo '✅ 未包含 conf.ini / .priv'
+   fi
+   tar -tzf dist/server.tar.gz | grep -q '^conf/uwsgi.ini$' \
+     && echo '✅ conf/uwsgi.ini 在包内' || echo '❌ 缺少 conf/uwsgi.ini'
+   ```
+4. 将后端包放在 `/home/lighthouse/openai-project/server.tar.gz`，配套依赖和启动脚本放在同一项目根目录。以 lighthouse 用户、现有 Python 环境执行：
+
+   ```bash
+   cd /home/lighthouse/openai-project
+   bash start-prod.sh --backend-only --restart
+   ```
+
+5. 脚本更新后端并启动 `/home/lighthouse/.local/bin/uwsgi`，监听 `127.0.0.1:39997`。检查本机和公网 `/health` JSON，确认 `service=openai-project`、`status=ok`；按改动检查对应业务。
+6. 量化采集与调度是独立进程；仅在相关代码变更时按现有 `start-prod-quant` 流程更新和重启。脚本中的 Agent 登录凭据已外置，更新脚本前先在服务器准备受控文件（权限 600）：
+
+   ```bash
+   printf 'QUANT_LOGIN_USER=%s\nQUANT_LOGIN_PASSWORD=%s\n' '<用户名>' '<密码>' \
+     > /home/lighthouse/openai-project/.quant-credentials
+   chmod 600 /home/lighthouse/openai-project/.quant-credentials
+   ```
+
+   也可用环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD` 覆盖；两者都缺失时 `start-prod-quant --agent` 会明确报错退出，不会静默使用内置账号。调度 Worker 不需要凭据。确认任务与数据库状态后结束发布。
+
+宝塔已有部署类 Shell 任务本轮保持原状态；本轮未切换后端发布方式。`start-prod.sh --frontend-only` 和整包 `--all` 保留给原服务器静态站部署，当前 EdgeOne 前端由 Git 构建发布。
+
+## 6. 日常检查、故障定位与回滚
+
+| 现象 | 优先检查 |
+| --- | --- |
+| 静态页打不开、刷新嵌套路由失败 | EdgeOne 最新生产部署、域名状态、`edgeone.json` 的 SPA 回退 |
+| 新版本未出现 | 生产 commit、环境变量是否重建、HTML 响应与浏览器刷新 |
+| 登录/模型/API 报错 | `api.chat-h.cc/health`、JWT、浏览器 CORS、Nginx 和后端日志 |
+| 流式输出延迟或中断 | API Nginx `proxy_buffering off`、上游响应、后端日志 |
+| 上传失败或附件不可读 | 请求体大小、`upload_dir`、`/download/` alias、文件 URL 是否为 API 标准 HTTPS |
+| 证书异常 | 主站看 EdgeOne 域名 HTTPS 状态，API 看宝塔计划任务日志及证书到期时间 |
+
+常用只读检查：
+
+```bash
+curl -I https://chat-h.cc/login
+curl -fsS https://api.chat-h.cc/health
+curl -i -X OPTIONS https://api.chat-h.cc/never_guess_my_usage/models -H 'Origin: https://chat-h.cc' -H 'Access-Control-Request-Method: GET'
+dig @launch1.spaceship.net chat-h.cc A +short
+dig @launch1.spaceship.net api.chat-h.cc A +short
+```
+
+- **前端版本回滚**：在 EdgeOne“构建部署”将历史成功版本恢复为生产，并核对 commit 与主站。DNS 保持 EdgeOne 配置。
+- **整站入口回滚**：在 Spaceship 将 `@` CNAME 恢复为 A `43.134.239.126`，保留 API 子域与验证记录，验证旧站。递归缓存按 TTL 传播。原静态站和 Nginx 至少保留到 2026-11-14，清理前确认可用备份和回滚要求。
+- **后端回滚**：恢复上一版包和匹配依赖，再按后端单独发布；数据库依据迁移回滚方案处理。API Nginx 改动前备份，执行 `/www/server/nginx/sbin/nginx -t` 成功后再 reload。
+
+## 7. 本轮验收与资源费用
+
+- 前端 14 个测试文件、129 项测试通过，生产构建及本地启动通过；云端 `npm ci` 和构建成功。
+- 收尾后端测试使用项目虚拟环境执行 `python -m pytest -m "not api"`：1132 项通过、21 项按标记排除。打包脚本在隔离目录运行通过，归档保留 `conf/uwsgi.ini` 并排除 `conf/conf.ini` 和 `.priv`；续签脚本 `bash -n` 与 `git diff --check` 通过。
+- API HTTPS、真实健康 JSON、允许与拒绝来源的 CORS、未登录鉴权通过；20MB 文件上传下载 SHA256 一致。
+- Chrome 预览站管理员登录、模型列表、文本文件上传、模型读取验证码 `EDGEONE-7319` 通过；浏览器上传的文本下载 SHA256 一致。PNG 上传后以 API HTTPS 显示，实际尺寸 160×100，预览加载完成。
+- 聊天 SSE 已收到真实响应。按用户要求停止进一步业务回归，保留本轮测试会话与附件；管理员、量化、音频等更完整回归交由后续功能发布按需执行。
+- 2026-11-07 正式切换完成：Spaceship 根域 CNAME 指向 `chat-h.cc.pages.dnsoe6.com`；权威和公共 DNS 返回 EdgeOne 节点。`https://chat-h.cc/login` 返回 200、响应头 `Server: edgeone makers`，页面资源从 EdgeOne 加载；Chrome 访问根域可进入登录页。EdgeOne 免费证书已部署至 `2027-02-05`，HTTP 已配置 301 到 HTTPS。
+- 同时验证 API `https://api.chat-h.cc/health` 返回 `service=openai-project`、`status=ok`；API 域名仍指向新加坡服务器。
+
+本轮使用 EdgeOne 免费套餐和免费证书，未购买付费升级。原腾讯云服务器与 Spaceship 域名继续按原周期续费；服务器承担 API、附件和数据流量。EdgeOne 用量与套餐额度在控制台查看，流量或功能超额前按平台当前价格评估。服务器续签使用 Let's Encrypt 免费证书。
+
+## 8. 官方资料
+
+- [Makers 构建指南](https://cloud.tencent.com/document/product/1552/127392)
 - [edgeone.json 与 SPA 回退](https://pages.edgeone.ai/document/edgeone-json)
-- [域名、区域与大陆预览限制](https://pages.edgeone.ai/document/domain-overview)
+- [自定义域名](https://cloud.tencent.com/document/product/1552/127404)
+- [免费证书、DNS 委派和自动续期](https://cloud.tencent.com/document/product/1552/127407)
 - [套餐](https://pages.edgeone.ai/zh/pricing)

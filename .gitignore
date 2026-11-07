@@ -6,6 +6,9 @@ cyf/project/server/logs
 *.db
 *.db-shm
 *.db-wal
+# 数据库备份快照（含生产数据，禁止入库）
+*.db.bak
+*.db.bak.*
 **/*.log
 cyf/project/fe/node_*/*
 **/dist/
@@ -15,6 +18,7 @@ cyf/project/fe/node_*/*
 .idea/
 .joycode/
 .playwright-mcp/
+.playwright-cli/
 **/__pycache__/
 cyf/project/server/.pip_cache_timestamp
 cyf/project/server/voice_data/

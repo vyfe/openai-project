@@ -55,7 +55,8 @@ feishu_debug_suffix=
 # 同花顺金融数据 API Key（https://fuyao.aicubes.cn/ 的 capability 鉴权）。
 # 留空时 ths provider 会被跳过，auto 链降级到 baostock。
 # 也可使用环境变量 THS_API_KEY 兜底（conf > env）。
-ths_api_key=sk-fuyao-8loNJrxzf22UoChoT-A7GoB8UukEBJwo
+# 密钥属生产机密，禁止写入本模板；请在服务器的 conf/conf.ini 或环境变量中维护。
+ths_api_key=
 [api]
 api_key=
 api_host=

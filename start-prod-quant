@@ -25,6 +25,41 @@ LAUNCHER_PID_FILE="$RUN_DIR/start-prod-quant.pid"
 AGENT_PID_FILE="$RUN_DIR/quant-agent.pid"
 SCHEDULER_PID_FILE="$RUN_DIR/quant-scheduler.pid"
 
+# ── 量化 Agent 登录凭据（生产机密，禁止写入本脚本）──
+# 读取顺序：环境变量 QUANT_LOGIN_USER / QUANT_LOGIN_PASSWORD
+#           → 服务器受控文件 $PROJECT_ROOT/.quant-credentials（KEY=VALUE，权限 600）
+# 两者都缺失时明确报错退出，不使用脚本内置默认值。
+QUANT_CRED_FILE="${QUANT_CRED_FILE:-$PROJECT_ROOT/.quant-credentials}"
+QUANT_LOGIN_USER="${QUANT_LOGIN_USER:-}"
+QUANT_LOGIN_PASSWORD="${QUANT_LOGIN_PASSWORD:-}"
+
+load_quant_credentials() {
+    local file_user="" file_password="" cred_key cred_value
+    if [ -r "$QUANT_CRED_FILE" ]; then
+        while IFS='=' read -r cred_key cred_value || [ -n "$cred_key" ]; do
+            cred_value="${cred_value%$'\r'}"
+            case "$cred_key" in
+                QUANT_LOGIN_USER) file_user="$cred_value" ;;
+                QUANT_LOGIN_PASSWORD) file_password="$cred_value" ;;
+            esac
+        done < "$QUANT_CRED_FILE"
+    fi
+    if [ -z "$QUANT_LOGIN_USER" ]; then
+        QUANT_LOGIN_USER="$file_user"
+    fi
+    if [ -z "$QUANT_LOGIN_PASSWORD" ]; then
+        QUANT_LOGIN_PASSWORD="$file_password"
+    fi
+    if [ -z "$QUANT_LOGIN_USER" ] || [ -z "$QUANT_LOGIN_PASSWORD" ]; then
+        echo "❌ 错误：缺少量化 Agent 登录凭据" >&2
+        echo "   请在 $QUANT_CRED_FILE 写入（权限 600）：" >&2
+        echo "     QUANT_LOGIN_USER=<用户名>" >&2
+        echo "     QUANT_LOGIN_PASSWORD=<密码>" >&2
+        echo "   或通过环境变量 QUANT_LOGIN_USER / QUANT_LOGIN_PASSWORD 提供。" >&2
+        exit 1
+    fi
+}
+
 # 默认选项
 START_AGENT=false
 START_SCHEDULER=false
@@ -258,6 +293,7 @@ echo ""
 
 # ── 数据采集 Agent ──
 if [ "$START_AGENT" = true ]; then
+    load_quant_credentials
     : > "$AGENT_LOG"
     (
         cd "$SERVER_DIR"
@@ -265,8 +301,8 @@ if [ "$START_AGENT" = true ]; then
             "$PYTHON_BIN" worker/quant_data_agent.py run-once \
                 --server-url "$SERVER_URL" \
                 --client-id "prod-local-client" \
-                --user cyf \
-                --password b199541d >>"$AGENT_LOG" 2>&1 || true
+                --user "$QUANT_LOGIN_USER" \
+                --password "$QUANT_LOGIN_PASSWORD" >>"$AGENT_LOG" 2>&1 || true
             sleep 15
         done
     ) &
