@@ -2,6 +2,8 @@ cyf/project/*/conf/conf.ini
 cyf/project/*/conf/role_init.sql
 # 密钥
 cyf/project/*/conf/key.*
+# 量化 Agent 登录凭据（服务器受控文件，禁止入库）
+.quant-credentials
 cyf/project/server/logs
 *.db
 *.db-shm
