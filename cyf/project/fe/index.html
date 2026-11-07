@@ -5,6 +5,9 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>慧聊 - do your imagination</title>
+    <!-- 构建时间在构建期注入到这里，不进 JS chunk：注入到 chunk 会让每次构建的
+         文件名哈希都变，部署切换期旧 HTML 会引用已被删除的旧 chunk。 -->
+    <script>window.__BUILD_TIME__ = "__BUILD_TIME_PLACEHOLDER__"</script>
   </head>
   <body>
     <div id="app"></div>

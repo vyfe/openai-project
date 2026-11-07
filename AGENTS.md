@@ -481,6 +481,24 @@ HTTP ──► routes/  (Flask Blueprint)
 - `marked` + `highlight.js` + KaTeX 三件套做 Markdown/代码/公式渲染。
 - `html-to-image` 用于对话分享导出图片。
 
+### 4.6 构建产物必须可复现
+
+**硬性约束**：进入 JS chunk 的内容不得包含任何随构建变化的值（时间戳、随机数、commit hash）。
+
+原因：前端由 EdgeOne 托管，边缘节点会缓存 `index.html`（实测 `Age` 可达 4700 秒，`Cache-Control: no-cache` 不被遵守）。若每次构建的 chunk 哈希都变，用户可能拿到旧版 HTML，而它引用的 chunk 已被新部署删除 → 资源 miss → SPA 回退返回 HTML → 浏览器按 `/assets/*` 规则缓存 → 报 `MIME type of "text/html"`，清站点缓存前无法恢复。
+
+- 构建时间不通过 `vite define` 注入，改为由 `vite.config.ts` 的 `build-time-injector` 插件注入 `index.html` 的 `window.__BUILD_TIME__`；`src/services/version.ts` 从 `globalThis.__BUILD_TIME__` 读取。
+- `__APP_VERSION__` 取 `package.json` 的 `npm_package_version`，固定值，不允许回退到时间戳。
+- 改动构建配置后校验确定性：
+
+  ```bash
+  cd cyf/project/fe
+  npm run build && cp -r dist /tmp/b1 && npm run build && cp -r dist /tmp/b2
+  diff <(ls /tmp/b1/assets) <(ls /tmp/b2/assets)   # 应无输出
+  ```
+
+  详见 [`doc/frontend-edgeone-deployment-plan.md`](doc/frontend-edgeone-deployment-plan.md) §3.1。
+
 ---
 
 ## 5. 启动脚本与运行时

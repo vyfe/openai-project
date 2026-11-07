@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import tailwindcss from '@tailwindcss/vite'
@@ -38,16 +38,28 @@ const resolveElementChunk = (id: string) => {
   return 'el-core'
 }
 
+// 构建时间只注入 index.html，不进 JS chunk。
+// 注入进 chunk 会让每次构建的产物文件名哈希都变：部署切换期旧 HTML 会引用
+// 已被新部署删除的旧 chunk，线上资源被 SPA 回退成 HTML，浏览器按 /assets/* 规则
+// 缓存后报 "MIME type of text/html"，且 immutable 类缓存无法靠刷新恢复。
+const buildTime = new Date().toISOString()
+const buildTimeInjector: Plugin = {
+  name: 'build-time-injector',
+  transformIndexHtml(html) {
+    return html.replace('"__BUILD_TIME_PLACEHOLDER__"', JSON.stringify(buildTime))
+  },
+}
+
 export default defineConfig({
-  plugins: [vue(),tailwindcss(),],
+  plugins: [vue(),tailwindcss(),buildTimeInjector,],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src')
     }
   },
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || Date.now().toString()),
-    __BUILD_TIME__: JSON.stringify(new Date().toISOString())
+    // 版本号取 package.json，固定值；不能回退到时间戳，否则同样会让产物哈希漂移。
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '0.0.0')
   },
   server: {
     port: 3000,

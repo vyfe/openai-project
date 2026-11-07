@@ -120,7 +120,33 @@ but the server responded with a MIME type of "text/html".
 
 排查顺序：**先确认服务器侧是否正常**（`curl -I https://chat-h.cc/assets/<文件名>` 看 `Content-Type`）。若服务器返回 `application/javascript`，问题就在浏览器本地缓存，清站点缓存即可恢复。
 
-因此 `/assets/*` 的缓存策略刻意不用一年期 + `immutable`，改为 `public, max-age=600, must-revalidate`：Vite 产物带内容哈希，内容永不变，靠 ETag 协商仍能拿到 304；而窗口期 miss 的回退最多影响 10 分钟，浏览器会自动重新校验恢复。代价是每 10 分钟一次条件请求，性能损失可忽略。
+#### 触发条件：构建产物必须是确定性的
+
+上面那个窗口期之所以会伤到用户，是因为 **EdgeOne 边缘节点会缓存 `index.html`（实测 `Age` 可达 4700 秒，`Cache-Control: no-cache` 不被遵守）**。于是用户可能拿到**旧版 HTML**，而它引用的 chunk 已被新部署删除：
+
+```
+旧 HTML  ──引用──►  旧 chunk 哈希（比如 index-FTgCRYNU.js）
+                        ↓ 新部署已删除该文件
+                    请求 miss → SPA 回退返回 HTML → 浏览器按 /assets/* 规则缓存
+                        ↓
+                  "MIME type of text/html"，清缓存前无法恢复
+```
+
+路由懒加载 chunk 同样受影响，会表现为 `Failed to fetch dynamically imported module`。
+
+**只要构建是确定性的，这条链就断了**：新旧部署的 chunk 文件名完全相同，旧 HTML 引用的文件在新部署里依然存在，永远不会 miss。2026-11-07 已修掉这个非确定性来源 —— `vite.config.ts` 原先用 `define` 把构建时刻注入 `__BUILD_TIME__`，它经 `src/services/version.ts` 渗进几乎所有应用 chunk，导致**每次构建所有应用 chunk 哈希都变**（实测间隔 2 秒的两次构建产物全不同）。现在构建时间改为注入 `index.html` 的 `window.__BUILD_TIME__`，不进 JS chunk，产物可复现。
+
+**这条约束对以后改构建配置同样重要**：任何进入 chunk 内容的构建期变量（时间戳、随机数、commit hash）都会让产物哈希漂移，把部署变成非原子操作。如需在页面展示构建时间，走 `index.html` 注入或运行时计算。
+
+校验构建确定性：
+
+```bash
+cd cyf/project/fe
+npm run build && cp -r dist /tmp/b1 && npm run build && cp -r dist /tmp/b2
+diff <(ls /tmp/b1/assets) <(ls /tmp/b2/assets)   # 应无输出
+```
+
+因此 `/assets/*` 的缓存策略刻意不用一年期 + `immutable`，改为 `public, max-age=600, must-revalidate`：靠 ETag 协商仍能拿到 304；而窗口期 miss 的回退最多影响 10 分钟，浏览器会自动重新校验恢复。代价是每 10 分钟一次条件请求，性能损失可忽略。
 
 调整 `edgeone.json` 后需重新部署才生效。每次部署后用自检脚本确认：
 

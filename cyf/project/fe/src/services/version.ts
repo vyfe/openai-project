@@ -14,7 +14,11 @@ class VersionService {
   }
 
   static getBuildTime(): string {
-    return typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : new Date().toISOString();
+    // 构建时间由 index.html 在构建期注入到 window.__BUILD_TIME__，
+    // 不通过 vite define 进 JS chunk——那会让每次构建的文件名哈希都变，
+    // 部署切换期旧 HTML 会引用已被删除的旧 chunk，线上资源被 SPA 回退成 HTML。
+    const injected = (globalThis as { __BUILD_TIME__?: string }).__BUILD_TIME__
+    return typeof injected === 'string' && injected ? injected : new Date().toISOString();
   }
 
   static checkAndHandleVersionChange(): void {
