@@ -510,11 +510,21 @@ HTTP ──► routes/  (Flask Blueprint)
 - **Element Plus 的桥接变量必须用 `:root:root`（0,2,0）压过它自己的 `:root`（0,1,0）。** 两者特异性相同时只能靠加载顺序决胜，而 Element Plus 的样式表在后 → 它赢，结果是全站 Element Plus 组件退回冷白 / EP 蓝：主按钮 `#409eff`、成功绿 `#67c23a`、边框 `#dcdfe6`、正文 `#606266`，跟项目的暖色 token 完全对不上。所以：`tokens.css` 的亮色桥接写在 `:root:root`，`theme-dark.css` 的暗色桥接写在 `:root.dark:root`（0,3,0，再高一级压过亮色块）。**新增 Element Plus 变量时按这条走，不要写进普通 `:root`。**
 - 暗色下 Element Plus 的 `color-light-N` 色阶语义要反转：官方暗色表把 `light-9` 设为最深色（标签底色）、`light-3` 才最亮（hover）。沿用亮色值会让 `el-tag` 在暗色下出现亮米色底。
 
-> ⚠ **`:deep()` 只能在 `<style scoped>` 里用。** Vue 编译器只对 scoped 样式做 `:deep()` 转换；非 scoped 样式里的 `:deep()` 会原样交给浏览器，成为**无效选择器**，整条规则被丢弃。
+> ⚠ **`:deep()` 有两个坑，都表现为「规则写了但完全没效果」。**
 >
-> `src/styles/admin.css` 通过 Admin.vue 的**非 scoped** `<style>@import</style>` 引入。该文件曾有 124 条 `:deep()` 规则：2026-03-18（提交 `1597423`）把 Admin.vue 的 `<style scoped>` 改成 `<style>` 之前它们是生效的，之后全部失效 —— 准确表述是「**当前构建下不生效**」，不是「从未生效」。本轮已全部清理：重复 / 过时 / 与有效规则冲突的直接删除，有设计意图的改写成 `.admin-page` 作用域下的普通选择器，硬编码冷色换成项目 token。
+> **坑一：`:deep()` 只在 `<style scoped>` 里有效。** Vue 编译器只对 scoped 样式做 `:deep()` 转换；非 scoped 样式里的 `:deep()` 会原样交给浏览器，成为**无效选择器**，整条规则被丢弃。
+> - `src/styles/admin.css` 通过 Admin.vue 的**非 scoped** `<style>@import</style>` 引入。该文件曾有 124 条 `:deep()` 规则：2026-03-18（提交 `1597423`）把 Admin.vue 的 `<style scoped>` 改成 `<style>` 之前它们是生效的，之后全部失效 —— 准确表述是「**当前构建下不生效**」，不是「从未生效」。
+> - `chat-responsive.css` / `chat-dark.css` 经 `chat.css` 从 Chat-New.vue 的**非 scoped** 块引入，其中 45 条 `:deep()` 同样失效（暗色代码块底色、引用块橙边、移动端代码块/表格尺寸等全都没生效）。
+> - Chat-New.vue 自己的 `.chat-tabs-wrap` 规则也在提交 `04e3ad3` 去掉 `<style scoped>` 后失效（工作台 tab 固定宽度那组）。
 >
-> 往 admin 页加样式时：**用 `.admin-page` 前缀 + 普通选择器**，不要用 `:deep()`。注意 `el-select` / `el-dropdown` / `el-message-box` 会 teleport 到 body，`.admin-page` 作用域命不中，它们的暗色样式由 `App.vue` 的 `body.dark-theme` 规则统一处理；`el-dialog` 默认 `appendToBody=false`，渲染在组件原位，`.admin-page .el-dialog` 可以命中。
+> **坑二：同一个选择器里不能出现两个 `:deep()`。** Vue 的 scoped 插件遇到**第一个** `:deep()` 就会 `return false` 停止处理该选择器，第二个 `:deep()` 原样留在产物里 → 死规则。`global-font-sizes.css` 里的 `.messages-container :deep(.message-text) :deep(code)` 就踩了这个坑（52 处），导致消息里代码块/表格/标题的字号没跟着字号设置走。正确写法：同组件内的元素直接写普通类名，只对 v-html 渲染出来的节点保留最后一个 `:deep()`。
+>
+> **改法约定**：
+> - 目标是 v-html 渲染的节点（`pre` / `code` / `table` / `th`…）→ 规则必须放进**某个组件的 `<style scoped>` 块**，靠 `:deep()` 穿透。聊天页的消息区覆盖统一放在 `src/styles/chat-message-content.css`，由 `ChatContent.vue` 的 scoped 块**最后**引入（保证与基础样式特异性相同时由它胜出）。
+> - 目标是页面自身的元素（`.admin-page` / `.chat-tabs-wrap` 等）→ 用普通后代选择器 + 宿主类名前缀限定范围，不要用 `:deep()`。
+> - `el-select` / `el-dropdown` / `el-message-box` 会 teleport 到 body，页面作用域命不中，它们的暗色样式由 `App.vue` 的 `body.dark-theme` 规则统一处理；`el-dialog` 默认 `appendToBody=false`，渲染在组件原位，`.admin-page .el-dialog` 可以命中。
+>
+> **自查**：`npm run build` 后 `grep -o ':deep(' dist/assets/*.css | wc -l` 必须是 0 —— 产物里还有字面 `:deep(` 就说明又写出了死规则。
 
 ---
 
@@ -679,6 +689,7 @@ npm run test:coverage                  # 覆盖率
 
 ### 10.1 项目级（`doc/`）
 
+- `doc/huiliao-login-permissions-development-plan.md` —— 慧聊登录入口、复合角色与资源隔离的开发任务、测试回归及发布验收。
 - `doc/minimax-voice-management.md` —— MiniMax 音色配置、复刻/激活、后台操作与 API。
 - `doc/minimax-music-management.md` —— MiniMax 音乐创作配置、生成流程、记录保存与 API。
 - `doc/web-search-tool.md` —— 服务端本地网络搜索工具的工作方式与配置。

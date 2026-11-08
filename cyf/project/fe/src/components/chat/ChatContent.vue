@@ -2606,6 +2606,8 @@ watch(() => formData.isDarkTheme, (newVal) => {
 @import '@/styles/chat-content.css';
 @import '@/styles/global-font-sizes.css';
 @import '@/styles/message-container-fix.css';
+/* 消息区的响应式 / 暗色覆盖：放在最后，保证与基础样式特异性相同时由它胜出 */
+@import '@/styles/chat-message-content.css';
 
 .tool-results {
   display: flex;

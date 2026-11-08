@@ -788,6 +788,41 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   box-shadow: none;
 }
 
+.chat-tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.chat-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-tab-unread-dot {
+  flex: 0 0 auto;
+}
+
+.chat-tab-loading {
+  color: var(--text-2);
+}
+
+@media (max-width: 768px) {
+  .chat-tabs-wrap {
+    padding: 6px 8px 4px;
+  }
+}
+</style>
+
+<style scoped>
+/* 工作台 tab：这些规则要穿透 Element Plus 的 .el-tabs__* 内部结构，
+   :deep() 只在 scoped 块里有效 —— 之前它们和 chat.css 一起放在非 scoped
+   块里，整组失效（提交 04e3ad3 去掉了 <style scoped> 之后）。 */
 .chat-tabs-wrap :deep(.el-tabs__nav-wrap) {
   overflow: hidden;
 }
@@ -822,26 +857,6 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   box-shadow: none;
 }
 
-.chat-tab-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  width: 100%;
-}
-
-.chat-tab-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-tab-unread-dot {
-  flex: 0 0 auto;
-}
-
 .chat-tabs-wrap :deep(.el-tabs__item:hover) {
   color: var(--text-1);
   border-color: var(--line-1) !important;
@@ -858,10 +873,6 @@ watch(() => formData.contextTotalTokens, (newTotal) => {
   animation: none;
 }
 
-.chat-tab-loading {
-  color: var(--text-2);
-}
-
 body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item),
 body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item.is-active) {
   background: var(--bg-1) !important;
@@ -874,11 +885,7 @@ body.dark-theme .chat-tabs-wrap :deep(.el-tabs__item:hover) {
 }
 
 @media (max-width: 768px) {
-  .chat-tabs-wrap {
-    padding: 6px 8px 4px;
-  }
-
-  .chat-tabs-wrap :deep(.el-tabs__item) {
+.chat-tabs-wrap :deep(.el-tabs__item) {
     flex-basis: 124px;
     width: 124px;
     min-width: 124px;

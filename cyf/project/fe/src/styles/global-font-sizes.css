@@ -134,203 +134,203 @@ body.font-size-large {
 }
 
 /* 代码块字体大小 */
-.messages-container :deep(.message-text) :deep(code) {
+.messages-container .message-text :deep(code) {
   font-size: calc(var(--message-font-size-medium) * 0.9);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(code) {
+.messages-container.font-size-small .message-text :deep(code) {
   font-size: calc(var(--message-font-size-small) * 0.9);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(code) {
+.messages-container.font-size-medium .message-text :deep(code) {
   font-size: calc(var(--message-font-size-medium) * 0.9);
   font-weight: 500; /* 为中等代码块添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(code) {
+.messages-container.font-size-large .message-text :deep(code) {
   font-size: calc(var(--message-font-size-large) * 0.9);
 }
 
 /* 预格式化文本字体大小 */
-.messages-container :deep(.message-text) :deep(pre) {
+.messages-container .message-text :deep(pre) {
   font-size: calc(var(--message-font-size-medium) * 0.85);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(pre) {
+.messages-container.font-size-small .message-text :deep(pre) {
   font-size: calc(var(--message-font-size-small) * 0.85);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(pre) {
+.messages-container.font-size-medium .message-text :deep(pre) {
   font-size: calc(var(--message-font-size-medium) * 0.85);
   font-weight: 500; /* 为中等预格式化文本添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(pre) {
+.messages-container.font-size-large .message-text :deep(pre) {
   font-size: calc(var(--message-font-size-large) * 0.85);
 }
 
 /* 代码高亮字体大小 */
-.messages-container :deep(.message-text) :deep(.hljs) {
+.messages-container .message-text :deep(.hljs) {
   font-size: calc(var(--message-font-size-medium) * 0.85);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(.hljs) {
+.messages-container.font-size-small .message-text :deep(.hljs) {
   font-size: calc(var(--message-font-size-small) * 0.85);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(.hljs) {
+.messages-container.font-size-medium .message-text :deep(.hljs) {
   font-size: calc(var(--message-font-size-medium) * 0.85);
   font-weight: 500; /* 为中等代码高亮添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(.hljs) {
+.messages-container.font-size-large .message-text :deep(.hljs) {
   font-size: calc(var(--message-font-size-large) * 0.85);
 }
 
 /* 表格字体大小 */
-.messages-container :deep(.message-text) :deep(th),
-.messages-container :deep(.message-text) :deep(td) {
+.messages-container .message-text :deep(th),
+.messages-container .message-text :deep(td) {
   font-size: calc(var(--message-font-size-medium) * 0.8);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(th),
-.messages-container.font-size-small :deep(.message-text) :deep(td) {
+.messages-container.font-size-small .message-text :deep(th),
+.messages-container.font-size-small .message-text :deep(td) {
   font-size: calc(var(--message-font-size-small) * 0.8);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(th),
-.messages-container.font-size-medium :deep(.message-text) :deep(td) {
+.messages-container.font-size-medium .message-text :deep(th),
+.messages-container.font-size-medium .message-text :deep(td) {
   font-size: calc(var(--message-font-size-medium) * 0.8);
   font-weight: 500; /* 为中等表格内容添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(th),
-.messages-container.font-size-large :deep(.message-text) :deep(td) {
+.messages-container.font-size-large .message-text :deep(th),
+.messages-container.font-size-large .message-text :deep(td) {
   font-size: calc(var(--message-font-size-large) * 0.8);
 }
 
 /* 标题字体大小 */
-.messages-container :deep(.message-text) :deep(h1) {
+.messages-container .message-text :deep(h1) {
   font-size: calc(var(--message-font-size-medium) * 2);
 }
 
-.messages-container :deep(.message-text) :deep(h2) {
+.messages-container .message-text :deep(h2) {
   font-size: calc(var(--message-font-size-medium) * 1.75);
 }
 
-.messages-container :deep(.message-text) :deep(h3) {
+.messages-container .message-text :deep(h3) {
   font-size: calc(var(--message-font-size-medium) * 1.5);
 }
 
-.messages-container :deep(.message-text) :deep(h4) {
+.messages-container .message-text :deep(h4) {
   font-size: calc(var(--message-font-size-medium) * 1.25);
 }
 
-.messages-container :deep(.message-text) :deep(h5) {
+.messages-container .message-text :deep(h5) {
   font-size: calc(var(--message-font-size-medium) * 1.1);
 }
 
-.messages-container :deep(.message-text) :deep(h6) {
+.messages-container .message-text :deep(h6) {
   font-size: var(--message-font-size-medium);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h1) {
+.messages-container.font-size-small .message-text :deep(h1) {
   font-size: calc(var(--message-font-size-small) * 2);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h2) {
+.messages-container.font-size-small .message-text :deep(h2) {
   font-size: calc(var(--message-font-size-small) * 1.75);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h3) {
+.messages-container.font-size-small .message-text :deep(h3) {
   font-size: calc(var(--message-font-size-small) * 1.5);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h4) {
+.messages-container.font-size-small .message-text :deep(h4) {
   font-size: calc(var(--message-font-size-small) * 1.25);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h5) {
+.messages-container.font-size-small .message-text :deep(h5) {
   font-size: calc(var(--message-font-size-small) * 1.1);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(h6) {
+.messages-container.font-size-small .message-text :deep(h6) {
   font-size: var(--message-font-size-small);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h1) {
+.messages-container.font-size-medium .message-text :deep(h1) {
   font-size: calc(var(--message-font-size-medium) * 2);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h2) {
+.messages-container.font-size-medium .message-text :deep(h2) {
   font-size: calc(var(--message-font-size-medium) * 1.75);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h3) {
+.messages-container.font-size-medium .message-text :deep(h3) {
   font-size: calc(var(--message-font-size-medium) * 1.5);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h4) {
+.messages-container.font-size-medium .message-text :deep(h4) {
   font-size: calc(var(--message-font-size-medium) * 1.25);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h5) {
+.messages-container.font-size-medium .message-text :deep(h5) {
   font-size: calc(var(--message-font-size-medium) * 1.1);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(h6) {
+.messages-container.font-size-medium .message-text :deep(h6) {
   font-size: var(--message-font-size-medium);
   font-weight: 500; /* 为中等标题添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h1) {
+.messages-container.font-size-large .message-text :deep(h1) {
   font-size: calc(var(--message-font-size-large) * 2);
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h2) {
+.messages-container.font-size-large .message-text :deep(h2) {
   font-size: calc(var(--message-font-size-large) * 1.75);
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h3) {
+.messages-container.font-size-large .message-text :deep(h3) {
   font-size: calc(var(--message-font-size-large) * 1.5);
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h4) {
+.messages-container.font-size-large .message-text :deep(h4) {
   font-size: calc(var(--message-font-size-large) * 1.25);
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h5) {
+.messages-container.font-size-large .message-text :deep(h5) {
   font-size: calc(var(--message-font-size-large) * 1.1);
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(h6) {
+.messages-container.font-size-large .message-text :deep(h6) {
   font-size: var(--message-font-size-large);
 }
 
 /* 列表字体大小 */
-.messages-container :deep(.message-text) :deep(ul),
-.messages-container :deep(.message-text) :deep(ol) {
+.messages-container .message-text :deep(ul),
+.messages-container .message-text :deep(ol) {
   font-size: var(--message-font-size-medium);
 }
 
-.messages-container.font-size-small :deep(.message-text) :deep(ul),
-.messages-container.font-size-small :deep(.message-text) :deep(ol) {
+.messages-container.font-size-small .message-text :deep(ul),
+.messages-container.font-size-small .message-text :deep(ol) {
   font-size: var(--message-font-size-small);
 }
 
-.messages-container.font-size-medium :deep(.message-text) :deep(ul),
-.messages-container.font-size-medium :deep(.message-text) :deep(ol) {
+.messages-container.font-size-medium .message-text :deep(ul),
+.messages-container.font-size-medium .message-text :deep(ol) {
   font-size: var(--message-font-size-medium);
   font-weight: 500; /* 为中等列表添加轻微粗体效果 */
 }
 
-.messages-container.font-size-large :deep(.message-text) :deep(ul),
-.messages-container.font-size-large :deep(.message-text) :deep(ol) {
+.messages-container.font-size-large .message-text :deep(ul),
+.messages-container.font-size-large .message-text :deep(ol) {
   font-size: var(--message-font-size-large);
 }
 
