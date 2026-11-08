@@ -1,5 +1,13 @@
 <template>
   <div class="login-page min-h-screen flex flex-col" :class="{ 'login-dark': isDarkTheme }">
+    <!-- 动画背景：沿用旧版 hero-vector 的漂浮色块 / 网格 / 波纹 -->
+    <div class="login-backdrop" aria-hidden="true">
+      <div class="login-backdrop__grid" />
+      <div class="login-backdrop__blob login-backdrop__blob--a" />
+      <div class="login-backdrop__blob login-backdrop__blob--b" />
+      <div class="login-backdrop__wave" />
+    </div>
+
     <!-- 顶栏：品牌 + 语言 / 主题 -->
     <header class="login-topbar">
       <div class="login-brand">
@@ -35,6 +43,7 @@
     <main class="login-shell">
       <!-- 功能选择 -->
       <section class="login-features" aria-labelledby="login-feature-title">
+        <p class="login-features__tagline">{{ t('login.description') }}</p>
         <h1 id="login-feature-title" class="login-features__title">
           {{ t('login.selectFunction') }}
         </h1>
@@ -118,7 +127,10 @@
               <el-button size="small" type="primary" plain @click="copyContact">
                 {{ t('login.contactAdmin') }}
               </el-button>
-              <span class="login-grant__contact-text">{{ contactInfo }}</span>
+              <span class="login-grant__contact-text">
+                <WeChatIcon size="sm" :label="t('login.contactLabel')" />
+                {{ contactInfo }}
+              </span>
             </div>
           </div>
 
@@ -330,7 +342,10 @@
           <el-icon><CopyDocument /></el-icon>
           <span>{{ copied ? t('login.copied') : t('login.copyContact') }}</span>
         </el-button>
-        <span class="login-footer__contact">{{ contactInfo }}</span>
+        <span class="login-footer__contact">
+          <WeChatIcon size="sm" :label="t('login.contactLabel')" />
+          {{ contactInfo }}
+        </span>
       </p>
     </footer>
   </div>
@@ -362,6 +377,7 @@ import { hasRole, type AppRole } from '@/auth/permissions'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
 import { useThemeManager } from '@/composables/useThemeManager'
+import WeChatIcon from '@/components/common/WeChatIcon.vue'
 
 const { t, locale } = useI18n()
 const route = useRoute()
@@ -636,6 +652,8 @@ onMounted(async () => {
 
 <style scoped>
 .login-page {
+  position: relative;
+  overflow: hidden;
   background:
     radial-gradient(900px 520px at 20% 16%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 72%),
     radial-gradient(860px 540px at 88% 84%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 74%),
@@ -643,12 +661,133 @@ onMounted(async () => {
   color: var(--text-1);
 }
 
+/* ---------- 动画背景（沿用旧版 hero-vector 的漂浮色块 / 网格 / 波纹） ---------- */
+
+.login-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.login-backdrop__grid {
+  position: absolute;
+  inset: 4% 6%;
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--line-1) 62%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--line-1) 62%, transparent) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 42%, black 22%, transparent 76%);
+  -webkit-mask-image: radial-gradient(circle at 50% 42%, black 22%, transparent 76%);
+  opacity: 0.2;
+}
+
+.login-backdrop__blob {
+  position: absolute;
+  filter: blur(48px);
+}
+
+.login-backdrop__blob--a {
+  top: -14%;
+  right: -10%;
+  width: 52vw;
+  height: 52vw;
+  max-width: 720px;
+  max-height: 720px;
+  border-radius: 42% 58% 52% 48%;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-1) 26%, transparent),
+    color-mix(in srgb, var(--accent-2) 10%, transparent)
+  );
+  animation: login-blob-float 18s ease-in-out infinite;
+}
+
+.login-backdrop__blob--b {
+  bottom: -20%;
+  left: -12%;
+  width: 44vw;
+  height: 44vw;
+  max-width: 620px;
+  max-height: 620px;
+  border-radius: 58% 42% 46% 54%;
+  background: radial-gradient(
+    120% 100% at 32% 82%,
+    color-mix(in srgb, var(--accent-2) 20%, transparent),
+    transparent 70%
+  );
+  animation: login-blob-drift 24s ease-in-out infinite;
+}
+
+.login-backdrop__wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40%;
+  background:
+    radial-gradient(120% 100% at 30% 84%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 68%),
+    radial-gradient(100% 90% at 68% 88%, color-mix(in srgb, var(--accent-1) 10%, transparent), transparent 68%);
+  transform-origin: center;
+  animation: login-wave 20s ease-in-out infinite;
+}
+
+@keyframes login-blob-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    border-radius: 42% 58% 52% 48%;
+  }
+  50% {
+    transform: translate3d(-14px, 12px, 0) scale(1.05);
+    border-radius: 56% 44% 48% 52%;
+  }
+}
+
+@keyframes login-blob-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    border-radius: 58% 42% 46% 54%;
+  }
+  50% {
+    transform: translate3d(18px, -10px, 0) scale(1.06);
+    border-radius: 44% 56% 52% 48%;
+  }
+}
+
+@keyframes login-wave {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scaleY(1);
+  }
+  50% {
+    transform: translate3d(2%, 0, 0) scaleY(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-backdrop__blob--a,
+  .login-backdrop__blob--b,
+  .login-backdrop__wave {
+    animation: none;
+  }
+}
+
+.login-topbar,
+.login-shell,
+.login-footer {
+  position: relative;
+  z-index: 1;
+}
+
 .login-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px clamp(16px, 4vw, 48px);
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 18px clamp(16px, 4vw, 32px);
 }
 
 .login-brand {
@@ -694,7 +833,18 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
   gap: clamp(20px, 3vw, 40px);
-  align-items: start;
+  /* 两列与整块内容都在可视区里垂直居中 */
+  align-items: center;
+  align-content: center;
+  flex: 1 1 auto;
+}
+
+.login-features__tagline {
+  margin: 0 0 8px;
+  font-size: clamp(21px, 2.5vw, 28px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent-1);
 }
 
 .login-features__title {
@@ -901,6 +1051,9 @@ onMounted(async () => {
 }
 
 .login-grant__contact-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 13px;
   color: var(--text-2);
 }
@@ -995,8 +1148,10 @@ onMounted(async () => {
 }
 
 .login-footer {
-  margin-top: auto;
-  padding: 16px clamp(16px, 4vw, 48px) 28px;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 8px clamp(16px, 4vw, 32px) 24px;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -1014,6 +1169,12 @@ onMounted(async () => {
 .login-footer__contact {
   font-size: 13px;
   color: var(--text-2);
+}
+
+.login-footer__contact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .login-footer__link:hover {

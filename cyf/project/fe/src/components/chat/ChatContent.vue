@@ -202,7 +202,10 @@
             <Link />
           </el-icon> {{ t('login.githubLink') }}
         </a>
-        <span class="wechat-info"> vx:pata_data_studio </span>
+        <span class="wechat-info">
+          <WeChatIcon size="sm" :label="t('login.contactLabel')" />
+          pata_data_studio
+        </span>
       </div>
 
       <!-- 回到顶部按钮 -->
@@ -283,6 +286,7 @@ import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
 import { normalizeFileUrl } from '@/services/backendUrl'
 import { FormData } from '@/utils/main'
+import WeChatIcon from '@/components/common/WeChatIcon.vue'
 import InputArea from './InputArea.vue'
 import ChatToolbar from './ChatToolbar.vue'
 import 'highlight.js/styles/github-dark.css'

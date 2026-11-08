@@ -823,6 +823,12 @@ body.dark-theme .message-text table::-webkit-scrollbar-thumb:hover {
   color: var(--text-2);
 }
 
+.wechat-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 body.dark-theme .message-content-user,
 body.dark-theme .message-content-ai {
   border-color: var(--line-1);

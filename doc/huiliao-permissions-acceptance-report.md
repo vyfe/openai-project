@@ -95,7 +95,7 @@
 | V02 主题 / 语言 | 亮 / 暗 × 中 / 英文切换正常，文案完整、对比度可读 | 通过 |
 | V03 键盘 / 辅助 | 功能选择为原生 radio 组（`role="radiogroup"`），表单有可关联标签与可见焦点，Enter 可提交 | 通过（自动化 + 快照核对） |
 
-证据截图：`doc/screenshots/huiliao-login-1440.png`（1440 亮色中文）、`doc/screenshots/huiliao-login-390.png`（390 单列）、`doc/screenshots/huiliao-login-390-dark-en.png`（390 暗色英文）、`doc/screenshots/huiliao-admin-user-roles.png`（管理端多角色编辑）。
+证据截图：`doc/screenshots/huiliao-login-1440.png`（1440 亮色中文，含动画背景与品牌标语）、`doc/screenshots/huiliao-login-1440-dark.png`（1440 暗色）、`doc/screenshots/huiliao-login-390.png`（390 单列）、`doc/screenshots/huiliao-login-390-dark-en.png`（390 暗色英文）、`doc/screenshots/huiliao-admin-user-roles.png`（管理端多角色编辑）、`doc/screenshots/huiliao-wechat-icon.png`（微信图标）。
 
 ### 4.2 角色矩阵（A03–A05）
 
