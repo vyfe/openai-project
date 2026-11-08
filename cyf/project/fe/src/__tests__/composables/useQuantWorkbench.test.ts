@@ -37,6 +37,16 @@ vi.mock('pinia', () => ({
   createPinia: vi.fn()
 }))
 
+// Mock auth store：工作台按管理员权限预加载运维接口
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isAdmin: () => true,
+    sessionVersion: 0,
+    userId: 1,
+    roles: ['admin']
+  })
+}))
+
 /**
  * 每个测试重新 import composable 以获取隔离实例。
  * 通过 vi.resetModules() 清除模块缓存中的单例。

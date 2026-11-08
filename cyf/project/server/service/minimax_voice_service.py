@@ -7,7 +7,13 @@ from datetime import datetime, timedelta, timezone
 from conf.runtime import runtime_state
 from model.entities import VoiceReading
 from model.repositories.minimax_repository import (
-    get_account_state, get_reading, list_readings, reading_dict, save_account_state,
+    claim_voice_ownership, owned_voice_ids, release_voice_ownership, get_account_state, get_reading, get_voice_owner, list_readings,
+    owns_voice, reading_dict, save_account_state,
+)
+from model.repositories.user_repository import (
+    BROWSER_CONF_DEFAULT_VOICE_KEY,
+    get_user_browser_conf_map,
+    set_user_browser_conf_value,
 )
 from service.minimax_audio import cache_audio
 from service.minimax_client import (
@@ -65,10 +71,18 @@ class MiniMaxVoiceService:
                                   region=self.settings.minimax_clone_region,
                                   state_loader=get_account_state, state_saver=save_account_state)
 
-    def snapshot(self):
+    def snapshot(self, owner_user_id=None, is_admin: bool = False, username: str = ""):
+        """音色台账快照。
+
+        普通用户只拿到可用模型、可用音色与本人记录；配置路径、存储目录、密钥种类、
+        内部 Host 与全局管理信息不下发。
+        """
         state = self.store.read()
-        return {
-            "config": {
+        voices = merged_voices(state)
+        # owner_user_id 为 None 表示系统作用域（内部调用 / 迁移脚本），不做裁剪。
+        system_scope = is_admin or owner_user_id is None
+        if system_scope:
+            config = {
                 "ready": self.client.ready, "region": self.client.region,
                 "key_kind": self.settings.minimax_key_kind, "model": self.settings.minimax_model,
                 "base_url": self.client.base_url, "timeout_seconds": self.client.timeout,
@@ -76,10 +90,34 @@ class MiniMaxVoiceService:
                 "clone_ready": self.clone_client.ready, "clone_region": self.clone_client.region,
                 "clone_base_url": self.clone_client.base_url,
                 "clone_dedicated": self.settings.minimax_clone_api_key != self.settings.minimax_api_key,
-            },
-            "models": MODELS, "voices": merged_voices(state), "history": list_readings(self.store.scope),
-            "default_voice_id": state["default_voice_id"], "last_sync": state["last_sync"],
+            }
+            visible_voices = voices
+            default_voice_id = state["default_voice_id"]
+        else:
+            config = {"ready": self.client.ready, "model": self.settings.minimax_model, "clone_ready": self.clone_client.ready}
+            personal_ids = owned_voice_ids(self.store.scope, owner_user_id)
+            visible_voices = [
+                voice for voice in voices
+                if voice.get("voice_type") == "system"
+                or voice.get("voice_id", "") in personal_ids
+            ]
+            default_voice_id = self._personal_default_voice(username, visible_voices)
+        return {
+            "config": config,
+            "models": MODELS,
+            "voices": visible_voices,
+            "history": list_readings(self.store.scope, owner_user_id=owner_user_id, is_admin=is_admin),
+            "default_voice_id": default_voice_id,
+            "last_sync": state["last_sync"] if is_admin else None,
         }
+
+    def _personal_default_voice(self, username: str, voices) -> str:
+        """普通用户的默认音色保存在本人浏览器配置里，且必须仍然可用。"""
+        if not username:
+            return ""
+        stored = get_user_browser_conf_map(username).get(BROWSER_CONF_DEFAULT_VOICE_KEY) or ""
+        available = {voice.get("voice_id") for voice in voices}
+        return stored if stored in available else ""
 
     def sync(self):
         result = self.clone_client.request("/v1/get_voice", {"voice_type": "all"})
@@ -107,7 +145,7 @@ class MiniMaxVoiceService:
         self.store.update(update)
         return {"count": len(voices)}
 
-    def clone(self, data, files):
+    def clone(self, data, files, owner_user_id=None):
         voice_id = text_value(data, "voice_id", 256)
         validate_new_voice_id(voice_id)
         alias = text_value(data, "alias", 80)
@@ -126,6 +164,8 @@ class MiniMaxVoiceService:
             payload["clone_prompt"] = {"prompt_audio": self.clone_client.upload(prompt, "prompt_audio"), "prompt_text": prompt_text}
         record = {"voice_id": voice_id, "alias": alias, "voice_type": "voice_cloning", "description": "由录音复刻",
                   "created_time": now(), "status": "unknown"}
+        if owner_user_id is not None:
+            claim_voice_ownership(self.store.scope, voice_id, owner_user_id)
         self.store.update(lambda s: s["voices"].__setitem__(voice_id, record))
         try:
             result = self.clone_client.request("/v1/voice_clone", payload)
@@ -135,29 +175,53 @@ class MiniMaxVoiceService:
         except VoiceError as exc:
             if not exc.uncertain:
                 self.store.update(lambda s: s["voices"].pop(voice_id, None))
+                release_voice_ownership(self.store.scope, voice_id)
             raise
         self.store.update(lambda s: s["voices"][voice_id].update(status="pending"))
         return {"voice_id": voice_id}
 
-    def preference(self, data):
+    def preference(self, data, owner_user_id=None, is_admin: bool = False, username: str = ""):
+        """音色偏好。
+
+        管理员写全局默认音色；普通用户只写本人浏览器配置，不触碰全局
+        ``VoiceAccountState.default_voice_id``。
+        """
         voice_id = text_value(data, "voice_id", 256)
         alias = text_value(data, "alias", 80, False)
         require(isinstance(data.get("make_default", False), bool), "make_default 必须是开关值。")
-        def update(state):
-            known = next((v for v in merged_voices(state) if v["voice_id"] == voice_id), None)
-            require(known is not None, "音色记录不存在，请先同步云端音色。")
-            if alias:
-                state["voices"][voice_id] = {**known, "alias": alias}
-            if data.get("make_default"):
-                state["default_voice_id"] = voice_id
-        self.store.update(update)
+        state = self.store.read()
+        known = next((v for v in merged_voices(state) if v["voice_id"] == voice_id), None)
+        require(known is not None, "音色记录不存在，请先同步云端音色。")
+        if not is_admin:
+            require(known.get("voice_type") == "system"
+                    or owns_voice(self.store.scope, voice_id, owner_user_id, False),
+                    "该音色不属于当前账号，无法设置为偏好。")
+        if alias:
+            if not is_admin and known.get("voice_type") == "system":
+                raise VoiceError("系统音色名称由管理员维护。", 403)
+            def update(state):
+                current = next((v for v in merged_voices(state) if v["voice_id"] == voice_id), None)
+                if current is not None:
+                    state["voices"][voice_id] = {**current, "alias": alias}
+            self.store.update(update)
+        if data.get("make_default"):
+            if is_admin or owner_user_id is None:
+                # 管理员或系统作用域：写全局默认音色
+                def update(state):
+                    state["default_voice_id"] = voice_id
+                self.store.update(update)
+            else:
+                require(bool(username), "账号信息缺失，无法保存音色偏好。")
+                set_user_browser_conf_value(username, BROWSER_CONF_DEFAULT_VOICE_KEY, voice_id)
 
-    def delete(self, data):
+    def delete(self, data, owner_user_id=None, is_admin: bool = False):
         voice_id = text_value(data, "voice_id", 256)
         require(data.get("confirmation") == voice_id, "请输入完整音色 ID 确认删除。")
         known = next((v for v in merged_voices(self.store.read()) if v["voice_id"] == voice_id), None)
         require(known is not None, "音色记录不存在，请先同步云端音色。")
         require(known["voice_type"] in ("voice_cloning", "voice_generation"), "系统音色不能删除。")
+        if not owns_voice(self.store.scope, voice_id, owner_user_id, is_admin):
+            raise VoiceError("音色不存在。", 404)
         self.clone_client.request("/v1/delete_voice", {"voice_id": voice_id, "voice_type": known["voice_type"]})
         def update(state):
             state["voices"].pop(voice_id, None)
@@ -165,6 +229,7 @@ class MiniMaxVoiceService:
             if state["default_voice_id"] == voice_id:
                 state["default_voice_id"] = ""
         self.store.update(update)
+        release_voice_ownership(self.store.scope, voice_id)
 
     def _synthesis_client(self, voice_id):
         """复刻音色首次使用要一次性付“音色费用”，这笔钱只走账户余额。
@@ -177,7 +242,7 @@ class MiniMaxVoiceService:
             return self.clone_client
         return self.client
 
-    def synthesize(self, data):
+    def synthesize(self, data, owner_user_id=None, is_admin: bool = False):
         voice_id = text_value(data, "voice_id", 256)
         text = text_value(data, "text", 9999)
         title = text_value(data, "title", 100, False) or "语音合成"
@@ -192,7 +257,11 @@ class MiniMaxVoiceService:
         if emotion:
             voice_setting["emotion"] = emotion
         audio_id = datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(4)
-        record = VoiceReading.create(id=audio_id, scope=self.store.scope, title=title, source_text=text,
+        voice = next((v for v in merged_voices(self.store.read()) if v["voice_id"] == voice_id), None)
+        if not (is_admin or owner_user_id is None or (voice is not None and (voice.get("voice_type") == "system" or owns_voice(self.store.scope, voice_id, owner_user_id)))):
+            raise VoiceError("音色不存在。", 404)
+        record = VoiceReading.create(id=audio_id, scope=self.store.scope, owner_user_id=owner_user_id,
+            title=title, source_text=text,
             voice_id=voice_id, model=model, speed=speed, volume=volume, pitch=pitch, emotion=emotion)
         payload = {
             "model": model, "text": text, "stream": False, "output_format": "url", "language_boost": "Chinese",
@@ -240,10 +309,11 @@ class MiniMaxVoiceService:
     def cache_audio(self, record):
         cache_audio(self.store, self.client, record, "audio")
 
-    def audio_path(self, audio_id, ext):
+    def audio_path(self, audio_id, ext, owner_user_id=None, is_admin: bool = False):
         require(ext in ("mp3", "txt") and re.fullmatch(r"[0-9]{8}-[0-9]{6}-[a-f0-9]{8}", audio_id), "文件标识无效。")
-        row = get_reading(self.store.scope, audio_id)
-        require(row is not None, "文件不存在于当前密钥的朗读记录。")
+        row = get_reading(self.store.scope, audio_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if row is None:
+            raise VoiceError("文件不存在于当前密钥的朗读记录。", 404)
         path = self.store.folder / "audio" / (audio_id + "." + ext)
         if ext == "txt":
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -256,9 +326,10 @@ class MiniMaxVoiceService:
         require(path.is_file(), "本地文件已不存在。")
         return path
 
-    def reading(self, audio_id):
-        row = get_reading(self.store.scope, audio_id)
-        require(row is not None, "朗读记录不存在。")
+    def reading(self, audio_id, owner_user_id=None, is_admin: bool = False):
+        row = get_reading(self.store.scope, audio_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if row is None:
+            raise VoiceError("朗读记录不存在。", 404)
         return reading_dict(row, include_text=True)
 
     # ---------- 音色保活 ----------
@@ -328,6 +399,11 @@ class MiniMaxVoiceService:
         text = keepalive_text(moment)
         results = []
         for voice_id in self.keepalive_due(moment):
+            owner_id = get_voice_owner(self.store.scope, voice_id)
+            if owner_id is not None:
+                from service.permission_service import active_module_owner, ROLE_SOUND
+                if active_module_owner(owner_id, ROLE_SOUND) is None:
+                    continue
             try:
                 # 用音色所属账号的凭据调用，确保一定调得到该音色。
                 self.clone_client.request("/v1/t2a_v2", {

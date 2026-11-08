@@ -228,10 +228,17 @@ def deliver_to_bound_users() -> list[dict]:
     for binding in bindings:
         username = binding["username"]
         try:
-            positions = list_position_summary(created_by=username)
+            from service.quant.ownership import require_quant_user
+            owner = require_quant_user(username)
+            positions = list_position_summary(owner_user_id=owner.id)
             if not positions:
                 continue
-            delivery = send_position_summary_to_channel(channel_id=None, strategy_id=None)
+            from service.quant.channel_user_resolver import resolve_channel_user
+            from quant.entities import QuantImChannel
+            personal_channels = [c for c in QuantImChannel.select() if (resolve_channel_user(c.id) or {}).get("username") == username]
+            if not personal_channels:
+                continue
+            delivery = send_position_summary_to_channel(channel_id=personal_channels[0].id, strategy_id=None)
             delivery["target_user"] = username
             results.append(delivery)
         except Exception as exc:
@@ -266,8 +273,16 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
     results, reports, deliveries = [], [], []
     for raw_strategy_id in strategy_ids:
         strategy_id = int(raw_strategy_id)
+        from quant.entities import QuantStrategy
+        from service.permission_service import active_module_owner, ROLE_QUANT
+        strategy = QuantStrategy.get_by_id(strategy_id)
+        owner = active_module_owner(strategy.owner_user_id, ROLE_QUANT) if strategy.owner_user_id is not None else None
+        if strategy.owner_user_id is not None and owner is None:
+            logger.info("analysis_report_skip_revoked strategy_id=%s", strategy_id)
+            continue
+        scope = {"owner_user_id": owner.id} if owner else {}
         logger.info("analysis_report_strategy run_id=%s strategy_id=%s", run.id, strategy_id)
-        strategy_run = run_strategy(strategy_id=strategy_id, trade_date=run.trade_date.isoformat() if run.trade_date else None, save_all_signals=save_all_signals)
+        strategy_run = run_strategy(strategy_id=strategy_id, trade_date=run.trade_date.isoformat() if run.trade_date else None, save_all_signals=save_all_signals, **scope)
         results.append(strategy_run)
         report = create_report_for_run(
             int(strategy_run["id"]),
@@ -276,7 +291,8 @@ def execute_analysis_report(run: QuantScheduleRun) -> dict:
             prompt_template_id=prompt_template_id,
             llm_enabled=llm_enabled,
             model_name=model_name,
-            username="scheduler",
+            username=owner.username if owner else "scheduler",
+            **scope,
         )
         reports.append(report)
         logger.info(

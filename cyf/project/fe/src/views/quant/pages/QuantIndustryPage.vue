@@ -14,7 +14,7 @@
         </div>
       </div>
 
-      <div class="quant-toolbar quant-toolbar--wrap">
+      <div v-if="isAdmin" class="quant-toolbar quant-toolbar--wrap">
         <el-button type="primary" :icon="Download" :loading="loading.collectAll" @click="collect(['market', 'announcements', 'news', 'research_reports', 'indicators'], 'collectAll')">采集全部</el-button>
         <el-button plain :loading="loading.collectMarket" @click="collect(['market', 'indicators'], 'collectMarket')">行情资金</el-button>
         <el-button plain :loading="loading.collectNews" @click="collect(['announcements', 'news', 'indicators'], 'collectNews')">公告新闻</el-button>
@@ -22,7 +22,7 @@
         <el-button plain @click="loadPreview" :loading="loading.preview">日报预览</el-button>
       </div>
 
-      <div class="quant-mini-section quant-mini-section--first">
+      <div v-if="isAdmin" class="quant-mini-section quant-mini-section--first">
         <div class="quant-mini-section__title">
           <span>添加行业标的</span>
           <span class="quant-muted">只保存到当前行业，不自动采集；保存后可手动点“行情资金”。</span>
@@ -161,11 +161,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Download, RefreshRight } from '@element-plus/icons-vue'
 import { quantDataAPI, quantIndustryAPI } from '@/services/quantApi'
 import { symbolLabel } from '@/composables/quant/format'
 
+const isAdmin = computed(() => useAuthStore().isAdmin())
 const boards = ref<any[]>([])
 const selectedBoardId = ref<number | null>(null)
 const dashboard = ref<any>(null)
@@ -298,7 +300,7 @@ async function addIndustrySymbol() {
 async function loadBoards() {
   loading.boards = true
   try {
-    await quantIndustryAPI.initDefaults()
+    if (isAdmin.value) await quantIndustryAPI.initDefaults()
     const response: any = await quantIndustryAPI.boards({ status: 'active' })
     boards.value = response.data || []
     if (!selectedBoardId.value && boards.value.length) selectedBoardId.value = boards.value[0].id

@@ -5,6 +5,12 @@ from typing import Optional
 
 from quant.entities import QuantDailyBar, QuantPositionJournal
 from service.quant.common import normalize_symbol
+from service.quant.ownership import (
+    ResourceNotFoundError,
+    assert_owned,
+    scope_by_owner,
+    validate_related_resources,
+)
 from service.quant.task_dispatch_service import create_fetch_bars_task
 
 # 日线回补默认窗口：约 6 个月，覆盖常见中期均线/趋势判断所需的历史
@@ -59,6 +65,8 @@ def list_position_journal(
     source: Optional[str] = None,
     created_by: Optional[str] = None,
     limit: int = 100,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> list[dict]:
     query = QuantPositionJournal.select()
     if strategy_id:
@@ -69,19 +77,31 @@ def list_position_journal(
         query = query.where(QuantPositionJournal.source == source)
     if created_by:
         query = query.where(QuantPositionJournal.created_by == created_by)
+    query = scope_by_owner(query, QuantPositionJournal, owner_user_id, is_admin)
     query = query.order_by(QuantPositionJournal.occurred_at.desc(), QuantPositionJournal.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
 
-def _get_owned_position(entry_id: int, created_by: Optional[str]) -> QuantPositionJournal:
-    query = QuantPositionJournal.select().where(QuantPositionJournal.id == entry_id)
-    if created_by is not None:
-        query = query.where(QuantPositionJournal.created_by == str(created_by).strip())
-    return query.get()
+def _get_owned_position(
+    entry_id: int,
+    created_by: Optional[str],
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> QuantPositionJournal:
+    """按归属取持仓流水；不可见时按「不存在」处理。"""
+    record = QuantPositionJournal.get_or_none(QuantPositionJournal.id == entry_id)
+    if record is None:
+        raise ResourceNotFoundError("持仓流水不存在")
+    return assert_owned(record, owner_user_id, is_admin, "持仓流水")
 
 
-def get_position_entry(entry_id: int, created_by: Optional[str] = None) -> dict:
-    return _get_owned_position(entry_id, created_by).to_dict()
+def get_position_entry(
+    entry_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> dict:
+    return _get_owned_position(entry_id, created_by, owner_user_id, is_admin).to_dict()
 
 
 def create_position_entry(
@@ -98,7 +118,9 @@ def create_position_entry(
     source: str = "manual",
     reason: str = "",
     remark: str = "",
+    owner_user_id: Optional[int] = None,
 ) -> dict:
+    validate_related_resources(owner_user_id, strategy_id=strategy_id, run_id=run_id, operation_id=operation_id)
     normalized_quantity = _to_int(quantity, default=0) or 0
     if normalized_quantity <= 0:
         raise ValueError("quantity 必须大于 0")
@@ -110,7 +132,7 @@ def create_position_entry(
     # 持仓上限检查：同一用户最多 5 只股票
     if created_by:
         # 计算当前净持仓（买入 - 卖出）
-        user_positions = list_position_summary(created_by=created_by)
+        user_positions = list_position_summary(created_by=created_by if owner_user_id is None else None, owner_user_id=owner_user_id)
         current_count = len(user_positions)
         already_held = any(p["symbol"] == normalized_symbol for p in user_positions)
         if not already_held and current_count >= 5:
@@ -120,6 +142,7 @@ def create_position_entry(
         strategy_id=_to_int(strategy_id),
         run_id=_to_int(run_id),
         operation_id=_to_int(operation_id),
+        owner_user_id=owner_user_id,
         symbol=normalized_symbol,
         side=normalized_side,
         price=_to_float(price),
@@ -132,7 +155,7 @@ def create_position_entry(
         created_at=datetime.now(),
         updated_at=datetime.now(),
     )
-    if should_backfill:
+    if should_backfill and owner_user_id is None:
         _create_new_position_backfill_task(normalized_symbol, created_by)
     return record.to_dict()
 
@@ -188,8 +211,17 @@ def _create_new_position_backfill_task(symbol: str, created_by: str = "") -> dic
     )
 
 
-def update_position_entry(entry_id: int, created_by: Optional[str] = None, **updates) -> dict:
-    record = _get_owned_position(entry_id, created_by)
+def update_position_entry(
+    entry_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+    **updates,
+) -> dict:
+    record = _get_owned_position(entry_id, created_by, owner_user_id, is_admin)
+    validate_related_resources(record.owner_user_id, **{
+        key: updates.get(key, getattr(record, key)) for key in ("strategy_id", "run_id", "operation_id")
+    })
     if "strategy_id" in updates:
         record.strategy_id = _to_int(updates["strategy_id"])
     if "run_id" in updates:
@@ -220,8 +252,13 @@ def update_position_entry(entry_id: int, created_by: Optional[str] = None, **upd
     return record.to_dict()
 
 
-def delete_position_entry(entry_id: int, created_by: Optional[str] = None) -> bool:
-    _get_owned_position(entry_id, created_by).delete_instance()
+def delete_position_entry(
+    entry_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> bool:
+    _get_owned_position(entry_id, created_by, owner_user_id, is_admin).delete_instance()
     return True
 
 
@@ -231,6 +268,7 @@ def sync_position_entries_by_operation(
     created_by: str,
     price,
     quantity,
+    owner_user_id: Optional[int] = None,
 ) -> int:
     """操作记录改价/改量后同步它已生成的持仓流水，使持仓成本价实时跟随。
 
@@ -244,6 +282,8 @@ def sync_position_entries_by_operation(
         & (QuantPositionJournal.created_by == str(created_by).strip())
         & (QuantPositionJournal.source.in_(("operation_record", "operation_revoked")))
     )
+    if owner_user_id is not None:
+        criteria = criteria & (QuantPositionJournal.owner_user_id == owner_user_id)
     normalized_quantity = _to_int(quantity, default=0) or 0
     if normalized_quantity <= 0:
         return QuantPositionJournal.delete().where(criteria).execute()
@@ -252,8 +292,19 @@ def sync_position_entries_by_operation(
     ).where(criteria).execute()
 
 
-def list_position_summary(strategy_id: Optional[int] = None, created_by: Optional[str] = None) -> list[dict]:
-    entries = list_position_journal(strategy_id=strategy_id, created_by=created_by, limit=5000)
+def list_position_summary(
+    strategy_id: Optional[int] = None,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> list[dict]:
+    entries = list_position_journal(
+        strategy_id=strategy_id,
+        created_by=created_by,
+        owner_user_id=owner_user_id,
+        is_admin=is_admin,
+        limit=5000,
+    )
     positions = {}
     for item in sorted(entries, key=lambda row: row.get("occurred_at") or ""):
         symbol = item["symbol"]

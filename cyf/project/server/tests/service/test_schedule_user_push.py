@@ -166,6 +166,8 @@ class TestPushReportFilteredPerChannel:
     ):
         bind_user("ou_p2p_user_a", "test_admin", "test123")
         # 给用户写一条持仓
+        from model.entities import User
+        owner_id = User.get(User.username == "test_admin").id
         create_position_entry(
             symbol="600519.SH",
             side="buy",
@@ -174,6 +176,7 @@ class TestPushReportFilteredPerChannel:
             occurred_at=datetime.now(),
             source="manual",
             created_by="test_admin",
+            owner_user_id=owner_id,
         )
         channel = _create_channel("p2p:oc_user_a", receive_id="ou_p2p_user_a")
         report_id = _create_report(_SAMPLE_REPORT)
@@ -255,17 +258,22 @@ class TestPushReportFilteredPerChannel:
         bind_user("ou_user_a", "test_admin", "test123")
         bind_user("ou_user_b", "test_admin", "test123")
         bind_user("ou_user_c", "test_admin", "test123")
+        from model.entities import User
+        owner_id = User.get(User.username == "test_admin").id
         create_position_entry(
             symbol="600519.SH", side="buy", quantity=100, price=1688.0,
             occurred_at=datetime.now(), source="manual", created_by="test_admin",
+            owner_user_id=owner_id,
         )
         create_position_entry(
             symbol="002837.SZ", side="buy", quantity=200, price=12.0,
             occurred_at=datetime.now(), source="manual", created_by="test_admin",
+            owner_user_id=owner_id,
         )
         create_position_entry(
             symbol="000001.SZ", side="buy", quantity=300, price=10.0,
             occurred_at=datetime.now(), source="manual", created_by="test_admin",
+            owner_user_id=owner_id,
         )
         channel_a = _create_channel("p2p:oc_a", receive_id="ou_user_a")
         channel_b = _create_channel("p2p:oc_b", receive_id="ou_user_b")

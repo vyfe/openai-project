@@ -1,4 +1,6 @@
 export const enValidation = {
+  username: 'Username',
+  password: 'Password',
   usernameRequired: 'Please enter username',
   usernameNotEmpty: 'Username cannot be empty',
   passwordRequired: 'Please enter password',

@@ -2,8 +2,9 @@ import json
 
 from flask import Blueprint, request
 
-from dto.common import error_response, get_request_data, parse_json_list, success_response
-from service.auth_service import require_admin_auth, require_auth
+from dto.common import ERROR_TYPE_RESOURCE_NOT_FOUND, error_response, get_request_data, parse_json_list, success_response
+from service.auth_service import require_admin_auth, require_module_auth
+from service.permission_service import ROLE_QUANT, current_auth_context
 from service.quant.common import normalize_symbol
 from service.quant.expression_engine import (
     BAR_FIELD_NAMES,
@@ -24,6 +25,7 @@ from service.quant.report_service import (
     update_prompt_template,
 )
 from service.quant.rule_engine import evaluate_series
+from service.quant.ownership import ResourceNotFoundError, current_owner_scope
 from service.quant.rule_migration import migrate_v1_to_v2
 from service.quant.expr_llm_service import generate_expr_from_description
 from service.quant.strategy_service import (
@@ -48,25 +50,29 @@ bp = Blueprint("quant_strategy_routes", __name__, url_prefix="/never_guess_my_us
 
 
 @bp.route("/strategy/list", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_list(user, password):
     del user, password
     status = str(request.args.get("status", "")).strip() or None
-    return success_response(data=list_strategies(status=status))
+    owner_user_id, is_admin = current_owner_scope()
+    return success_response(data=list_strategies(status=status, owner_user_id=owner_user_id, is_admin=is_admin))
 
 
 @bp.route("/strategy/get/<int:strategy_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_get(user, password, strategy_id):
     del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
-        return success_response(data=get_strategy(strategy_id))
+        return success_response(data=get_strategy(strategy_id, owner_user_id=owner_user_id, is_admin=is_admin))
+    except ResourceNotFoundError:
+        return error_response("策略不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"获取策略失败: {exc}")
 
 
 @bp.route("/strategy/create", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_create():
     try:
         data = get_request_data()
@@ -77,12 +83,14 @@ def quant_strategy_create():
         rule_config = data.get("rule_config")
         if isinstance(rule_config, str):
             rule_config = json.loads(rule_config)
+        owner_user_id, _is_admin = current_owner_scope()
         result = create_strategy(
             name=name,
             description=str(data.get("description", "")).strip(),
             symbols=symbols,
             rule_config=rule_config,
             status=str(data.get("status", "active")).strip() or "active",
+            owner_user_id=owner_user_id,
         )
         return success_response(data=result, msg="策略创建成功")
     except Exception as exc:
@@ -90,7 +98,7 @@ def quant_strategy_create():
 
 
 @bp.route("/strategy/update", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_update():
     try:
         data = get_request_data()
@@ -107,49 +115,69 @@ def quant_strategy_update():
             updates["symbols"] = symbols
         if rule_config is not None:
             updates["rule_config"] = rule_config
-        return success_response(data=update_strategy(strategy_id, **updates), msg="策略更新成功")
+        owner_user_id, is_admin = current_owner_scope()
+        return success_response(data=update_strategy(
+            strategy_id, owner_user_id=owner_user_id, is_admin=is_admin, **updates,
+        ), msg="策略更新成功")
+    except ResourceNotFoundError:
+        return error_response("策略不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"更新策略失败: {exc}")
 
 
 @bp.route("/strategy/delete", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_delete():
     try:
         data = get_request_data()
         strategy_id = int(data.get("id"))
-        delete_strategy(strategy_id)
+        owner_user_id, is_admin = current_owner_scope()
+        delete_strategy(strategy_id, owner_user_id=owner_user_id, is_admin=is_admin)
         return success_response(msg="策略删除成功")
+    except ResourceNotFoundError:
+        return error_response("策略不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"删除策略失败: {exc}")
 
 
 @bp.route("/strategy/run", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_run():
     try:
         data = get_request_data()
         strategy_id = int(data.get("strategy_id"))
         trade_date = str(data.get("trade_date", "")).strip() or None
         save_all_signals = str(data.get("save_all_signals", "true")).lower() in ("true", "1", "yes")
-        result = run_strategy(strategy_id=strategy_id, trade_date=trade_date, save_all_signals=save_all_signals)
+        owner_user_id, is_admin = current_owner_scope()
+        result = run_strategy(
+            strategy_id=strategy_id,
+            trade_date=trade_date,
+            save_all_signals=save_all_signals,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
         return success_response(data=result, msg="策略执行成功")
+    except ResourceNotFoundError:
+        return error_response("策略不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"执行策略失败: {exc}")
 
 
 @bp.route("/strategy/runs", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_runs(user, password):
     del user, password
     strategy_id = request.args.get("strategy_id", type=int)
     limit = request.args.get("limit", default=50, type=int) or 50
+    owner_user_id, is_admin = current_owner_scope()
     limit = max(1, min(limit, 500))
-    return success_response(data=list_strategy_runs(strategy_id=strategy_id, limit=limit))
+    return success_response(data=list_strategy_runs(
+        strategy_id=strategy_id, limit=limit, owner_user_id=owner_user_id, is_admin=is_admin,
+    ))
 
 
 @bp.route("/strategy/signals", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_signals(user, password):
     del user, password
     strategy_id = request.args.get("strategy_id", type=int)
@@ -157,13 +185,21 @@ def quant_strategy_signals(user, password):
     passed_only = str(request.args.get("passed_only", "false")).lower() in ("true", "1", "yes")
     limit = request.args.get("limit", default=200, type=int) or 200
     limit = max(1, min(limit, 2000))
+    owner_user_id, is_admin = current_owner_scope()
     return success_response(
-        data=list_strategy_signals(strategy_id=strategy_id, run_id=run_id, passed_only=passed_only, limit=limit)
+        data=list_strategy_signals(
+            strategy_id=strategy_id,
+            run_id=run_id,
+            passed_only=passed_only,
+            limit=limit,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
     )
 
 
 @bp.route("/symbols", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_symbols(user, password):
     del user, password
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -212,7 +248,7 @@ def quant_symbol_batch_delete():
 
 
 @bp.route("/symbols/search", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_symbol_search(user, password):
     del user, password
     keyword = str(request.args.get("keyword", "")).strip()
@@ -225,20 +261,24 @@ def quant_symbol_search(user, password):
 
 
 @bp.route("/prompt_templates", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_prompt_templates(user, password):
     del user, password
     strategy_id = request.args.get("strategy_id", type=int)
     report_type = str(request.args.get("report_type", "")).strip() or None
-    return success_response(data=list_prompt_templates(strategy_id=strategy_id, report_type=report_type))
+    owner_user_id, is_admin = current_owner_scope()
+    return success_response(data=list_prompt_templates(strategy_id=strategy_id, report_type=report_type, owner_user_id=owner_user_id, is_admin=is_admin))
 
 
 @bp.route("/prompt_template/<int:template_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_prompt_template_get(user, password, template_id):
     del user, password
     try:
-        return success_response(data=get_prompt_template(template_id))
+        owner_user_id, is_admin = current_owner_scope()
+        return success_response(data=get_prompt_template(template_id, owner_user_id=owner_user_id, is_admin=is_admin))
+    except ResourceNotFoundError:
+        return error_response("模板不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"获取 Prompt 模板失败: {exc}")
 
@@ -289,22 +329,32 @@ def quant_prompt_template_delete():
 
 
 @bp.route("/reports", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_reports(user, password):
     del user, password
     strategy_id = request.args.get("strategy_id", type=int)
     run_id = request.args.get("run_id", type=int)
     limit = request.args.get("limit", default=100, type=int) or 100
     limit = max(1, min(limit, 300))
-    return success_response(data=list_reports(strategy_id=strategy_id, run_id=run_id, limit=limit))
+    owner_user_id, is_admin = current_owner_scope()
+    return success_response(data=list_reports(
+        strategy_id=strategy_id,
+        run_id=run_id,
+        limit=limit,
+        owner_user_id=owner_user_id,
+        is_admin=is_admin,
+    ))
 
 
 @bp.route("/report/<int:report_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_report_get(user, password, report_id):
     del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
-        return success_response(data=get_report(report_id))
+        return success_response(data=get_report(report_id, owner_user_id=owner_user_id, is_admin=is_admin))
+    except ResourceNotFoundError:
+        return error_response("报告不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"获取报告失败: {exc}")
 
@@ -324,7 +374,8 @@ def _parse_report_request(data: dict) -> dict:
         prompt_template_id = int(prompt_template_id)
     llm_enabled = str(data.get("llm_enabled", False)).strip().lower() in ("true", "1", "yes", "on")
     model_name = str(data.get("model_name") or "").strip()
-    username = str(data.get("username") or "admin").strip() or "admin"
+    # 身份只取认证主体，忽略请求体里的 username。
+    username = current_auth_context().username
     return {
         "run_id": run_id,
         "report_type": report_type,
@@ -336,19 +387,26 @@ def _parse_report_request(data: dict) -> dict:
 
 
 @bp.route("/report/generate", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_report_generate():
     """生成 + 落库报告。body 同 /report/preview。"""
     try:
         params = _parse_report_request(get_request_data())
-        result = create_report_for_run(**params)
+        owner_user_id, is_admin = current_owner_scope()
+        result = create_report_for_run(
+            **params,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
         return success_response(data=result, msg="观测报告生成成功")
+    except ResourceNotFoundError:
+        return error_response("执行记录不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"生成观测报告失败: {exc}")
 
 
 @bp.route("/report/preview", methods=["POST"])
-@require_admin_auth
+@require_module_auth(ROLE_QUANT)
 def quant_report_preview():
     """不落库的"报告 IDE"：返回 bundle + draft + markdown + meta，便于前端预览 / 调试。
 
@@ -356,8 +414,15 @@ def quant_report_preview():
     """
     try:
         params = _parse_report_request(get_request_data())
-        result = preview_report_for_run(**params)
+        owner_user_id, is_admin = current_owner_scope()
+        result = preview_report_for_run(
+            **params,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
         return success_response(data=result, msg="报告预览已生成")
+    except ResourceNotFoundError:
+        return error_response("执行记录不存在", ERROR_TYPE_RESOURCE_NOT_FOUND), 404
     except Exception as exc:
         return error_response(f"生成报告预览失败: {exc}")
 
@@ -368,7 +433,7 @@ def quant_report_preview():
 
 
 @bp.route("/meta/indicators", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_meta_indicators(user, password):
     """指标 catalog：前端据此渲染指标面板 + 参数表单。
 
@@ -379,7 +444,7 @@ def quant_meta_indicators(user, password):
 
 
 @bp.route("/meta/expression_functions", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_meta_expression_functions(user, password):
     """表达式沙箱允许的函数 + bar 字段；前端用来做变量/函数自动补全。
 
@@ -402,7 +467,7 @@ def quant_meta_expression_functions(user, password):
 
 
 @bp.route("/meta/strategy_templates", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_meta_strategy_templates(user, password):
     """预设策略模板（v2 形态）；前端"模板"按钮据此渲染。"""
     del user, password
@@ -410,7 +475,7 @@ def quant_meta_strategy_templates(user, password):
 
 
 @bp.route("/strategy/validate", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_validate(user, password):
     """校验 rule_config 各条 expr 的语法与变量合法性，不落库、不打数据库。
 
@@ -473,7 +538,7 @@ def quant_strategy_validate(user, password):
 
 
 @bp.route("/strategy/llm_generate_expr", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_llm_generate_expr(user, password):
     """调大模型把自然语言描述生成 expr。不入库；不需要 admin。"""
     del password
@@ -498,7 +563,7 @@ def quant_strategy_llm_generate_expr(user, password):
 
 
 @bp.route("/strategy/dry_run", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_strategy_dry_run(user, password):
     """不落库试算：按 symbol 跑日线 evaluate_series，返回逐日结果。
 

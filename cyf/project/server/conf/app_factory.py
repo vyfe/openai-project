@@ -28,6 +28,8 @@ def create_app() -> Flask:
 
     @app.after_request
     def after_request(response):
+        if request.path.startswith("/never_guess_my_usage/"):
+            response.headers["Cache-Control"] = "private, no-store"
         response.headers.add("Access-Control-Allow-Origin", "*")
         response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,User-Agent,Cache-Control")
         response.headers.add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS")

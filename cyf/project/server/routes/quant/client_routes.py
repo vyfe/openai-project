@@ -4,7 +4,7 @@ import logging
 from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, parse_json_list, success_response
-from service.auth_service import require_admin_auth, require_auth
+from service.auth_service import require_admin_auth
 from service.quant.import_service import import_bundle, parse_bundle_bytes
 from service.quant.task_dispatch_service import claim_next_task, create_fetch_bars_task, list_tasks, mark_task_failed, mark_task_success, reset_task
 
@@ -66,7 +66,7 @@ def quant_client_task_reset():
 
 
 @bp.route("/client/tasks/claim", methods=["POST"])
-@require_auth
+@require_admin_auth
 def quant_client_task_claim(user, password):
     del user, password
     try:
@@ -82,7 +82,7 @@ def quant_client_task_claim(user, password):
 
 
 @bp.route("/client/tasks/report", methods=["POST"])
-@require_auth
+@require_admin_auth
 def quant_client_task_report(user, password):
     del user, password
     import_result = None

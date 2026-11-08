@@ -2,7 +2,13 @@ import axios, { AxiosError } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiClient } from '@/services/httpClient'
 
-const auth = vi.hoisted(() => ({ getCredentials: vi.fn(), updateAccessToken: vi.fn(), logout: vi.fn() }))
+const auth = vi.hoisted(() => ({
+  getCredentials: vi.fn(),
+  updateAccessToken: vi.fn(),
+  logout: vi.fn(),
+  applySnapshot: vi.fn(),
+  sessionVersion: 0
+}))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }))
 
 beforeEach(() => {

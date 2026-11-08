@@ -16,7 +16,8 @@ type ListResponse<T> = {
   }
 }
 
-type Fetcher<T, P extends Record<string, any>> = (params: P) => Promise<ListResponse<T>>
+// axios 响应拦截器已把 response.data 解包成业务体，运行时返回的其实是 ListResponse<T>。
+type Fetcher<T, P extends Record<string, any>> = (params: P) => Promise<ListResponse<T> | any>
 
 export function useAdminPagedList<T, P extends Record<string, any> = Record<string, any>>(
   fetcher: Fetcher<T, P>,
@@ -41,7 +42,7 @@ export function useAdminPagedList<T, P extends Record<string, any> = Record<stri
         keyword: keyword.value || undefined,
         ...(extraParams ? extraParams() : {})
       } as P
-      const response = await fetcher(params)
+      const response = (await fetcher(params)) as ListResponse<T>
       if (!response.success) {
         throw new Error(response.msg || '列表加载失败')
       }

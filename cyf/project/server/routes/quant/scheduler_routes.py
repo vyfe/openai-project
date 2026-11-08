@@ -3,7 +3,7 @@ import json
 from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, success_response
-from service.auth_service import require_admin_auth, require_auth
+from service.auth_service import require_admin_auth
 from service.quant.schedule_service import (
     TASK_TYPE_ANALYSIS,
     TASK_TYPE_DATA_SYNC,
@@ -33,7 +33,7 @@ bp = Blueprint("quant_scheduler_routes", __name__, url_prefix="/never_guess_my_u
 
 
 @bp.route("/scheduler/meta", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_meta(user, password):
     del user, password
     return success_response(
@@ -48,14 +48,14 @@ def quant_scheduler_meta(user, password):
 
 
 @bp.route("/scheduler/overview", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_overview(user, password):
     del user, password
     return success_response(data=get_scheduler_overview())
 
 
 @bp.route("/scheduler/configs", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_configs(user, password):
     del user, password
     status = str(request.args.get("status", "")).strip() or None
@@ -64,7 +64,7 @@ def quant_scheduler_configs(user, password):
 
 
 @bp.route("/scheduler/config/<int:schedule_id>", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_config_get(user, password, schedule_id):
     del user, password
     try:
@@ -132,7 +132,7 @@ def quant_scheduler_config_delete():
 
 
 @bp.route("/scheduler/runs", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_runs(user, password):
     del user, password
     schedule_id = request.args.get("schedule_id", type=int)
@@ -143,7 +143,7 @@ def quant_scheduler_runs(user, password):
 
 
 @bp.route("/scheduler/run/<int:run_id>", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_run_get(user, password, run_id):
     del user, password
     try:
@@ -155,7 +155,7 @@ def quant_scheduler_run_get(user, password, run_id):
 
 
 @bp.route("/scheduler/run/<int:run_id>/log", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_scheduler_run_log(user, password, run_id):
     del user, password
     try:

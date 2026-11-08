@@ -98,8 +98,10 @@ class User(BaseModel):
     api_key = CharField(null=True)
     token = TextField(null=True)
     browser_conf = TextField(null=True)
+    # 兼容字段：仅投影为 admin/user，真实授权一律读取 user_role 表。
     role = CharField(default="user")
     is_active = BooleanField(default=True)
+    deleted_at = DateTimeField(null=True)
     created_at = DateTimeField(default=datetime.now)
     updated_at = DateTimeField(default=datetime.now)
 
@@ -117,6 +119,45 @@ class User(BaseModel):
     def verify_password(self, password: str) -> bool:
         password_hash, _ = User.hash_password(password, self.salt)
         return password_hash == self.password_hash
+
+
+class UserRole(BaseModel):
+    """用户与角色的成员关系表，授权的唯一来源。"""
+
+    user_id = IntegerField(index=True)
+    role = CharField()
+    created_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        database = db
+        table_name = "user_role"
+        indexes = ((("user_id", "role"), True),)
+
+
+class PlatformSchemaMigration(BaseModel):
+    """平台库迁移版本表；启动时校验关键版本，缺失即阻止业务启动。"""
+
+    version = CharField(primary_key=True)
+    applied_at = DateTimeField(default=datetime.now)
+    note = TextField(default="")
+
+    class Meta:
+        database = db
+        table_name = "platform_schema_migration"
+
+
+class VoiceAssetOwnership(BaseModel):
+    """自定义音色的归属记录；系统音色共享，不写入本表。"""
+
+    scope = CharField()
+    voice_id = CharField()
+    owner_user_id = IntegerField(index=True)
+    created_at = DateTimeField(default=datetime.now)
+
+    class Meta:
+        database = db
+        table_name = "voice_asset_ownership"
+        indexes = ((("scope", "voice_id"), True),)
 
 
 class Notification(BaseModel):
@@ -160,6 +201,7 @@ class VoiceAccountState(BaseModel):
 class VoiceReading(BaseModel):
     id = CharField(primary_key=True)
     scope = CharField(index=True)
+    owner_user_id = IntegerField(null=True, index=True)
     title = CharField()
     source_text = TextField()
     voice_id = CharField()
@@ -186,6 +228,7 @@ class VoiceReading(BaseModel):
 class MusicTrack(BaseModel):
     id = CharField(primary_key=True)
     scope = CharField(index=True)
+    owner_user_id = IntegerField(null=True, index=True)
     title = CharField()
     prompt = TextField(null=True)
     lyrics = TextField(null=True)
@@ -207,4 +250,18 @@ class MusicTrack(BaseModel):
         indexes = ((("scope", "created_at"), False),)
 
 
-ALL_MODELS = [Log, Dialog, ModelMeta, SystemPrompt, TestLimit, User, Notification, VoiceAccountState, VoiceReading, MusicTrack]
+ALL_MODELS = [
+    Log,
+    Dialog,
+    ModelMeta,
+    SystemPrompt,
+    TestLimit,
+    User,
+    UserRole,
+    PlatformSchemaMigration,
+    VoiceAssetOwnership,
+    Notification,
+    VoiceAccountState,
+    VoiceReading,
+    MusicTrack,
+]

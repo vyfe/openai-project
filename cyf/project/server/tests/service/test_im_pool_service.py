@@ -141,7 +141,7 @@ class TestHandlePoolCommand:
         assert handle_pool_command("买入,600519,100,10", self._parsed()) is None
 
     def test_empty_arg_returns_usage(self, seed_admin_user):
-        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="admin"):
+        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="test_admin"):
             command, text = handle_pool_command("加入", self._parsed())
         assert command == "pool_usage"
         assert "用法" in text
@@ -152,7 +152,7 @@ class TestHandlePoolCommand:
                 handle_pool_command("加入,600519", self._parsed())
 
     def test_adds_and_enqueues_backfill(self, seed_admin_user):
-        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="admin"), patch(
+        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="test_admin"), patch(
             "service.quant.symbol_search_service.search_symbols_fallback",
             return_value=[_remote("600519", "贵州茅台")],
         ), patch(
@@ -169,7 +169,7 @@ class TestHandlePoolCommand:
 
     def test_backfill_failure_does_not_break_reply(self, seed_admin_user):
         """回补任务创建失败只记日志，加入成功的回复照常返回。"""
-        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="admin"), patch(
+        with patch("service.quant.im_operation_service.get_username_by_feishu", return_value="test_admin"), patch(
             "service.quant.symbol_search_service.search_symbols_fallback",
             return_value=[_remote("600519", "贵州茅台")],
         ), patch(

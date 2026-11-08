@@ -1,4 +1,6 @@
 export const zhValidation = {
+  username: '用户名',
+  password: '密码',
   usernameRequired: '请输入用户名',
   usernameNotEmpty: '用户名不能为空',
   passwordRequired: '请输入密码',

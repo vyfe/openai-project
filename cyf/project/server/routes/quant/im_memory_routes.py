@@ -1,7 +1,7 @@
 from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, parse_json_list, success_response
-from service.auth_service import require_admin_auth, require_auth
+from service.auth_service import require_admin_auth
 from service.quant.im_service import (
     create_im_channel,
     delete_im_channel,
@@ -22,7 +22,7 @@ bp = Blueprint("quant_im_memory_routes", __name__, url_prefix="/never_guess_my_u
 
 
 @bp.route("/im/channels", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_im_channels(user, password):
     del user, password
     status = str(request.args.get("status", "")).strip() or None
@@ -31,7 +31,7 @@ def quant_im_channels(user, password):
 
 
 @bp.route("/im/channel/<int:channel_id>", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_im_channel_get(user, password, channel_id):
     del user, password
     try:
@@ -81,7 +81,7 @@ def quant_im_channel_delete():
 
 
 @bp.route("/im/deliveries", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_im_deliveries(user, password):
     del user, password
     report_id = request.args.get("report_id", type=int)
@@ -93,7 +93,7 @@ def quant_im_deliveries(user, password):
 
 
 @bp.route("/im/inbound_events", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_im_inbound_events(user, password):
     del user, password
     channel_id = request.args.get("channel_id", type=int)
@@ -154,7 +154,7 @@ def quant_im_test():
 
 
 @bp.route("/memory/files", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_memory_files(user, password):
     del user, password
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -163,7 +163,7 @@ def quant_memory_files(user, password):
 
 
 @bp.route("/memory/<symbol>", methods=["GET"])
-@require_auth
+@require_admin_auth
 def quant_memory_get(user, password, symbol):
     del user, password
     try:

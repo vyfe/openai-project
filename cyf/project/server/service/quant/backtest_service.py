@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Optional
 
-from peewee import fn
+from peewee import DoesNotExist, fn
 
 from quant.entities import QuantBacktestRun, QuantDailyBar, QuantStrategy
 from service.quant.backtest_curves import (
@@ -13,8 +13,10 @@ from service.quant.backtest_curves import (
     _compute_metrics,
 )
 from service.quant.common import normalize_symbol, parse_trade_date
+from service.quant.ownership import ResourceNotFoundError, assert_owned
 from service.quant.rule_engine import evaluate_series, get_required_history_size_v2
 from service.quant.rule_migration import migrate_v1_to_v2
+from service.quant.strategy_service import visible_strategy_ids
 
 
 def _safe_float(value, default: float) -> float:
@@ -29,12 +31,20 @@ def _safe_int(value, default: int) -> int:
     return int(value)
 
 
-def list_backtest_runs(strategy_id: Optional[int] = None, status: Optional[str] = None, limit: int = 50) -> list[dict]:
+def list_backtest_runs(
+    strategy_id: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = 50,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> list[dict]:
+    """回测继承策略归属：只返回可见策略下的回测。"""
     query = QuantBacktestRun.select()
     if strategy_id:
         query = query.where(QuantBacktestRun.strategy_id == strategy_id)
     if status:
         query = query.where(QuantBacktestRun.status == status)
+    query = query.where(QuantBacktestRun.strategy_id.in_(visible_strategy_ids(owner_user_id, is_admin)))
     query = query.order_by(QuantBacktestRun.id.desc()).limit(limit)
     items = []
     for item in query.iterator():
@@ -46,18 +56,36 @@ def list_backtest_runs(strategy_id: Optional[int] = None, status: Optional[str] 
     return items
 
 
-def get_backtest_run(backtest_id: int) -> dict:
-    return QuantBacktestRun.get_by_id(backtest_id).to_dict()
+def get_backtest_run(
+    backtest_id: int,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> dict:
+    try:
+        record = QuantBacktestRun.get_by_id(backtest_id)
+        strategy = QuantStrategy.get_by_id(record.strategy_id)
+    except DoesNotExist as exc:
+        raise ResourceNotFoundError("回测记录不存在") from exc
+    assert_owned(strategy, owner_user_id, is_admin, "回测记录")
+    return record.to_dict()
 
 
-def delete_backtest_run(backtest_id: int) -> bool:
+def delete_backtest_run(
+    backtest_id: int,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> bool:
+    get_backtest_run(backtest_id, owner_user_id=owner_user_id, is_admin=is_admin)
     record = QuantBacktestRun.get_by_id(backtest_id)
     record.delete_instance()
     return True
 
 
 def _load_strategy(strategy_id: int) -> QuantStrategy:
-    return QuantStrategy.get_by_id(strategy_id)
+    try:
+        return QuantStrategy.get_by_id(strategy_id)
+    except DoesNotExist as exc:
+        raise ResourceNotFoundError("策略不存在") from exc
 
 
 def _resolve_symbols(strategy: QuantStrategy, override_symbols=None) -> list[str]:
@@ -103,8 +131,11 @@ def run_backtest(
     slippage_rate: float = 0.0005,
     benchmark_symbol: str = "",
     symbols=None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> dict:
     strategy = _load_strategy(strategy_id)
+    assert_owned(strategy, owner_user_id, is_admin, "策略")
     resolved_start_date = parse_trade_date(start_date)
     resolved_end_date = parse_trade_date(end_date)
     if resolved_start_date > resolved_end_date:

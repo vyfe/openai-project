@@ -3,7 +3,8 @@ import json
 from flask import Blueprint, request
 
 from dto.common import error_response, get_request_data, parse_json_list, success_response
-from service.auth_service import require_admin_auth, require_auth
+from service.auth_service import require_admin_auth, require_module_auth
+from service.permission_service import ROLE_QUANT
 from service.quant.industry_service import (
     collect_industry,
     create_or_update_industry_board,
@@ -20,7 +21,7 @@ bp = Blueprint("quant_industry_routes", __name__, url_prefix="/never_guess_my_us
 
 
 @bp.route("/industry/boards", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_boards(user, password):
     del user, password
     status = str(request.args.get("status", "")).strip() or None
@@ -28,7 +29,7 @@ def quant_industry_boards(user, password):
 
 
 @bp.route("/industry/defaults", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_defaults(user, password):
     del user, password
     return success_response(data=ensure_default_industry_boards(), msg="默认行业板块已初始化")
@@ -57,7 +58,7 @@ def quant_industry_board_save():
 
 
 @bp.route("/industry/collect", methods=["POST"])
-@require_auth
+@require_admin_auth
 def quant_industry_collect(user, password):
     del user, password
     try:
@@ -75,7 +76,7 @@ def quant_industry_collect(user, password):
 
 
 @bp.route("/industry/dashboard", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_dashboard(user, password):
     del user, password
     try:
@@ -88,7 +89,7 @@ def quant_industry_dashboard(user, password):
 
 
 @bp.route("/industry/news", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_news(user, password):
     del user, password
     board_id = request.args.get("board_id", type=int)
@@ -98,7 +99,7 @@ def quant_industry_news(user, password):
 
 
 @bp.route("/industry/research_reports", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_research_reports(user, password):
     del user, password
     board_id = request.args.get("board_id", type=int)
@@ -108,7 +109,7 @@ def quant_industry_research_reports(user, password):
 
 
 @bp.route("/industry/report/preview", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_industry_report_preview(user, password):
     del user, password
     try:

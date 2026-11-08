@@ -313,6 +313,7 @@ class QuantPositionJournal(QuantBaseModel):
     strategy_id = IntegerField(null=True, index=True)
     run_id = IntegerField(null=True, index=True)
     operation_id = IntegerField(null=True, index=True)
+    owner_user_id = IntegerField(null=True, index=True)
     symbol = CharField(index=True)
     side = CharField(default="buy", index=True)
     price = FloatField(null=True)

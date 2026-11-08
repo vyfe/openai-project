@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import { Setting } from '@element-plus/icons-vue'
@@ -14,7 +13,6 @@ import RuntimeOverview from '@/components/admin/RuntimeOverview.vue'
 import { useThemeManager } from '@/composables/useThemeManager'
 
 const { t } = useI18n()
-const router = useRouter()
 const activeTab = ref('models')
 const loadedTabs = ref(new Set<string>(['models']))
 const { isDarkTheme, initThemeManager } = useThemeManager()
@@ -29,10 +27,6 @@ const tabs = [
   { name: 'observability', label: t('admin.observability') }
 ]
 
-const goBack = () => {
-  router.push('/chat')
-}
-
 onMounted(() => {
   initThemeManager()
 })
@@ -46,18 +40,6 @@ watch(activeTab, (tab) => {
   <div class="admin-page min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col" :class="{ dark: isDarkTheme, 'admin-dark': isDarkTheme }">
     <!-- Header -->
     <AppHeader :title="t('admin.title')" :logo-icon="Setting" variant="admin">
-      <template #left>
-        <button
-          @click="goBack"
-          class="app-back-btn"
-          aria-label="返回聊天"
-          title="返回聊天"
-        >
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </button>
-      </template>
     </AppHeader>
 
     <!-- Content -->

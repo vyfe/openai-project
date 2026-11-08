@@ -7,6 +7,8 @@ import { useAdminPagedList } from '@/composables/useAdminPagedList'
 import { useAdminCrudDialog } from '@/composables/useAdminCrudDialog'
 import { useAdminAction } from '@/composables/useAdminAction'
 import { Plus } from '@element-plus/icons-vue'
+import { BUSINESS_ROLE_ORDER, type BusinessRole } from '@/auth/permissions'
+import { APP_META } from '@/auth/apps'
 
 const { t } = useI18n()
 
@@ -16,10 +18,14 @@ interface User {
   api_key_masked: string
   api_key?: string
   role: string
+  roles: string[]
   is_active: boolean
+  deleted?: boolean
   created_at: string
   updated_at: string
 }
+
+const roleFilter = ref('')
 
 const {
   items: users,
@@ -30,14 +36,29 @@ const {
   search: handleSearch,
   changePage: handlePageChange,
   changePageSize: handlePageSizeChange
-} = useAdminPagedList<User, { page?: number; page_size?: number; keyword?: string }>(userAPI.list)
+} = useAdminPagedList<User, { page?: number; page_size?: number; keyword?: string; role?: string }>(
+  userAPI.list,
+  () => ({ role: roleFilter.value || undefined })
+)
 
-const createEmptyForm = () => ({
+interface UserForm {
+  id: number
+  username: string
+  password: string
+  api_key: string
+  roles: BusinessRole[]
+  isAdmin: boolean
+  is_active: boolean
+}
+
+const createEmptyForm = (): UserForm => ({
   id: 0,
   username: '',
   password: '',
   api_key: '',
-  role: 'user',
+  // 管理员创建普通账号默认勾选聊天
+  roles: ['chat'],
+  isAdmin: false,
   is_active: true
 })
 
@@ -51,6 +72,14 @@ const {
   closeDialog
 } = useAdminCrudDialog(createEmptyForm)
 
+/** 角色标签：管理员显示 admin，业务角色显示各自名称。 */
+const roleTags = (roles: string[]) => (roles && roles.length ? roles : [])
+
+const roleLabel = (role: string) => {
+  if (role === 'admin') return t('admin.adminRole')
+  return t(APP_META[role as BusinessRole]?.labelKey || role)
+}
+
 const openEditDialog = async (row: User) => {
   dialogMode.value = 'edit'
   await runAction(
@@ -62,18 +91,28 @@ const openEditDialog = async (row: User) => {
           throw new Error(response.msg || t('admin.executeFailed'))
         }
         const detail = response.data
+        const roles: string[] = Array.isArray(detail.roles) ? detail.roles : []
+        const isAdmin = roles.includes('admin')
         formData.value = {
           id: detail.id,
           username: detail.username,
           password: '',
           api_key: detail.api_key || '',
-          role: detail.role,
+          roles: isAdmin ? ['chat'] : (roles.filter((role) => BUSINESS_ROLE_ORDER.includes(role as BusinessRole)) as BusinessRole[]),
+          isAdmin,
           is_active: detail.is_active
         }
         dialogVisible.value = true
       }
     }
   ).catch(() => undefined)
+}
+
+/** 关闭管理员开关后回到聊天默认值，允许重新组合。 */
+const onAdminToggle = (value: boolean) => {
+  if (!value && !formData.value.roles.length) {
+    formData.value.roles = ['chat']
+  }
 }
 
 const saveUser = async () => {
@@ -87,6 +126,13 @@ const saveUser = async () => {
     return
   }
 
+  if (!formData.value.isAdmin && !formData.value.roles.length) {
+    ElMessage.error(t('admin.roleRequired'))
+    return
+  }
+
+  const roles = formData.value.isAdmin ? ['admin'] : [...formData.value.roles]
+
   await runAction(
     async () => {
       if (dialogMode.value === 'create') {
@@ -94,14 +140,14 @@ const saveUser = async () => {
           username: formData.value.username,
           new_password: formData.value.password,
           api_key: formData.value.api_key || undefined,
-          role: formData.value.role,
+          roles,
           is_active: formData.value.is_active
         })
       }
       const updateData: any = {
         id: formData.value.id,
         username: formData.value.username,
-        role: formData.value.role,
+        roles,
         is_active: formData.value.is_active,
         api_key: formData.value.api_key || ''
       }
@@ -124,35 +170,28 @@ const saveUser = async () => {
 const deleteUser = async (row: User) => {
   await runConfirmedAction(
     {
-      message: `${t('admin.confirmDelete')} (${row.username})?`,
+      message: `${t('admin.deleteUserConfirm')} (${row.username})`,
       title: t('admin.confirm'),
-      confirmButtonText: t('admin.hardDelete'),
-      cancelButtonText: t('admin.softDelete'),
+      confirmButtonText: t('admin.delete'),
+      cancelButtonText: t('admin.cancel'),
       distinguishCancelAndClose: true,
       type: 'warning'
     },
-    () => userAPI.delete(row.id, true),
+    () => userAPI.delete(row.id),
     {
       successText: t('admin.deleteSuccess'),
       errorFallbackText: 'admin.deleteFailed',
       onSuccess: async () => {
         await fetchUsers()
-      },
-      onCancel: async (cancelError) => {
-        if (cancelError !== 'cancel') return
-        await runAction(
-          () => userAPI.delete(row.id, false),
-          {
-            successText: t('admin.deleteSuccess'),
-            errorFallbackText: 'admin.deleteFailed',
-            onSuccess: async () => {
-              await fetchUsers()
-            }
-          }
-        ).catch(() => undefined)
       }
     }
   ).catch(() => undefined)
+}
+
+const onRoleFilterChange = () => {
+  handleSearch().catch((error: any) => {
+    ElMessage.error(error.response?.data?.msg || error.message || t('admin.loading'))
+  })
 }
 
 onMounted(() => {
@@ -169,6 +208,19 @@ onMounted(() => {
         {{ t('admin.userManagement') }}
       </h2>
       <div class="flex items-center gap-2">
+        <el-select
+          v-model="roleFilter"
+          clearable
+          :placeholder="t('admin.roleFilter')"
+          style="width: 160px"
+          @change="onRoleFilterChange"
+        >
+          <el-option :label="t('admin.roleFilterAll')" value="" />
+          <el-option label="chat" value="chat" />
+          <el-option label="quant" value="quant" />
+          <el-option label="sound" value="sound" />
+          <el-option :label="t('admin.adminRole')" value="admin" />
+        </el-select>
         <el-input
           v-model="keyword"
           clearable
@@ -199,11 +251,19 @@ onMounted(() => {
           <code class="admin-code-chip">{{ row.api_key_masked || '-' }}</code>
         </template>
       </el-table-column>
-      <el-table-column prop="role" :label="t('admin.role')" width="100">
+      <el-table-column :label="t('admin.roles')" min-width="180">
         <template #default="{ row }">
-          <el-tag :type="row.role === 'admin' ? 'danger' : 'primary'" size="small">
-            {{ row.role }}
-          </el-tag>
+          <div class="flex flex-wrap gap-1">
+            <el-tag
+              v-for="role in roleTags(row.roles)"
+              :key="role"
+              :type="role === 'admin' ? 'danger' : 'primary'"
+              size="small"
+            >
+              {{ roleLabel(role) }}
+            </el-tag>
+            <span v-if="!roleTags(row.roles).length" class="admin-code-chip">-</span>
+          </div>
         </template>
       </el-table-column>
       <el-table-column prop="is_active" :label="t('admin.isActive')" width="100">
@@ -258,12 +318,20 @@ onMounted(() => {
         <el-form-item :label="t('admin.apiKey')">
           <el-input v-model="formData.api_key" :placeholder="t('admin.confirmPassword')" />
         </el-form-item>
-        <el-form-item :label="t('admin.role')">
-          <el-select v-model="formData.role">
-            <el-option label="user" value="user" />
-            <el-option label="admin" value="admin" />
-          </el-select>
+
+        <el-form-item :label="t('admin.adminRole')">
+          <el-switch v-model="formData.isAdmin" @change="onAdminToggle" />
         </el-form-item>
+
+        <el-form-item :label="t('admin.businessRoles')">
+          <el-checkbox-group v-model="formData.roles" :disabled="formData.isAdmin">
+            <el-checkbox v-for="role in BUSINESS_ROLE_ORDER" :key="role" :value="role">
+              {{ t(APP_META[role].labelKey) }}
+            </el-checkbox>
+          </el-checkbox-group>
+          <p v-if="formData.isAdmin" class="admin-role-hint">{{ t('admin.adminRoleEnabledHint') }}</p>
+        </el-form-item>
+
         <el-form-item v-if="dialogMode === 'edit'" :label="t('admin.isActive')">
           <el-switch v-model="formData.is_active" />
         </el-form-item>
@@ -279,5 +347,11 @@ onMounted(() => {
 <style scoped>
 .user-table {
   padding: 16px;
+}
+
+.admin-role-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  opacity: 0.75;
 }
 </style>

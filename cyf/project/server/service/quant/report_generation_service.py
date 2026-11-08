@@ -15,11 +15,13 @@ from quant.entities import (
     QuantStrategySignal,
 )
 from service.quant.memory_service import extract_memory_snippets
+from service.quant.ownership import ResourceNotFoundError, assert_owned
 from service.quant.report_draft import (
     REPORT_DRAFT_VERSION,
     _validate_report_draft,
     generate_report_draft,
 )
+from service.quant.strategy_service import visible_strategy_ids
 from service.quant.report_prompt_service import (
     latest_prompt,
     normalize_report_type,
@@ -33,7 +35,18 @@ ANALYSIS_BUNDLE_VERSION = "analysis-bundle-v1"
 
 
 def _load_strategy_run(run_id: int) -> QuantStrategyRun:
-    return QuantStrategyRun.get_by_id(run_id)
+    strategy_run = QuantStrategyRun.get_or_none(QuantStrategyRun.id == run_id)
+    if strategy_run is None:
+        raise ResourceNotFoundError("执行记录不存在")
+    return strategy_run
+
+
+def _assert_run_owned(strategy_run: QuantStrategyRun, owner_user_id: Optional[int], is_admin: bool) -> None:
+    """执行记录继承策略归属；不可见时按「不存在」处理。"""
+    strategy = QuantStrategy.get_or_none(QuantStrategy.id == strategy_run.strategy_id)
+    if strategy is None:
+        raise ResourceNotFoundError("执行记录不存在")
+    assert_owned(strategy, owner_user_id, is_admin, "执行记录")
 
 
 def _load_strategy(strategy_id: int) -> QuantStrategy:
@@ -64,10 +77,10 @@ def _bulk_lookup_instrument_names(symbols: list) -> dict:
     return bulk_lookup_instrument_records(symbols)
 
 
-def _load_recent_operations(strategy_id: int, trade_date, limit: int = 10) -> list[dict]:
+def _load_recent_operations(strategy_id: int, trade_date, limit: int = 10, owner_user_id=None) -> list[dict]:
     query = (
         QuantOperationRecord.select()
-        .where((QuantOperationRecord.strategy_id == strategy_id) & (QuantOperationRecord.trade_date <= trade_date))
+        .where((QuantOperationRecord.strategy_id == strategy_id) & (QuantOperationRecord.trade_date <= trade_date) & (QuantOperationRecord.owner_user_id == owner_user_id))
         .order_by(QuantOperationRecord.trade_date.desc(), QuantOperationRecord.id.desc())
         .limit(limit)
     )
@@ -153,11 +166,11 @@ def _build_operator_notes(operations_snapshot: list[dict], limit: int = 3) -> li
     return notes
 
 
-def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_template: Optional[dict] = None) -> dict:
+def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_template: Optional[dict] = None, *, include_memory=True) -> dict:
     strategy_run = _load_strategy_run(run_id)
     strategy = _load_strategy(strategy_run.strategy_id)
     signals = _load_run_signals(run_id)
-    operations_snapshot = _load_recent_operations(strategy.id, strategy_run.trade_date)
+    operations_snapshot = _load_recent_operations(strategy.id, strategy_run.trade_date, owner_user_id=strategy.owner_user_id)
     symbols = [item["symbol"] for item in signals if item.get("passed")] or [item["symbol"] for item in signals[:5]]
     prompt_template = prompt_template or latest_prompt(strategy.id, report_type=normalize_report_type(report_type))
     run_dict = strategy_run.to_dict()
@@ -205,7 +218,7 @@ def build_analysis_bundle(run_id: int, report_type: str = "test_report", prompt_
             "open_or_pending_total": len([item for item in operations_snapshot if item.get("status") in ("draft", "executed")]),
         },
         "market_summary": _build_market_summary(signals),
-        "memory_snippets": extract_memory_snippets(symbols),
+        "memory_snippets": extract_memory_snippets(symbols) if include_memory else [],
         "operator_notes": _build_operator_notes(operations_snapshot),
         "token_budget": {
             "signal_limit": len(signals),
@@ -274,6 +287,8 @@ def create_report_for_run(
     llm_enabled: bool = False,
     model_name: str = "",
     username: str = "system",
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> dict:
     """生成并落库一条报告。
 
@@ -283,15 +298,18 @@ def create_report_for_run(
     """
     report_type = normalize_report_type(report_type)
     strategy_run = _load_strategy_run(run_id)
+    _assert_run_owned(strategy_run, owner_user_id, is_admin)
     if prompt_template_id is not None:
         from service.quant.report_prompt_service import get_prompt_template
         try:
-            prompt_template = get_prompt_template(int(prompt_template_id))
+            prompt_template = get_prompt_template(int(prompt_template_id), owner_user_id=owner_user_id, is_admin=is_admin)
+        except ResourceNotFoundError:
+            raise
         except Exception:
             prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
     else:
         prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
-    bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template)
+    bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template, include_memory=is_admin or owner_user_id is None)
     report_draft = generate_report_draft(
         bundle,
         prompt_template=prompt_template,
@@ -334,12 +352,21 @@ def create_report_for_run(
     return record.to_dict()
 
 
-def list_reports(strategy_id: Optional[int] = None, run_id: Optional[int] = None, limit: int = 100) -> list[dict]:
+def list_reports(
+    strategy_id: Optional[int] = None,
+    run_id: Optional[int] = None,
+    limit: int = 100,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> list[dict]:
+    """报告继承策略归属。"""
     query = QuantReportRecord.select().order_by(QuantReportRecord.id.desc()).limit(limit)
     if strategy_id:
         query = query.where(QuantReportRecord.strategy_id == strategy_id)
     if run_id:
         query = query.where(QuantReportRecord.run_id == run_id)
+    if owner_user_id is not None and not is_admin:
+        query = query.where(QuantReportRecord.strategy_id.in_(visible_strategy_ids(owner_user_id, is_admin)))
     return [item.to_dict() for item in query.iterator()]
 
 
@@ -351,6 +378,8 @@ def preview_report_for_run(
     llm_enabled: bool = False,
     model_name: str = "",
     username: str = "system",
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> dict:
     """不落库的"报告 IDE"：返回 bundle + draft + markdown + meta，供前端调试 / 预览用。
 
@@ -358,15 +387,18 @@ def preview_report_for_run(
     """
     report_type = normalize_report_type(report_type)
     strategy_run = _load_strategy_run(run_id)
+    _assert_run_owned(strategy_run, owner_user_id, is_admin)
     if prompt_template_id is not None:
         from service.quant.report_prompt_service import get_prompt_template
         try:
-            prompt_template = get_prompt_template(int(prompt_template_id))
+            prompt_template = get_prompt_template(int(prompt_template_id), owner_user_id=owner_user_id, is_admin=is_admin)
+        except ResourceNotFoundError:
+            raise
         except Exception:
             prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
     else:
         prompt_template = latest_prompt(strategy_run.strategy_id, report_type=report_type)
-    bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template)
+    bundle = build_analysis_bundle(run_id, report_type=report_type, prompt_template=prompt_template, include_memory=is_admin or owner_user_id is None)
     report_draft = generate_report_draft(
         bundle,
         prompt_template=prompt_template,
@@ -391,5 +423,19 @@ def preview_report_for_run(
     }
 
 
-def get_report(report_id: int) -> dict:
-    return QuantReportRecord.get_by_id(report_id).to_dict()
+def get_report(
+    report_id: int,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> dict:
+    """报告继承策略归属；不可见时按「不存在」处理。"""
+    record = QuantReportRecord.get_or_none(QuantReportRecord.id == report_id)
+    if record is None:
+        raise ResourceNotFoundError("报告不存在")
+    if is_admin or owner_user_id is None:
+        return record.to_dict()
+    strategy = QuantStrategy.get_or_none(QuantStrategy.id == record.strategy_id)
+    if strategy is None:
+        raise ResourceNotFoundError("报告不存在")
+    assert_owned(strategy, owner_user_id, is_admin, "报告")
+    return record.to_dict()

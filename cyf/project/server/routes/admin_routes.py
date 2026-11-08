@@ -11,10 +11,27 @@ from conf.runtime import runtime_state
 from dto.common import build_page_result, error_response, get_request_data, parse_pagination_args, success_response, to_bool
 from model.db import db
 from model.entities import ModelMeta, Notification, SystemPrompt, TestLimit, User
-from model.repositories.user_repository import get_active_notifications
+from model.repositories.user_repository import (
+    count_active_admins,
+    filter_user_ids_by_role,
+    get_active_notifications,
+    get_roles_for_users,
+    get_user_roles,
+    replace_user_roles,
+)
 from routes._crud_factory import crud_create, crud_delete, crud_get, crud_list, crud_update
 from service.auth_service import require_admin_auth
 from service.model_service import get_runtime_state_snapshot, invalidate_model_cache
+from service.permission_service import (
+    ROLE_ADMIN,
+    ROLE_CHAT,
+    ROLE_SET,
+    RoleValidationError,
+    current_auth_context,
+    merge_compat_and_roles,
+    sort_roles,
+    to_compat_role,
+)
 
 
 admin_bp = Blueprint("admin_routes", __name__, url_prefix="/never_guess_my_usage")
@@ -31,26 +48,41 @@ def test_limit_to_dict(limit):
     return {"id": limit.id, "user_ip": limit.user_ip, "user_count": limit.user_count, "limit": limit.limit}
 
 
-def user_to_dict(user):
+def user_to_dict(user, roles=None):
     api_key = user.api_key or ""
     api_key_masked = "-"
     if api_key:
         api_key_masked = api_key if len(api_key) <= 8 else f"{api_key[:4]}****{api_key[-4:]}"
+    role_list = sort_roles(roles if roles is not None else get_user_roles(user.id))
     return {
         "id": user.id,
         "username": user.username,
         "api_key_masked": api_key_masked,
-        "role": user.role,
+        "role": to_compat_role(role_list),
+        "roles": role_list,
         "is_active": user.is_active,
+        "deleted": user.deleted_at is not None,
         "created_at": user.created_at.strftime("%Y-%m-%d %H:%M:%S") if user.created_at else None,
         "updated_at": user.updated_at.strftime("%Y-%m-%d %H:%M:%S") if user.updated_at else None,
     }
 
 
-def user_to_detail_dict(user):
-    data = user_to_dict(user)
+def user_to_detail_dict(user, roles=None):
+    data = user_to_dict(user, roles)
     data["api_key"] = user.api_key
     return data
+
+
+def _audit_role_change(operator: str, target_user_id: int, before_roles, after_roles, result: str):
+    """记录管理员改权审计；只记录操作者、目标与角色变化，不含任何凭据。"""
+    llm_logger.info(
+        "admin_role_change operator=%s target_user_id=%s before=%s after=%s result=%s",
+        operator,
+        target_user_id,
+        ",".join(before_roles or []) or "-",
+        ",".join(after_roles or []) or "-",
+        result,
+    )
 
 
 def notification_to_dict(notification):
@@ -358,17 +390,46 @@ def test_limit_reset():
 
 @admin_bp.route("/user/list", methods=["GET"])
 @require_admin_auth
-@crud_list(User, serializer=user_to_dict, search_fields=["username"], default_page_size=50,
-           filters={"role": (User.role, str), "is_active": (User.is_active, bool)})
 def user_list():
-    pass
+    """用户列表；角色筛选按成员关系匹配，组合角色账号同样命中。"""
+    try:
+        page, page_size, offset = parse_pagination_args(default_page_size=50)
+        keyword = (request.args.get("keyword") or "").strip()
+        role_filter = (request.args.get("role") or "").strip()
+        is_active_filter = request.args.get("is_active")
+
+        query = User.select()
+        if keyword:
+            query = query.where(User.username.contains(keyword))
+        if is_active_filter not in (None, ""):
+            query = query.where(User.is_active == to_bool(is_active_filter))
+        if role_filter:
+            if role_filter not in ROLE_SET:
+                return error_response(f"未知角色: {role_filter}")
+            member_ids = filter_user_ids_by_role(role_filter)
+            if not member_ids:
+                return success_response(data=build_page_result([], 0, page, page_size))
+            query = query.where(User.id.in_(member_ids))
+
+        total = query.count()
+        users = list(query.order_by(User.id.desc()).offset(offset).limit(page_size).iterator())
+        roles_map = get_roles_for_users([user.id for user in users])
+        items = [user_to_dict(user, roles_map.get(user.id, [])) for user in users]
+        return success_response(data=build_page_result(items, total, page, page_size))
+    except Exception as exc:
+        return error_response(f"获取用户列表失败: {exc}")
 
 
 @admin_bp.route("/user/get/<int:user_id>", methods=["GET"])
 @require_admin_auth
-@crud_get(User, serializer=user_to_detail_dict, id_param="user_id", not_found_msg="用户不存在")
 def user_get(user_id):
-    pass
+    try:
+        user = User.get_by_id(int(user_id))
+    except DoesNotExist:
+        return error_response("用户不存在")
+    except Exception as exc:
+        return error_response(f"获取用户失败: {exc}")
+    return success_response(data=user_to_detail_dict(user))
 
 
 @admin_bp.route("/user/create", methods=["POST"])
@@ -382,13 +443,27 @@ def user_create():
             return error_response("用户名和新密码不能为空")
         if User.select().where(User.username == username).exists():
             return error_response("用户名已存在")
-        user = sqlitelog.create_user(username, new_password, data.get("api_key", "").strip() or None)
-        if "role" in data:
-            user.role = data["role"]
-        if "is_active" in data:
-            user.is_active = to_bool(data["is_active"])
-        user.save()
-        return success_response(data=user_to_dict(user), msg="用户创建成功")
+
+        if "roles" in data and data["roles"] is None:
+            return error_response("角色必须是数组"), 400
+        payload_roles = data.get("roles") if "roles" in data else None
+        compat_role = data.get("role") if "role" in data else None
+        try:
+            roles = merge_compat_and_roles(payload_roles, compat_role, [ROLE_CHAT]) if (
+                payload_roles is not None or compat_role is not None
+            ) else [ROLE_CHAT]
+        except RoleValidationError as exc:
+            return error_response(str(exc)), 400
+
+        with db.atomic():
+            user = sqlitelog.create_user(username, new_password, data.get("api_key", "").strip() or None, roles=roles)
+            if "is_active" in data:
+                user.is_active = to_bool(data["is_active"])
+                user.save()
+        _audit_role_change(_operator_name(), user.id, [], roles, "created")
+        return success_response(data=user_to_dict(user, roles), msg="用户创建成功")
+    except RoleValidationError as exc:
+        return error_response(str(exc)), 400
     except Exception as exc:
         return error_response(f"创建用户失败: {exc}")
 
@@ -402,25 +477,53 @@ def user_update():
         if not user_id:
             return error_response("用户ID不能为空")
         user = User.get_by_id(int(user_id))
-        if "username" in data:
-            new_username = data["username"].strip()
-            if new_username != user.username:
-                if User.select().where(User.username == new_username).exists():
-                    return error_response("用户名已存在")
-                user.username = new_username
-        if "role" in data:
-            user.role = data["role"]
-        if "is_active" in data:
-            user.is_active = to_bool(data["is_active"])
-        if "api_key" in data:
-            user.api_key = data["api_key"].strip() or None
-        if "new_password" in data and data["new_password"].strip():
-            user.password_hash, user.salt = User.hash_password(data["new_password"].strip())
-        user.updated_at = datetime.now()
-        user.save()
-        return success_response(data=user_to_dict(user), msg="用户信息更新成功")
+        if user.deleted_at is not None:
+            return error_response("账号已删除"), 400
+        existing_roles = get_user_roles(user.id)
+
+        if "roles" in data and data["roles"] is None:
+            return error_response("角色必须是数组"), 400
+        payload_roles = data.get("roles") if "roles" in data else None
+        compat_role = data.get("role") if "role" in data else None
+        try:
+            new_roles = merge_compat_and_roles(payload_roles, compat_role, existing_roles)
+        except RoleValidationError as exc:
+            return error_response(str(exc)), 400
+
+        will_be_active = to_bool(data["is_active"]) if "is_active" in data else user.is_active
+        loses_admin = (ROLE_ADMIN in existing_roles) and (ROLE_ADMIN not in new_roles)
+        disables_admin = (ROLE_ADMIN in existing_roles) and (not will_be_active)
+
+        with db.atomic("IMMEDIATE"):
+            if (loses_admin or disables_admin) and count_active_admins(exclude_user_id=user.id) < 1:
+                _audit_role_change(_operator_name(), user.id, existing_roles, new_roles, "rejected_last_admin")
+                return error_response("必须至少保留一个启用的管理员"), 400
+            if "username" in data:
+                new_username = data["username"].strip()
+                if new_username != user.username:
+                    if User.select().where(User.username == new_username).exists():
+                        return error_response("用户名已存在")
+                    user.username = new_username
+            if "is_active" in data:
+                user.is_active = to_bool(data["is_active"])
+            if "api_key" in data:
+                user.api_key = data["api_key"].strip() or None
+            if "new_password" in data and data["new_password"].strip():
+                user.password_hash, user.salt = User.hash_password(data["new_password"].strip())
+                user.token = None
+            user.updated_at = datetime.now()
+            user.save()
+            replace_user_roles(user.id, new_roles)
+            # 停用后立即撤销凭据；改权不撤销 token，授权按数据库角色即时生效。
+            if not user.is_active:
+                user.token = None
+                user.save()
+        _audit_role_change(_operator_name(), user.id, existing_roles, new_roles, "updated")
+        return success_response(data=user_to_dict(user, new_roles), msg="用户信息更新成功")
     except DoesNotExist:
         return error_response("用户不存在")
+    except RoleValidationError as exc:
+        return error_response(str(exc)), 400
     except Exception as exc:
         return error_response(f"更新用户信息失败: {exc}")
 
@@ -428,27 +531,39 @@ def user_update():
 @admin_bp.route("/user/delete", methods=["POST"])
 @require_admin_auth
 def user_delete():
+    """软删除账号：保留身份主键与资源归属，撤销凭据。"""
     try:
         data = get_request_data()
         user_id = data.get("id")
         if not user_id:
             return error_response("用户ID不能为空")
-        hard_delete_value = data.get("hard_delete", "false")
-        hard_delete = hard_delete_value if isinstance(hard_delete_value, bool) else str(hard_delete_value).lower() in ("true", "1", "yes")
         user = User.get_by_id(int(user_id))
-        if hard_delete:
+        if user.deleted_at is not None:
+            return error_response("账号已删除"), 400
+        existing_roles = get_user_roles(user.id)
+        with db.atomic("IMMEDIATE"):
+            if ROLE_ADMIN in existing_roles and count_active_admins(exclude_user_id=user.id) < 1:
+                _audit_role_change(_operator_name(), user.id, existing_roles, existing_roles, "rejected_last_admin")
+                return error_response("必须至少保留一个启用的管理员"), 400
+            user.is_active = False
+            user.deleted_at = datetime.now()
             user.token = None
-            user.delete_instance()
-            return success_response(msg="用户永久删除成功")
-        user.is_active = False
-        user.token = None
-        user.updated_at = datetime.now()
-        user.save()
-        return success_response(msg="用户已标记为未激活")
+            user.updated_at = datetime.now()
+            user.save()
+        _audit_role_change(_operator_name(), user.id, existing_roles, existing_roles, "deleted")
+        return success_response(msg="用户已软删除，凭据已撤销，资源归属保持原 ID")
     except DoesNotExist:
         return error_response("用户不存在")
     except Exception as exc:
         return error_response(f"删除用户失败: {exc}")
+
+
+def _operator_name() -> str:
+    """当前操作者用户名；取自已认证主体。"""
+    try:
+        return current_auth_context().username
+    except RuntimeError:
+        return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -470,6 +585,7 @@ def notification_list():
 
 
 @admin_bp.route("/notification/active_list", methods=["GET"])
+@require_admin_auth
 def notification_active_list():
     try:
         limit = request.args.get("limit", 10, type=int)

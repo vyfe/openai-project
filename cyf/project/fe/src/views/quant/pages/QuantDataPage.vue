@@ -178,7 +178,7 @@
         </div>
       </section>
 
-      <section class="quant-panel">
+      <section v-if="workbench.canManage" class="quant-panel">
         <div class="quant-panel__header quant-side-panel__header">
           <div>
             <h2>数据同步任务</h2>

@@ -1,4 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { VoiceState } from '@/services/voiceApi'
 
@@ -13,7 +15,10 @@ const initial: VoiceState = {
   voices: [{ voice_id: 'YuexiTest001', alias: '我的声音', voice_type: 'voice_cloning', description: '', status: 'pending', created_time: '' }]
 }
 const keepaliveState = { enabled: true, hour: 3, minute: 17, voices: [{ voice_id: 'YuexiTest001', deadline: null, days_left: 2, disabled: false, activated_at: null, keepalive_count: 0 }] }
-const options = { global: { stubs: { VoiceCloneForm: true, VoiceReader: true } } }
+const pinia = createPinia()
+setActivePinia(pinia)
+useAuthStore(pinia).login({ username: 'admin', roles: ['admin'], access_token: 'at', refresh_token: 'rt' })
+const options = { global: { plugins: [pinia], stubs: { VoiceCloneForm: true, VoiceReader: true } } }
 beforeEach(() => {
   vi.clearAllMocks()
   api.state.mockResolvedValue(structuredClone(initial))

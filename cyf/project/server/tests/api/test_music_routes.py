@@ -60,7 +60,10 @@ def test_delete_removes_track(auth_client):
         row = auth_client.post(BASE + "/generate", json={"prompt": "风格", "lyrics": "歌词"}).get_json()["data"]
     response = auth_client.post(BASE + "/delete", json={"id": row["id"]})
     assert response.status_code == 200
-    assert auth_client.get(BASE + "/track/" + row["id"]).status_code == 400
+    # 合法角色访问不存在的资源同样返回 404
+    missing = auth_client.get(BASE + "/track/" + row["id"])
+    assert missing.status_code == 404
+    assert missing.get_json()["error_type"] == "RESOURCE_NOT_FOUND"
 
 
 def test_cover_preprocess_and_generate(app, auth_client, seed_admin_user):

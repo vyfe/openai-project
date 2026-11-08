@@ -251,8 +251,9 @@ def _feishu_help_text() -> str:
     return help_text()
 
 
-def _latest_report_text() -> str:
-    report = QuantReportRecord.select().order_by(QuantReportRecord.id.desc()).first()
+def _latest_report_text(owner_user_id) -> str:
+    from service.quant.strategy_service import visible_strategy_ids
+    report = QuantReportRecord.select().where(QuantReportRecord.strategy_id.in_(visible_strategy_ids(owner_user_id, False))).order_by(QuantReportRecord.id.desc()).first()
     if not report:
         return "当前还没有可发送的量化报告。"
     return _truncate_text(report.final_markdown, limit=9000)
@@ -287,6 +288,7 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
         return None
     # 股票池校验（精确匹配 symbol/code/name/custom_name）
     from service.quant.im_operation_service import _require_bound_user, _resolve_symbol_in_pool
+    from service.quant.ownership import require_quant_user
     instrument = _resolve_symbol_in_pool(tokens[1])
     symbol = instrument["symbol"]
     quantity = _parse_number_token(tokens[2], as_int=True)
@@ -308,12 +310,13 @@ def _try_create_position_from_command(text: str, sender_id: str) -> Optional[dic
         # 必须用绑定后的用户名：持仓查询/汇总按 created_by=username 过滤，
         # 写 feishu:{sender_id} 会让飞书登记的持仓在「持仓」命令里查不到
         created_by=_require_bound_user({"sender_id": sender_id}),
+        owner_user_id=require_quant_user(_require_bound_user({"sender_id": sender_id})).id,
     )
     return entry
 
 
 # 群聊未绑定时仍放行的只读命令：这几条不触碰任何用户私有数据
-_GROUP_PUBLIC_COMMANDS = {"帮助", "菜单", "说明", "help", "时间", "几点", "现在几点", "报告", "最新报告", "日报", "report", "latestreport"}
+_GROUP_PUBLIC_COMMANDS = {"帮助", "菜单", "说明", "help", "时间", "几点", "现在几点"}
 
 
 def _is_group_chat(parsed: dict) -> bool:
@@ -335,6 +338,17 @@ def _route_feishu_command(text: str, parsed: dict, event_record_id: int) -> tupl
             return "group_unbound_guide", group_bind_guide()
         # 只读命令继续往下走正常流程
 
+    normalized = command_text.lower().replace(" ", "").lstrip("/")
+    public_command = normalized in _GROUP_PUBLIC_COMMANDS or command_text.startswith(("/bind ", "/unbind", "/whoami"))
+    owner = None
+    if not public_command:
+        from service.quant.im_operation_service import _require_bound_user
+        from service.quant.ownership import require_quant_user
+        try:
+            owner = require_quant_user(_require_bound_user(parsed))
+        except ValueError as exc:
+            return "auth_error", str(exc)
+
     for rule in _message_rules:
         if rule.pattern.search(command_text):
             result = rule.handler(command_text, parsed)
@@ -354,9 +368,9 @@ def _route_feishu_command(text: str, parsed: dict, event_record_id: int) -> tupl
         created_by = get_username_by_feishu(parsed.get("sender_id", "") or "") or ""
         if not created_by:
             return "auth_error", "请先私聊机器人发送 /bind 完成绑定，再查询持仓。"
-        return "position_summary", render_position_summary_markdown(created_by=created_by)
+        return "position_summary", render_position_summary_markdown(owner_user_id=owner.id)
     if compact in ("报告", "最新报告", "日报", "report", "latestreport"):
-        return "latest_report", _latest_report_text()
+        return "latest_report", _latest_report_text(owner.id)
     entry = _try_create_position_from_command(command_text, parsed.get("sender_id") or "")
     if entry:
         price_text = "--" if entry.get("price") is None else entry.get("price")

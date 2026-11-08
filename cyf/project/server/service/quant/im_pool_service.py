@@ -91,6 +91,10 @@ def handle_pool_command(text: str, parsed: dict) -> Optional[tuple[str, str]]:
         return "pool_usage", f"请在「加入」后面跟股票代码或中文名。\n{pool_usage()}"
 
     username = _require_bound_user(parsed)
+    from service.quant.ownership import require_quant_user
+    from model.repositories.user_repository import get_user_roles
+    if 'admin' not in get_user_roles(require_quant_user(username).id):
+        return "auth_error", "股票池管理需要管理员权限"
     keywords = [item for item in _POOL_SPLIT_RE.split(arg_text) if item]
     if len(keywords) > _MAX_KEYWORDS:
         return "pool_error", f"一次最多加入 {_MAX_KEYWORDS} 只，请分批发送。"

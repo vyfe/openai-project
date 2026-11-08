@@ -4,7 +4,7 @@
       <div class="quant-panel__header">
         <div>
           <h2>当前持仓</h2>
-          <p>状态变更自动同步；可在「IM 通道」页查看私聊通道配置。</p>
+          <p>记录买卖流水后，当前持仓会自动更新。</p>
         </div>
         <div class="quant-toolbar">
           <el-button :icon="RefreshRight" @click="refreshOperationsPage" :loading="workbench.loading.operations || workbench.loading.positionSummary">刷新</el-button>
@@ -33,6 +33,7 @@
       </el-table>
     </section>
 
+    <PersonalPositions />
     <section class="quant-panel quant-area-editor">
         <div class="quant-panel__header">
           <div>
@@ -219,6 +220,7 @@
 </template>
 
 <script setup lang="ts">
+import PersonalPositions from './PersonalPositions.vue'
 import { EditPen, RefreshRight } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { symbolLabel } from '@/composables/quant/format'

@@ -37,21 +37,29 @@ class MiniMaxMusicService:
                                     timeout=self.settings.minimax_music_timeout_seconds)
         self.store = MiniMaxStore(self.settings, api_key=music_key, region=self.settings.minimax_music_region)
 
-    def snapshot(self):
-        return {
-            "config": {
+    def snapshot(self, owner_user_id=None, is_admin: bool = False):
+        """音乐台账快照；普通用户不下发配置路径、密钥种类与内部 Host。"""
+        if is_admin:
+            config = {
                 "ready": self.client.ready, "region": self.client.region,
                 "key_kind": self.settings.minimax_music_key_kind, "model": self.settings.minimax_music_model,
                 "cover_model": COVER_MODEL,
                 "base_url": self.client.base_url, "timeout_seconds": self.client.timeout,
                 "config_path": self.settings.conf_path, "storage_dir": str(self.store.folder.parent),
                 "dedicated_key": bool(self.settings.minimax_music_api_key),
-            },
+            }
+        else:
+            config = {
+                "ready": self.client.ready, "model": self.settings.minimax_music_model,
+                "cover_model": COVER_MODEL,
+            }
+        return {
+            "config": config,
             "models": list(MUSIC_MODELS),
-            "tracks": list_tracks(self.store.scope),
+            "tracks": list_tracks(self.store.scope, owner_user_id=owner_user_id, is_admin=is_admin),
         }
 
-    def generate(self, data):
+    def generate(self, data, owner_user_id=None):
         model = data.get("model") or self.settings.minimax_music_model
         require(model in MUSIC_MODELS, "请选择支持的音乐模型。")
         prompt = text_value(data, "prompt", MAX_PROMPT, False)
@@ -64,7 +72,8 @@ class MiniMaxMusicService:
         require(bool(lyrics) or optimizer or instrumental, "带人声的作品需要填写歌词，或开启自动写词。")
         title = text_value(data, "title", 100, False) or (prompt[:24] if prompt else "未命名作品")
 
-        record = MusicTrack.create(id=_new_track_id(), scope=self.store.scope, title=title, prompt=prompt,
+        record = MusicTrack.create(id=_new_track_id(), scope=self.store.scope, owner_user_id=owner_user_id,
+                                   title=title, prompt=prompt,
                                    lyrics=lyrics, model=model, instrumental=instrumental,
                                    lyrics_optimizer=optimizer)
         payload = {"model": model, "stream": False, "output_format": "url",
@@ -83,11 +92,12 @@ class MiniMaxMusicService:
             raise
         return self._store_result(record, result)
 
-    def preprocess_cover(self, data, files):
+    def preprocess_cover(self, data, files, owner_user_id=None):
         """上传参考音频换取翻唱特征 ID 与 ASR 提取的歌词。"""
         title = text_value(data, "title", 100, False) or "参考翻唱"
         content = read_cover_audio(files.get("audio"), data.get("audio_duration"))
-        record = MusicTrack.create(id=_new_track_id(), scope=self.store.scope, title=title, prompt="",
+        record = MusicTrack.create(id=_new_track_id(), scope=self.store.scope, owner_user_id=owner_user_id,
+                                   title=title, prompt="",
                                    lyrics="", model=COVER_MODEL)
         try:
             result = self.client.request("/v1/music_cover_preprocess", {
@@ -109,11 +119,12 @@ class MiniMaxMusicService:
         record.save()
         return track_dict(record, include_text=True)
 
-    def generate_cover(self, data):
+    def generate_cover(self, data, owner_user_id=None, is_admin: bool = False):
         track_id = text_value(data, "id", 64)
         require(TRACK_ID_PATTERN.fullmatch(track_id), "文件标识无效。")
-        record = get_track(self.store.scope, track_id)
-        require(record is not None, "翻唱记录不存在。")
+        record = get_track(self.store.scope, track_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if record is None:
+            raise VoiceError("翻唱记录不存在。", 404)
         require(record.cover_feature_id, "该记录没有可用的翻唱特征，请重新上传参考音频。")
         prompt = text_value(data, "prompt", COVER_PROMPT_RANGE[1])
         require(len(prompt) >= COVER_PROMPT_RANGE[0],
@@ -167,10 +178,11 @@ class MiniMaxMusicService:
     def cache_audio(self, record, inline=None):
         cache_audio(self.store, self.client, record, "music", inline)
 
-    def audio_path(self, track_id, ext):
+    def audio_path(self, track_id, ext, owner_user_id=None, is_admin: bool = False):
         require(ext in ("mp3", "txt") and TRACK_ID_PATTERN.fullmatch(track_id), "文件标识无效。")
-        row = get_track(self.store.scope, track_id)
-        require(row is not None, "文件不存在于当前密钥的音乐记录。")
+        row = get_track(self.store.scope, track_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if row is None:
+            raise VoiceError("文件不存在于当前密钥的音乐记录。", 404)
         folder = self.store.folder / "music"
         path = folder / (track_id + "." + ext)
         if ext == "txt":
@@ -184,16 +196,18 @@ class MiniMaxMusicService:
         require(path.is_file(), "本地文件已不存在。")
         return path
 
-    def track(self, track_id):
-        row = get_track(self.store.scope, track_id)
-        require(row is not None, "音乐记录不存在。")
+    def track(self, track_id, owner_user_id=None, is_admin: bool = False):
+        row = get_track(self.store.scope, track_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if row is None:
+            raise VoiceError("音乐记录不存在。", 404)
         return track_dict(row, include_text=True)
 
-    def delete(self, track_id):
+    def delete(self, track_id, owner_user_id=None, is_admin: bool = False):
         require(TRACK_ID_PATTERN.fullmatch(track_id), "文件标识无效。")
-        row = get_track(self.store.scope, track_id)
-        require(row is not None, "音乐记录不存在。")
-        remove_track(self.store.scope, track_id)
+        row = get_track(self.store.scope, track_id, owner_user_id=owner_user_id, is_admin=is_admin)
+        if row is None:
+            raise VoiceError("音乐记录不存在。", 404)
+        remove_track(self.store.scope, track_id, owner_user_id=owner_user_id, is_admin=is_admin)
         path = self.store.folder / "music" / (track_id + ".mp3")
         if path.is_file():
             path.unlink()

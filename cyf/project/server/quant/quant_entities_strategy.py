@@ -12,7 +12,9 @@ class QuantBaseModel(Model):
 
 
 class QuantStrategy(QuantBaseModel):
-    name = CharField(unique=True)
+    # 名称唯一性改为「(owner_user_id, name)」，空 owner 走独立的 name 唯一索引（见 ensure_quant_schema）。
+    name = CharField()
+    owner_user_id = IntegerField(null=True, index=True)
     market = CharField(default="A_SHARE", index=True)
     status = CharField(default="active", index=True)
     description = TextField(default="")
@@ -106,6 +108,7 @@ class QuantOperationRecord(QuantBaseModel):
     strategy_id = IntegerField(null=True, index=True)
     run_id = IntegerField(null=True, index=True)
     signal_id = IntegerField(null=True, index=True)
+    owner_user_id = IntegerField(null=True, index=True)
     symbol = CharField(index=True)
     action = CharField(default="buy", index=True)
     status = CharField(default="draft", index=True)

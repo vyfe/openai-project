@@ -4,6 +4,12 @@ from typing import Optional
 
 from quant.entities import QuantOperationRecord
 from service.quant.common import normalize_symbol, parse_trade_date
+from service.quant.ownership import (
+    ResourceNotFoundError,
+    assert_owned,
+    scope_by_owner,
+    validate_related_resources,
+)
 
 
 def _normalize_tags(tags) -> list[str]:
@@ -66,6 +72,8 @@ def list_operation_records(
     date_to=None,
     created_by: Optional[str] = None,
     limit: int = 100,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> list[dict]:
     query = QuantOperationRecord.select()
     if strategy_id:
@@ -84,15 +92,18 @@ def list_operation_records(
         query = query.where(QuantOperationRecord.trade_date <= parse_trade_date(date_to))
     if created_by is not None:
         query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
+    query = scope_by_owner(query, QuantOperationRecord, owner_user_id, is_admin)
     query = query.order_by(QuantOperationRecord.trade_date.desc(), QuantOperationRecord.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
 
-def get_operation_record(record_id: int, created_by: Optional[str] = None) -> dict:
-    query = QuantOperationRecord.select().where(QuantOperationRecord.id == record_id)
-    if created_by is not None:
-        query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
-    return query.get().to_dict()
+def get_operation_record(
+    record_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> dict:
+    return _get_owned_operation(record_id, created_by, owner_user_id, is_admin).to_dict()
 
 
 def create_operation_record(
@@ -116,11 +127,14 @@ def create_operation_record(
     result_amount=None,
     tags=None,
     meta=None,
+    owner_user_id: Optional[int] = None,
 ) -> dict:
+    validate_related_resources(owner_user_id, strategy_id=strategy_id, run_id=run_id, signal_id=signal_id)
     record = QuantOperationRecord.create(
         strategy_id=int(strategy_id) if strategy_id not in (None, "") else None,
         run_id=int(run_id) if run_id not in (None, "") else None,
         signal_id=int(signal_id) if signal_id not in (None, "") else None,
+        owner_user_id=owner_user_id,
         symbol=normalize_symbol(symbol),
         action=str(action or "buy").strip() or "buy",
         status=str(status or "draft").strip() or "draft",
@@ -155,15 +169,30 @@ def create_operation_record(
     return result_dict
 
 
-def _get_owned_operation(record_id: int, created_by: Optional[str]) -> QuantOperationRecord:
-    query = QuantOperationRecord.select().where(QuantOperationRecord.id == record_id)
-    if created_by is not None:
-        query = query.where(QuantOperationRecord.created_by == str(created_by).strip())
-    return query.get()
+def _get_owned_operation(
+    record_id: int,
+    created_by: Optional[str],
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> QuantOperationRecord:
+    """按归属取操作记录；不可见时按「不存在」处理。"""
+    record = QuantOperationRecord.get_or_none(QuantOperationRecord.id == record_id)
+    if record is None:
+        raise ResourceNotFoundError("操作记录不存在")
+    return assert_owned(record, owner_user_id, is_admin, "操作记录")
 
 
-def update_operation_record(record_id: int, created_by: Optional[str] = None, **updates) -> dict:
-    record = _get_owned_operation(record_id, created_by)
+def update_operation_record(
+    record_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+    **updates,
+) -> dict:
+    record = _get_owned_operation(record_id, created_by, owner_user_id, is_admin)
+    validate_related_resources(record.owner_user_id, **{
+        key: updates.get(key, getattr(record, key)) for key in ("strategy_id", "run_id", "signal_id")
+    })
     old_status = record.status
 
     if "strategy_id" in updates:
@@ -229,8 +258,13 @@ def update_operation_record(record_id: int, created_by: Optional[str] = None, **
     return record.to_dict()
 
 
-def delete_operation_record(record_id: int, created_by: Optional[str] = None) -> bool:
-    record = _get_owned_operation(record_id, created_by)
+def delete_operation_record(
+    record_id: int,
+    created_by: Optional[str] = None,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> bool:
+    record = _get_owned_operation(record_id, created_by, owner_user_id, is_admin)
     record.delete_instance()
     return True
 
@@ -256,6 +290,7 @@ def _sync_position_entries(record) -> int:
         created_by=record.created_by,
         price=record.price,
         quantity=record.quantity,
+        owner_user_id=record.owner_user_id,
     )
 
 
@@ -302,6 +337,7 @@ def _apply_position_change(record, *, from_status, to_status):
             source="operation_record",
             reason=str(record.thesis or "").strip(),
             created_by=record.created_by,
+            owner_user_id=record.owner_user_id,
             operation_id=record.id,
         )
     elif from_status == "executed" and to_status != "executed":
@@ -315,5 +351,6 @@ def _apply_position_change(record, *, from_status, to_status):
             source="operation_revoked",
             reason=f"操作 #{record.id} 状态从 executed 变更为 {to_status}",
             created_by=record.created_by,
+            owner_user_id=record.owner_user_id,
             operation_id=record.id,
         )

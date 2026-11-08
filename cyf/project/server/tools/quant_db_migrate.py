@@ -23,6 +23,7 @@ import os
 import sqlite3
 import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Iterable, List, Tuple
 
 
@@ -123,6 +124,60 @@ def _build_alter_sql(table: str, field_name: str, sql_type: str, nullable: bool,
 def _iter_models() -> Iterable:
     from quant.entities import QUANT_MODELS
     return QUANT_MODELS
+
+
+#: 归属改造的版本化变更名
+USER_OWNERSHIP_CHANGE = "user_ownership"
+
+
+def _strategy_table_ddl() -> str:
+    """使用同一字段渲染器生成新表，避免把 Peewee DDL 方法当作字符串。"""
+    from quant.entities import QuantStrategy
+    parts = []
+    for field in QuantStrategy._meta.sorted_fields:
+        if field.primary_key:
+            parts.append(f'"{field.column_name}" INTEGER NOT NULL PRIMARY KEY')
+        else:
+            sql_type, nullable, default = _field_ddl(field)
+            parts.append(f'"{field.column_name}" {sql_type} {"NULL" if nullable else "NOT NULL"} {_default_to_sql(default)}'.strip())
+    return f"CREATE TABLE quant_strategy_new ({', '.join(parts)})"
+
+
+def ownership_statements():
+    columns = "id, name, owner_user_id, market, status, description, symbols_json, rule_config_json, created_at, updated_at"
+    return [
+        _strategy_table_ddl(),
+        f"INSERT INTO quant_strategy_new ({columns}) SELECT {columns} FROM quant_strategy",
+        "DROP TABLE quant_strategy",
+        "ALTER TABLE quant_strategy_new RENAME TO quant_strategy",
+        "CREATE UNIQUE INDEX quant_strategy_owner_name ON quant_strategy (owner_user_id,name) WHERE owner_user_id IS NOT NULL",
+        "CREATE UNIQUE INDEX quant_strategy_name_null_owner ON quant_strategy (name) WHERE owner_user_id IS NULL",
+        "CREATE INDEX quant_strategy_owner_user_id ON quant_strategy (owner_user_id)",
+        "CREATE INDEX quant_strategy_market ON quant_strategy (market)",
+        "CREATE INDEX quant_strategy_status ON quant_strategy (status)",
+        "CREATE INDEX IF NOT EXISTS quant_operation_record_owner_user_id ON quant_operation_record (owner_user_id)",
+        "CREATE INDEX IF NOT EXISTS quant_position_journal_owner_user_id ON quant_position_journal (owner_user_id)",
+    ]
+
+
+def render_user_ownership_sql() -> str:
+    return "\n".join(["-- user_ownership: column additions and table rebuild form one transaction"]
+                     + [statement + ";" for statement in ownership_statements()]) + "\n"
+
+
+def apply_user_ownership(db_path: str, missing=(), mode="soft", log=print) -> None:
+    """归属字段、索引及策略约束在同一事务迁移；soft 整库一致性备份。"""
+    from tools.platform_permissions_migrate import backup_database
+    if mode == "soft":
+        backup_database(db_path, log)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("BEGIN IMMEDIATE")
+        for table, col, sql_type, nullable, default_sql in missing:
+            conn.execute(_build_alter_sql(table, col, sql_type, nullable, default_sql))
+        for statement in ownership_statements():
+            conn.execute(statement)
+    log("[ownership] 归属字段、索引和策略约束迁移完成。")
 
 
 def diff_entity_vs_db(quant_db) -> List[Tuple[str, str, str, bool, str]]:
@@ -226,13 +281,14 @@ def main(argv: List[str] | None = None) -> int:
         return 1
 
     # 重定向 quant_db 到指定路径（--db 覆盖）
-    quant_db.init(db_path, pragmas={
-        "journal_mode": "wal", "foreign_keys": 1, "busy_timeout": 5000,
-    })
+    quant_db.init(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True)
     quant_db.connect(reuse_if_open=True)
 
     missing = diff_entity_vs_db(quant_db)
     sql_doc = render_sql_blocks(missing, change_name=args.change_name)
+    quant_db.close()
+    if args.change_name == USER_OWNERSHIP_CHANGE:
+        sql_doc = "BEGIN IMMEDIATE;\n" + sql_doc + render_user_ownership_sql() + "COMMIT;\n"
 
     if args.output:
         os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
@@ -242,7 +298,9 @@ def main(argv: List[str] | None = None) -> int:
     else:
         print(sql_doc)
 
-    if args.mode == "soft":
+    if args.mode != "dry-run" and args.change_name == USER_OWNERSHIP_CHANGE:
+        apply_user_ownership(db_path, missing, args.mode)
+    elif args.mode == "soft":
         apply_soft(db_path, missing)
     elif args.mode == "hard":
         apply_hard(db_path, missing)

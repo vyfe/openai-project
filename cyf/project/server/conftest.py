@@ -180,16 +180,42 @@ def init_tables(test_db):
 
 @pytest.fixture()
 def seed_admin_user(test_db):
-    """确保数据库中有 test_admin 用户，用于 require_admin_auth 绕过。"""
-    from model.entities import User
+    """确保数据库中有 test_admin 用户（含 admin 角色），用于管理接口绕过。"""
+    from model.entities import User, UserRole
     password_hash, salt = User.hash_password("test123")
-    User.create(
+    user = User.create(
         username="test_admin",
         password_hash=password_hash,
         salt=salt,
         role="admin",
         is_active=True,
     )
+    UserRole.create(user_id=user.id, role="admin")
+
+
+@pytest.fixture()
+def seed_user_factory(test_db):
+    """创建带指定角色的账号，返回工厂函数。
+
+    角色写入 ``user_role`` 表——这是授权的唯一来源。
+    """
+
+    def _factory(username, roles, password="test123", is_active=True, api_key=None):
+        from model.entities import User, UserRole
+        password_hash, salt = User.hash_password(password)
+        user = User.create(
+            username=username,
+            password_hash=password_hash,
+            salt=salt,
+            api_key=api_key,
+            role="admin" if "admin" in roles else "user",
+            is_active=is_active,
+        )
+        for role in roles:
+            UserRole.create(user_id=user.id, role=role)
+        return user
+
+    return _factory
 
 
 @pytest.fixture()

@@ -28,8 +28,24 @@ quant_db = SqliteExtDatabase(
 
 def init_quant_db(models):
     quant_db.connect(reuse_if_open=True)
+    fresh = not quant_db.get_tables()
+    if not fresh:
+        check_ownership_schema()
     quant_db.create_tables(models, safe=True)
+    if fresh:
+        quant_db.execute_sql("CREATE UNIQUE INDEX IF NOT EXISTS quant_strategy_name_null_owner ON quant_strategy (name) WHERE owner_user_id IS NULL")
     ensure_quant_schema()
+
+
+def check_ownership_schema():
+    """存量库只检查；列与约束必须由 quant_db_migrate 显式迁移。"""
+    for table in ("quant_strategy", "quant_operation_record", "quant_position_journal"):
+        if "owner_user_id" not in {col.name for col in quant_db.get_columns(table)}:
+            raise RuntimeError(f"{table} 缺少归属迁移，请执行 tools/quant_db_migrate.py --change-name user_ownership --mode soft")
+    indexes = quant_db.get_indexes("quant_strategy")
+    if (any(idx.unique and idx.columns == ["name"] and "WHERE" not in (idx.sql or "").upper() for idx in indexes)
+            or not any(idx.unique and idx.columns == ["owner_user_id", "name"] for idx in indexes)):
+        raise RuntimeError("策略名约束未迁移，请执行 tools/quant_db_migrate.py --change-name user_ownership --mode soft")
 
 
 def ensure_quant_schema():

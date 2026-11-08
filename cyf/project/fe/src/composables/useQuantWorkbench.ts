@@ -1,4 +1,5 @@
-import { computed, nextTick, proxyRefs, reactive, ref, watch } from 'vue'
+import { computed, effectScope, nextTick, proxyRefs, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Calendar,
@@ -46,6 +47,7 @@ import type {
 
 
 function createQuantWorkbench() {
+  const canManage = computed(() => useAuthStore().isAdmin())
   // 指标 warmup 由后端 compute 路由根据 indicator_names 自动决定；
   // 前端只传 symbol + 日期区间 + interval，不再加 MA_PADDING。
 
@@ -1364,7 +1366,7 @@ function createQuantWorkbench() {
   }
 
   const loadIndustryBoards = async () => {
-    await quantIndustryAPI.initDefaults()
+    if (canManage.value) await quantIndustryAPI.initDefaults()
     const response: any = await quantIndustryAPI.boards({ status: 'active' })
     industryBoards.value = response.data || []
   }
@@ -2240,21 +2242,21 @@ function createQuantWorkbench() {
         loadSymbols(),
         loadStockPool(),
         loadIndustryBoards(),
-        loadImportBatches(),
-        loadTasks(),
+        ...(canManage.value ? [loadImportBatches()] : []),
+        ...(canManage.value ? [loadTasks()] : []),
         loadStrategies(),
         loadRuns(),
         loadOperations(),
         loadBacktests(),
-        loadSchedulerMeta(),
-        loadScheduleConfigs(),
-        loadScheduleRuns(),
+        ...(canManage.value ? [loadSchedulerMeta()] : []),
+        ...(canManage.value ? [loadScheduleConfigs()] : []),
+        ...(canManage.value ? [loadScheduleRuns()] : []),
         loadPromptTemplates(),
         loadReports(),
-        loadMemoryFiles(),
-        loadImChannels(),
-        loadDeliveryRecords(),
-        loadImInboundEvents(),
+        ...(canManage.value ? [loadMemoryFiles()] : []),
+        ...(canManage.value ? [loadImChannels()] : []),
+        ...(canManage.value ? [loadDeliveryRecords()] : []),
+        ...(canManage.value ? [loadImInboundEvents()] : []),
         loadPositionSummary(),
         loadPositionJournal()
       ])
@@ -2341,6 +2343,7 @@ function createQuantWorkbench() {
     { deep: true }
   )
   return {
+    canManage,
     providers,
     symbolOptions,
     symbolSearchOptions,
@@ -2545,11 +2548,20 @@ function createQuantWorkbench() {
   }
 }
 
-let quantWorkbenchInstance: ReturnType<typeof proxyRefs<ReturnType<typeof createQuantWorkbench>>> | null = null
+let cached: { key: string; scope: ReturnType<typeof effectScope>; value: ReturnType<typeof proxyRefs<ReturnType<typeof createQuantWorkbench>>> } | null = null
 
 export function useQuantWorkbench() {
-  if (!quantWorkbenchInstance) {
-    quantWorkbenchInstance = proxyRefs(createQuantWorkbench()) as ReturnType<typeof proxyRefs<ReturnType<typeof createQuantWorkbench>>>
+  const store = useAuthStore()
+  const key = `${store.sessionVersion}:${store.userId}:${store.roles.join(',')}`
+  if (!cached || cached.key !== key) {
+    cached?.scope.stop()
+    const scope = effectScope(true)
+    const value = scope.run(() => proxyRefs(createQuantWorkbench()))!
+    cached = { key, scope, value }
+    scope.run(() => watch(() => `${store.sessionVersion}:${store.userId}:${store.roles.join(',')}`, () => {
+      scope.stop()
+      if (cached?.scope === scope) cached = null
+    }, { flush: 'sync' }))
   }
-  return quantWorkbenchInstance
+  return cached.value
 }

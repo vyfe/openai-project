@@ -1,7 +1,8 @@
 from flask import Blueprint, request
 
-from dto.common import error_response, get_request_data, parse_json_list, success_response
-from service.auth_service import require_admin_auth, require_auth
+from dto.common import ERROR_TYPE_RESOURCE_NOT_FOUND, error_response, get_request_data, parse_json_list, success_response
+from service.auth_service import require_module_auth
+from service.permission_service import ROLE_QUANT
 from service.quant.backtest_service import delete_backtest_run, get_backtest_run, list_backtest_runs, run_backtest
 from service.quant.ops_service import (
     create_operation_record,
@@ -10,46 +11,72 @@ from service.quant.ops_service import (
     list_operation_records,
     update_operation_record,
 )
+from service.quant.ownership import ResourceNotFoundError, current_owner_scope
 from service.quant.position_service import create_position_entry, delete_position_entry, get_position_entry, list_position_journal, list_position_summary, update_position_entry
 
 
 bp = Blueprint("quant_trade_routes", __name__, url_prefix="/never_guess_my_usage/quant")
 
 
+def _not_found(msg="资源不存在"):
+    return error_response(msg, ERROR_TYPE_RESOURCE_NOT_FOUND), 404
+
+
 @bp.route("/positions/summary", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_positions_summary(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
-    return success_response(data=list_position_summary(strategy_id=strategy_id, created_by=user))
+    return success_response(data=list_position_summary(
+        strategy_id=strategy_id,
+        owner_user_id=owner_user_id,
+        is_admin=is_admin,
+    ))
 
 
 @bp.route("/positions/journal", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_positions_journal(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
     source = str(request.args.get("source", "")).strip() or None
     limit = request.args.get("limit", default=100, type=int) or 100
     limit = max(1, min(limit, 500))
-    return success_response(data=list_position_journal(strategy_id=strategy_id, symbol=symbol, source=source, created_by=user, limit=limit))
+    return success_response(data=list_position_journal(
+        strategy_id=strategy_id,
+        symbol=symbol,
+        source=source,
+        owner_user_id=owner_user_id,
+        is_admin=is_admin,
+        limit=limit,
+    ))
 
 
 @bp.route("/positions/journal/<int:entry_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_position_get(user, password, entry_id):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
-        return success_response(data=get_position_entry(entry_id, created_by=user))
+        return success_response(data=get_position_entry(
+            entry_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        ))
+    except ResourceNotFoundError:
+        return _not_found("持仓流水不存在")
     except Exception as exc:
         return error_response(f"获取持仓流水失败: {exc}")
 
 
 @bp.route("/positions/create", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_position_create(user, password):
     del password
+    owner_user_id, _is_admin = current_owner_scope()
     try:
         data = get_request_data()
         result = create_position_entry(
@@ -65,41 +92,60 @@ def quant_position_create(user, password):
             reason=str(data.get("reason", "")).strip(),
             remark=str(data.get("remark", "")).strip(),
             created_by=user,
+            owner_user_id=owner_user_id,
         )
         return success_response(data=result, msg="持仓流水创建成功")
+    except ResourceNotFoundError:
+        return _not_found()
     except Exception as exc:
         return error_response(f"创建持仓流水失败: {exc}")
 
 
 @bp.route("/positions/update", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_position_update(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
         entry_id = int(data.get("id"))
         updates = {key: data.get(key) for key in ("strategy_id", "run_id", "operation_id", "symbol", "side", "price", "quantity", "occurred_at", "source", "reason", "remark") if key in data}
-        return success_response(data=update_position_entry(entry_id, created_by=user, **updates), msg="持仓流水更新成功")
+        return success_response(data=update_position_entry(
+            entry_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+            **updates,
+        ), msg="持仓流水更新成功")
+    except ResourceNotFoundError:
+        return _not_found("持仓流水不存在")
     except Exception as exc:
         return error_response(f"更新持仓流水失败: {exc}")
 
 
 @bp.route("/positions/delete", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_position_delete(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
-        delete_position_entry(int(data.get("id")), created_by=user)
+        delete_position_entry(
+            int(data.get("id")),
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
         return success_response(msg="持仓流水删除成功")
+    except ResourceNotFoundError:
+        return _not_found("持仓流水不存在")
     except Exception as exc:
         return error_response(f"删除持仓流水失败: {exc}")
 
 
 @bp.route("/operations/list", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_operations_list(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
     status = str(request.args.get("status", "")).strip() or None
@@ -119,7 +165,8 @@ def quant_operations_list(user, password):
                 result_status=result_status,
                 date_from=date_from,
                 date_to=date_to,
-                created_by=user,
+                owner_user_id=owner_user_id,
+                is_admin=is_admin,
                 limit=limit,
             )
         )
@@ -128,19 +175,27 @@ def quant_operations_list(user, password):
 
 
 @bp.route("/operations/get/<int:record_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_operations_get(user, password, record_id):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
-        return success_response(data=get_operation_record(record_id, created_by=user))
+        return success_response(data=get_operation_record(
+            record_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        ))
+    except ResourceNotFoundError:
+        return _not_found("操作记录不存在")
     except Exception as exc:
         return error_response(f"获取操作记录失败: {exc}")
 
 
 @bp.route("/operations/create", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_operations_create(user, password):
     del password
+    owner_user_id, _is_admin = current_owner_scope()
     try:
         data = get_request_data()
         symbol = str(data.get("symbol", "")).strip()
@@ -167,16 +222,20 @@ def quant_operations_create(user, password):
             tags=parse_json_list(data.get("tags")) if "tags" in data else data.get("tags"),
             meta=data.get("meta"),
             created_by=user,
+            owner_user_id=owner_user_id,
         )
         return success_response(data=record, msg="操作记录创建成功")
+    except ResourceNotFoundError:
+        return _not_found()
     except Exception as exc:
         return error_response(f"创建操作记录失败: {exc}")
 
 
 @bp.route("/operations/update", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_operations_update(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
         record_id = int(data.get("id"))
@@ -205,48 +264,78 @@ def quant_operations_update(user, password):
         }
         if "tags" in data:
             updates["tags"] = parse_json_list(data.get("tags")) if isinstance(data.get("tags"), str) else data.get("tags")
-        return success_response(data=update_operation_record(record_id, created_by=user, **updates), msg="操作记录更新成功")
+        return success_response(data=update_operation_record(
+            record_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+            **updates,
+        ), msg="操作记录更新成功")
+    except ResourceNotFoundError:
+        return _not_found("操作记录不存在")
     except Exception as exc:
         return error_response(f"更新操作记录失败: {exc}")
 
 
 @bp.route("/operations/delete", methods=["POST"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_operations_delete(user, password):
-    del password
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
         record_id = int(data.get("id"))
-        delete_operation_record(record_id, created_by=user)
+        delete_operation_record(
+            record_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        )
         return success_response(msg="操作记录删除成功")
+    except ResourceNotFoundError:
+        return _not_found("操作记录不存在")
     except Exception as exc:
         return error_response(f"删除操作记录失败: {exc}")
 
 
 @bp.route("/backtest/list", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_backtest_list(user, password):
     del user, password
+    owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     status = str(request.args.get("status", "")).strip() or None
     limit = request.args.get("limit", default=30, type=int) or 30
     limit = max(1, min(limit, 200))
-    return success_response(data=list_backtest_runs(strategy_id=strategy_id, status=status, limit=limit))
+    return success_response(data=list_backtest_runs(
+        strategy_id=strategy_id,
+        status=status,
+        limit=limit,
+        owner_user_id=owner_user_id,
+        is_admin=is_admin,
+    ))
 
 
 @bp.route("/backtest/get/<int:backtest_id>", methods=["GET"])
-@require_auth
+@require_module_auth(ROLE_QUANT)
 def quant_backtest_get(user, password, backtest_id):
     del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
-        return success_response(data=get_backtest_run(backtest_id))
+        return success_response(data=get_backtest_run(
+            backtest_id,
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
+        ))
+    except ResourceNotFoundError:
+        return _not_found("回测记录不存在")
     except Exception as exc:
         return error_response(f"获取回测结果失败: {exc}")
 
 
 @bp.route("/backtest/run", methods=["POST"])
-@require_admin_auth
-def quant_backtest_run():
+@require_module_auth(ROLE_QUANT)
+def quant_backtest_run(user, password):
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
         strategy_id = int(data.get("strategy_id"))
@@ -265,19 +354,27 @@ def quant_backtest_run():
             slippage_rate=data.get("slippage_rate", 0.0005),
             benchmark_symbol=str(data.get("benchmark_symbol", "")).strip(),
             symbols=parse_json_list(data.get("symbols")) if "symbols" in data else data.get("symbols"),
+            owner_user_id=owner_user_id,
+            is_admin=is_admin,
         )
         return success_response(data=result, msg="回测执行成功")
+    except ResourceNotFoundError:
+        return _not_found("策略不存在")
     except Exception as exc:
         return error_response(f"执行回测失败: {exc}")
 
 
 @bp.route("/backtest/delete", methods=["POST"])
-@require_admin_auth
-def quant_backtest_delete():
+@require_module_auth(ROLE_QUANT)
+def quant_backtest_delete(user, password):
+    del user, password
+    owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
         backtest_id = int(data.get("id"))
-        delete_backtest_run(backtest_id)
+        delete_backtest_run(backtest_id, owner_user_id=owner_user_id, is_admin=is_admin)
         return success_response(msg="回测记录删除成功")
+    except ResourceNotFoundError:
+        return _not_found("回测记录不存在")
     except Exception as exc:
         return error_response(f"删除回测记录失败: {exc}")

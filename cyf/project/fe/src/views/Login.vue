@@ -1,45 +1,150 @@
 <template>
-  <div
-    class="login-page login-page-v2 min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-amber-100 via-stone-100 to-emerald-50 relative overflow-hidden"
-    :class="{ 'login-dark': isDarkTheme }"
-  >
-    <div class="login-shell relative z-10">
-      <section class="login-hero" aria-hidden="true">
-        <div class="hero-vector hero-vector-main" />
-        <div class="hero-vector hero-vector-grid" />
-        <div class="hero-vector hero-vector-wave" />
-        <div class="hero-copy">
-          <p class="hero-copy-label">{{ t('login.subtitle') }}</p>
-          <h2 class="hero-copy-title">{{ t('login.description') }}</h2>
+  <div class="login-page min-h-screen flex flex-col" :class="{ 'login-dark': isDarkTheme }">
+    <!-- 顶栏：品牌 + 语言 / 主题 -->
+    <header class="login-topbar">
+      <div class="login-brand">
+        <span class="login-brand__mark" aria-hidden="true">
+          <el-icon><ChatDotRound /></el-icon>
+        </span>
+        <span class="login-brand__title">{{ t('login.title') }}</span>
+      </div>
+      <div class="login-topbar__actions">
+        <el-button
+          class="login-topbar__action"
+          :icon="SwitchFilled"
+          :aria-label="currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese')"
+          @click="toggleLanguage"
+        >
+          <span class="login-topbar__action-text">
+            {{ currentLang === 'zh' ? t('chat.languageEnglish') : t('chat.languageChinese') }}
+          </span>
+        </el-button>
+        <el-button
+          class="login-topbar__action"
+          :icon="isDarkTheme ? Sunny : Moon"
+          :aria-label="isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme')"
+          @click="toggleTheme"
+        >
+          <span class="login-topbar__action-text">
+            {{ isDarkTheme ? t('chat.lightTheme') : t('chat.darkTheme') }}
+          </span>
+        </el-button>
+      </div>
+    </header>
+
+    <main class="login-shell">
+      <!-- 功能选择 -->
+      <section class="login-features" aria-labelledby="login-feature-title">
+        <h1 id="login-feature-title" class="login-features__title">
+          {{ t('login.selectFunction') }}
+        </h1>
+        <p class="login-features__subtitle">{{ t('login.pageTitle') }}</p>
+
+        <div class="login-feature-group" role="radiogroup" aria-labelledby="login-feature-title">
+          <label
+            v-for="app in LOGIN_APP_KEYS"
+            :key="app"
+            class="login-feature-card"
+            :class="{ 'is-selected': selectedApp === app }"
+          >
+            <input
+              v-model="selectedApp"
+              @change="explicitSelection = true"
+              class="login-feature-card__input"
+              type="radio"
+              name="login-app"
+              :value="app"
+            />
+            <span class="login-feature-card__body">
+              <span class="login-feature-card__head">
+                <el-icon class="login-feature-card__icon"><component :is="APP_META[app].icon" /></el-icon>
+                <span class="login-feature-card__name">{{ t(APP_META[app].labelKey) }}</span>
+                <span
+                  class="login-feature-card__tag"
+                  :class="APP_META[app].requiresGrant ? 'is-grant' : 'is-included'"
+                >
+                  {{ APP_META[app].requiresGrant ? t('login.featureTagGrant') : t('login.featureTagIncluded') }}
+                </span>
+              </span>
+              <span class="login-feature-card__desc">{{ t(APP_META[app].descriptionKey) }}</span>
+            </span>
+            <el-icon v-if="selectedApp === app" class="login-feature-card__check"><Select /></el-icon>
+          </label>
         </div>
+
+        <button type="button" class="login-admin-entry" @click="selectAdminEntry">
+          <el-icon><Setting /></el-icon>
+          <span>{{ t('login.adminEntry') }}</span>
+        </button>
       </section>
 
+      <!-- 表单 -->
       <section class="login-panel">
-        <div class="login-card bg-white/95 backdrop-blur-sm rounded-2xl p-10 shadow-xl border border-amber-200/30 w-96 max-w-[90%]">
-          <div class="login-head text-center mb-8">
-            <h1 class="login-title text-2xl font-bold text-amber-700 mb-2">{{ t('login.title') }}</h1>
-            <p class="login-subtitle text-stone-500">{{ t('login.subtitle') }}</p>
+        <div class="login-card">
+          <!-- 已登录：当前账号 -->
+          <el-alert v-if="syncFailed" :title="t('login.roleSyncFailed')" type="error" :closable="false" show-icon>
+            <el-button :loading="syncing" @click="refreshAuthorization">{{ t('login.retryAuthorization') }}</el-button>
+          </el-alert>
+          <div v-if="isLoggedIn" class="login-account">
+            <span class="login-account__label">{{ t('login.currentAccount') }}</span>
+            <span class="login-account__name">{{ authStore.user }}</span>
+            <div class="login-account__roles">
+              <el-tag v-for="role in authStore.roles" :key="role" size="small" type="info">
+                {{ t(`apps.${role === 'admin' ? 'admin' : role}`) }}
+              </el-tag>
+            </div>
+            <div class="login-account__actions">
+              <el-button size="small" text @click="switchAccount">{{ t('login.switchAccount') }}</el-button>
+              <el-button size="small" text @click="logout">{{ t('login.logout') }}</el-button>
+            </div>
           </div>
 
+          <!-- 权限引导 -->
+          <div v-if="showGrantGuide" class="login-grant" role="status">
+            <h2 class="login-grant__title">{{ grantTitle }}</h2>
+            <p class="login-grant__desc">{{ t('login.notEnabledDesc') }}</p>
+            <div v-if="availableEntries.length" class="login-grant__entries">
+              <span class="login-grant__entries-label">{{ t('login.availableEntries') }}</span>
+              <el-button
+                v-for="entry in availableEntries"
+                :key="entry"
+                size="small"
+                @click="explicitSelection = true; selectedApp = entry; enterApp(entry)"
+              >
+                {{ t(APP_META[entry].labelKey) }}
+              </el-button>
+            </div>
+            <div class="login-grant__contact">
+              <el-button size="small" type="primary" plain @click="copyContact">
+                {{ t('login.contactAdmin') }}
+              </el-button>
+              <span class="login-grant__contact-text">{{ contactInfo }}</span>
+            </div>
+          </div>
+
+          <!-- 登录表单 -->
+          <div v-if="!isLoggedIn && mode === 'login'" class="login-form-host">
           <el-form
             ref="loginFormRef"
             :model="loginForm"
             :rules="loginRules"
-            class="login-form mt-5"
+            class="login-form"
+            label-position="top"
             @submit.prevent="handleLogin"
           >
-            <el-form-item prop="username" class="mb-5">
+            <el-form-item :label="t('validation.username')" prop="username" class="login-form__item">
               <el-input
+                ref="usernameInputRef"
                 v-model="loginForm.username"
                 :placeholder="t('login.usernamePlaceholder')"
                 :prefix-icon="User"
                 size="large"
-                class="rounded-lg"
-                autocomplete="new-password"
+                autocomplete="username"
+                :disabled="submitting"
               />
             </el-form-item>
 
-            <el-form-item prop="password" class="mb-5">
+            <el-form-item :label="t('validation.password')" prop="password" class="login-form__item">
               <el-input
                 v-model="loginForm.password"
                 type="password"
@@ -47,147 +152,88 @@
                 :prefix-icon="Lock"
                 size="large"
                 show-password
-                class="rounded-lg"
-                autocomplete="new-password"
+                autocomplete="current-password"
+                :disabled="submitting"
               />
             </el-form-item>
 
-            <el-form-item class="w-full">
+            <el-form-item class="login-form__item login-form__submit">
               <el-button
                 type="primary"
                 size="large"
-                :loading="loading"
-                class="login-primary-btn w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
-                @click="handleLogin"
+                class="login-primary-btn"
+                :loading="submitting"
+                :disabled="submitting"
+                native-type="submit"
               >
-                {{ t('login.submitButton') }}
+                {{ isLoggedIn ? t('login.enterApp', { app: selectedAppLabel }) : t('login.loginAndEnter', { app: selectedAppLabel }) }}
               </el-button>
             </el-form-item>
           </el-form>
-
-          <!-- 注册链接按钮 -->
-          <div class="text-center mt-4">
-            <el-button
-              type="info"
-              plain
-              size="small"
-              @click="showRegisterModal = true"
-              :icon="CirclePlus"
-              class="login-secondary-btn text-amber-700 hover:text-amber-700"
-            >
-              {{ t('login.goToRegister') }}
-            </el-button>
           </div>
 
-          <!-- 通知按钮 -->
-          <div class="mt-4 flex justify-end">
-            <div class="notification-button-wrapper">
-            <el-button
-              type="info"
-              plain
-              size="small"
-              @click="openNotifications"
-              :icon="Bell"
-            >
-              {{ t('login.viewNotifications') }}
-            </el-button>
-              <span v-if="hasNewNotifications" class="notification-dot" />
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+          <!-- 注册表单 -->
+          <div v-if="!isLoggedIn && mode === 'register'" class="login-form-host">
+          <el-form
+            ref="registerFormRef"
+            :model="registerForm"
+            :rules="registerRules"
+            class="login-form"
+            label-position="top"
+            @submit.prevent="handleRegister"
+          >
+            <p class="login-notice">{{ t('login.registerNotice') }}</p>
 
-    <div class="login-footer mt-8 text-center">
-      <p class="mt-2.5 flex items-center justify-center gap-1">
-        <a href="https://github.com/vyfe/openai-project" target="_blank" rel="noopener noreferrer" class="login-footer-link text-stone-500 text-sm font-medium flex items-center gap-1 hover:text-amber-700 hover:underline">
-          <el-icon><Link /></el-icon> {{ t('login.githubLink') }}
-        </a>
-        <span class="login-footer-contact ml-3.5 text-stone-500 font-medium inline-flex items-center"> {{ t('login.contactInfo') }} </span>
-      </p>
-    </div>
+            <el-form-item :label="t('validation.username')" prop="username" class="login-form__item">
+              <el-input
+                v-model="registerForm.username"
+                :placeholder="t('login.usernamePlaceholder')"
+                :prefix-icon="User"
+                size="large"
+                autocomplete="username"
+                :disabled="registering"
+              />
+            </el-form-item>
 
-    <!-- 通知模态框 -->
-    <Teleport to="body">
-      <div v-if="showNotificationModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div class="relative">
-          <NotificationPanel
-            isModal
-            :notifications="notifications"
-            :loading="notificationsLoading"
-            @close="closeNotifications"
-          />
-        </div>
-      </div>
-    </Teleport>
+            <el-form-item :label="t('validation.password')" prop="password" class="login-form__item">
+              <el-input
+                v-model="registerForm.password"
+                type="password"
+                :placeholder="t('login.passwordPlaceholder')"
+                :prefix-icon="Lock"
+                size="large"
+                show-password
+                autocomplete="new-password"
+                :disabled="registering"
+              />
+            </el-form-item>
 
-    <!-- 注册弹窗 -->
-    <Teleport to="body">
-      <div v-if="showRegisterModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div :class="[
-          'login-register-modal login-register-modal-v2',
-          { 'login-dark-modal': isDarkTheme },
-          'rounded-2xl shadow-xl border w-96 max-w-[90%] transition-all duration-300 transform',
-          'bg-white/95 backdrop-blur-sm border-amber-200/30'
-        ]">
-          <!-- 弹窗头部 -->
-          <div class="flex items-center justify-between p-5 border-b border-gray-200">
-            <h2 class="text-lg font-bold flex items-center text-amber-700">
-              <el-icon class="mr-2"><CirclePlus /></el-icon>
-              {{ t('login.registerTitle') }}
-            </h2>
-            <button @click="showRegisterModal = false" class="text-gray-500 hover:text-gray-700 transition-colors">
-              <el-icon size="20"><Close /></el-icon>
-            </button>
-          </div>
+            <el-form-item :label="t('validation.confirmPassword')" prop="confirmPassword" class="login-form__item">
+              <el-input
+                v-model="registerForm.confirmPassword"
+                type="password"
+                :placeholder="t('validation.confirmPassword')"
+                :prefix-icon="Lock"
+                size="large"
+                show-password
+                autocomplete="new-password"
+                :disabled="registering"
+              />
+            </el-form-item>
 
-          <!-- 弹窗内容 -->
-          <div class="p-5">
-            <el-form
-              ref="registerFormRef"
-              :model="registerForm"
-              :rules="registerRules"
-              class="space-y-4"
-            >
-              <el-form-item prop="username">
-                <el-input
-                  v-model="registerForm.username"
-                  :placeholder="t('login.usernamePlaceholder')"
-                  :prefix-icon="User"
-                  size="large"
-                  class="rounded-lg"
-                  autocomplete="new-password"
-                />
-              </el-form-item>
-
-              <el-form-item prop="password">
-                <el-input
-                  v-model="registerForm.password"
-                  type="password"
-                  :placeholder="t('login.passwordPlaceholder')"
-                  :prefix-icon="Lock"
-                  size="large"
-                  show-password
-                  class="rounded-lg"
-                  autocomplete="new-password"
-                />
-              </el-form-item>
-
-              <el-form-item prop="confirmPassword">
-                <el-input
-                  v-model="registerForm.confirmPassword"
-                  type="password"
-                  :placeholder="t('validation.confirmPassword')"
-                  :prefix-icon="Lock"
-                  size="large"
-                  show-password
-                  class="rounded-lg"
-                  autocomplete="new-password"
-                />
-              </el-form-item>
-
-              <!-- API key 输入框 -->
-              <el-form-item prop="apiKey">
+            <!-- 高级设置：API Key -->
+            <div class="login-advanced">
+              <button
+                type="button"
+                class="login-advanced__toggle"
+                :aria-expanded="advancedOpen"
+                @click="advancedOpen = !advancedOpen"
+              >
+                <el-icon><Setting /></el-icon>
+                <span>{{ t('login.advancedSettings') }}</span>
+                <el-icon class="login-advanced__caret" :class="{ 'is-open': advancedOpen }"><ArrowDown /></el-icon>
+              </button>
+              <el-form-item v-show="advancedOpen" label="" prop="apiKey" class="login-form__item">
                 <el-input
                   v-model="registerForm.apiKey"
                   type="password"
@@ -195,78 +241,183 @@
                   :prefix-icon="Lock"
                   size="large"
                   show-password
-                  class="rounded-lg"
                   autocomplete="new-password"
+                  :disabled="registering"
                 />
-                <template #label>
-                  <span class="text-sm">{{ t('login.apiKey') }}</span>
-                </template>
+                <p class="login-form__hint">{{ t('login.apiKeyHint') }}</p>
               </el-form-item>
-
-              <!-- API key 提示信息 -->
-              <div class="text-xs text-gray-500 mb-2 flex items-start gap-1">
-                <el-icon><InfoFilled /></el-icon>
-                <span>{{ t('login.apiKeyHint') }}</span>
-              </div>
-
-              <el-form-item class="mb-0">
-                <el-button
-                  type="primary"
-                  size="large"
-                  :loading="registerLoading"
-                  class="w-full bg-gradient-to-r from-amber-600 to-emerald-600 border-none text-base font-medium h-12 transition-all duration-300 hover:from-amber-700 hover:to-emerald-700 hover:translate-y-[-2px] hover:shadow-lg"
-                  @click="handleRegister"
-                >
-                  {{ t('login.registerButton') }}
-                </el-button>
-              </el-form-item>
-            </el-form>
-
-            <div class="mt-4 text-center text-sm text-gray-500">
-              {{ t('login.goToLogin') }}
-              <button
-                @click="showRegisterModal = false"
-                class="ml-1 text-amber-700 hover:text-amber-700 font-medium underline"
-              >
-                {{ t('login.submitButton') }}
-              </button>
             </div>
+
+            <!-- 只读初始权限 -->
+            <div class="login-permissions">
+              <span class="login-permissions__title">{{ t('login.registerPermissionsTitle') }}</span>
+              <ul class="login-permissions__list">
+                <li class="login-permissions__item is-on">{{ t('login.permissionChat') }}</li>
+                <li class="login-permissions__item">{{ t('login.permissionQuant') }}</li>
+                <li class="login-permissions__item">{{ t('login.permissionSound') }}</li>
+              </ul>
+            </div>
+
+            <el-form-item class="login-form__item login-form__submit">
+              <el-button
+                type="primary"
+                size="large"
+                class="login-primary-btn"
+                :loading="registering"
+                :disabled="registering"
+                native-type="submit"
+              >
+                {{ t('login.registerButton') }}
+              </el-button>
+            </el-form-item>
+          </el-form>
+          </div>
+
+          <!-- 已登录时的进入按钮 -->
+          <div v-if="isLoggedIn" class="login-form__submit login-form__submit--standalone">
+            <el-button
+              type="primary"
+              size="large"
+              class="login-primary-btn"
+              :disabled="!canEnterSelected"
+              @click="enterApp(selectedApp)"
+            >
+              {{ t('login.enterApp', { app: selectedAppLabel }) }}
+            </el-button>
+          </div>
+
+          <!-- 模式切换 -->
+          <div class="login-switch">
+            <el-button
+              v-if="mode === 'login'"
+              type="info"
+              plain
+              size="small"
+              :icon="CirclePlus"
+              :disabled="isLoggedIn"
+              @click="switchToRegister"
+            >
+              {{ t('login.goToRegister') }}
+            </el-button>
+            <el-button
+              v-else
+              type="info"
+              plain
+              size="small"
+              :disabled="isLoggedIn"
+              @click="switchToLogin"
+            >
+              {{ t('login.goToLogin') }}
+            </el-button>
           </div>
         </div>
-      </div>
-    </Teleport>
+      </section>
+    </main>
+
+    <footer class="login-footer">
+      <p class="login-footer__line">
+        <a
+          href="https://github.com/vyfe/openai-project"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="login-footer__link"
+        >
+          <el-icon><Link /></el-icon> {{ t('login.githubLink') }}
+        </a>
+      </p>
+      <p class="login-footer__line">
+        <el-button link class="login-footer__copy" @click="copyContact">
+          <el-icon><CopyDocument /></el-icon>
+          <span>{{ copied ? t('login.copied') : t('login.copyContact') }}</span>
+        </el-button>
+        <span class="login-footer__contact">{{ contactInfo }}</span>
+      </p>
+    </footer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, FormInstance, FormRules } from 'element-plus'
-import { User, Lock, Link, Bell, CirclePlus, Close, InfoFilled } from '@element-plus/icons-vue'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import {
+  ArrowDown,
+  ChatDotRound,
+  CirclePlus,
+  CopyDocument,
+  Link,
+  Lock,
+  Moon,
+  Select,
+  Setting,
+  Sunny,
+  SwitchFilled,
+  User
+} from '@element-plus/icons-vue'
+import { APP_META, LOGIN_APP_KEYS, type AppKey } from '@/auth/apps'
+import { resolveDestination } from '@/auth/destination'
+import { syncCurrentRoles } from '@/auth/sync'
+import { hasRole, type AppRole } from '@/auth/permissions'
 import { useAuthStore } from '@/stores/auth'
 import { authAPI } from '@/services/api'
-import NotificationPanel from '@/components/NotificationPanel.vue'
-import { useNotifications } from '@/composables/useNotifications'
 import { useThemeManager } from '@/composables/useThemeManager'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
-const { isDarkTheme, initThemeManager } = useThemeManager()
-const loginFormRef = ref()
-const loading = ref(false)
-const showNotificationModal = ref(false)
-const showRegisterModal = ref(false)
-const registerFormRef = ref<FormInstance>()
-const registerLoading = ref(false)
+const { isDarkTheme, initThemeManager, setThemeManually } = useThemeManager()
 
-const loginForm = reactive({
-  username: '',
-  password: ''
+const mode = ref<'login' | 'register'>('login')
+const selectedApp = ref<AppKey>('chat')
+const submitting = ref(false)
+const registering = ref(false)
+const advancedOpen = ref(false)
+const copied = ref(false)
+const isLoggedIn = computed(() => Boolean(authStore.user && authStore.refreshToken))
+const explicitSelection = ref(false)
+const syncing = ref(false)
+const syncFailed = ref(false)
+const loginFormRef = ref<FormInstance>()
+const registerFormRef = ref<FormInstance>()
+const usernameInputRef = ref()
+
+const currentLang = ref(locale.value)
+
+const loginForm = ref({ username: '', password: '' })
+const registerForm = ref({ username: '', password: '', confirmPassword: '', apiKey: '' })
+
+const contactInfo = computed(() => t('login.contactInfo'))
+
+const selectedAppLabel = computed(() => t(APP_META[selectedApp.value].labelKey))
+
+const requestedDestination = computed(() => {
+  const base = resolveDestination({ app: explicitSelection.value ? selectedApp.value : typeof route.query.app === 'string' ? route.query.app : null, redirect: typeof route.query.redirect === 'string' ? route.query.redirect : null }, authStore.roles, authStore.lastApp)
+  // 路由守卫把被拒页面所需角色带过来（如 /quant/scheduler 需要 admin）：
+  // 该角色才是本次真正缺失的权限，不能用功能入口的角色覆盖。
+  const required = route.query.required
+  if (typeof required === 'string' && required) {
+    return { ...base, requiredRole: required as AppRole }
+  }
+  return base
+})
+const canEnterSelected = computed(() => !syncing.value && !syncFailed.value && (!isLoggedIn.value || (authStore.rolesConfirmed && hasRole(authStore.roles, requestedDestination.value.requiredRole))))
+
+const availableEntries = computed<AppKey[]>(() =>
+  isLoggedIn.value ? authStore.availableApps.filter((app) => app !== 'admin' || authStore.isAdmin()) : []
+)
+
+/** 未开通引导：已登录但目标功能未授权。 */
+const showGrantGuide = computed(() => isLoggedIn.value && authStore.rolesConfirmed && !hasRole(authStore.roles, requestedDestination.value.requiredRole))
+
+const grantTitle = computed(() => {
+  const required = explicitSelection.value ? APP_META[selectedApp.value].role : route.query.required ?? requestedDestination.value.requiredRole
+  if (required === 'admin') return t('login.requiresAdminTitle')
+  return t('login.notEnabledTitle')
 })
 
-const loginRules = {
+const loginRules: FormRules = {
   username: [
     { required: true, message: t('validation.usernameRequired'), trigger: 'blur' },
     { min: 1, message: t('validation.usernameNotEmpty'), trigger: 'blur' }
@@ -275,24 +426,6 @@ const loginRules = {
     { required: true, message: t('validation.passwordRequired'), trigger: 'blur' },
     { min: 1, message: t('validation.passwordNotEmpty'), trigger: 'blur' }
   ]
-}
-
-const registerForm = reactive({
-  username: '',
-  password: '',
-  confirmPassword: '',
-  apiKey: ''
-})
-
-const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
-
-const openNotifications = () => {
-  showNotificationModal.value = true
-}
-
-const closeNotifications = () => {
-  showNotificationModal.value = false
-  markNotificationsRead()
 }
 
 const registerRules: FormRules = {
@@ -308,8 +441,8 @@ const registerRules: FormRules = {
   confirmPassword: [
     { required: true, message: t('validation.confirmPasswordRequired'), trigger: 'blur' },
     {
-      validator: (rule: any, value: any, callback: any) => {
-        if (value !== registerForm.password) {
+      validator: (_rule: any, value: any, callback: any) => {
+        if (value !== registerForm.value.password) {
           callback(new Error(t('validation.passwordsNotMatch')))
         } else {
           callback()
@@ -321,361 +454,613 @@ const registerRules: FormRules = {
   apiKey: []
 }
 
-onMounted(() => {
-  initThemeManager()
-  fetchNotifications()
-})
+/** 从 URL 参数解析初始目的地。 */
+const applyQueryDestination = () => {
+  const queryApp = route.query.app
+  const queryRedirect = route.query.redirect
+  const resolved = resolveDestination(
+    {
+      app: typeof queryApp === 'string' ? queryApp : null,
+      redirect: typeof queryRedirect === 'string' ? queryRedirect : null
+    },
+    authStore.roles,
+    authStore.lastApp
+  )
+  selectedApp.value = resolved.app
+}
+
+const selectAdminEntry = () => {
+  explicitSelection.value = true
+  selectedApp.value = 'admin'
+  mode.value = 'login'
+  nextTick(() => usernameInputRef.value?.focus?.())
+}
+
+const switchToRegister = () => {
+  mode.value = 'register'
+}
+
+const switchToLogin = () => {
+  mode.value = 'login'
+  loginForm.value.password = ''
+}
+
+const switchAccount = () => {
+  authStore.logout()
+  mode.value = 'login'
+  loginForm.value.password = ''
+}
+
+const logout = async () => {
+  authStore.logout()
+  ElMessage.success(t('chat.logoutSuccess'))
+}
+
+const copyContact = async () => {
+  try {
+    await navigator.clipboard.writeText(contactInfo.value)
+    copied.value = true
+    setTimeout(() => {
+      copied.value = false
+    }, 2000)
+  } catch (error) {
+    console.error('复制联系方式失败:', error)
+  }
+}
+
+/** 进入目标功能；未授权时展示权限引导，不发起业务请求。 */
+const enterApp = async (app: AppKey) => {
+  if (!authStore.canAccessApp(app)) {
+    selectedApp.value = app
+    return
+  }
+  if (syncFailed.value || !authStore.rolesConfirmed) {
+    if (!await refreshAuthorization()) return
+  }
+  const destination = app === selectedApp.value ? requestedDestination.value : resolveDestination({ app }, authStore.roles)
+  if (!hasRole(authStore.roles, destination.requiredRole)) return
+  const target = destination.route
+  authStore.setLastApp(app)
+  await router.push(target)
+}
 
 const handleLogin = async () => {
-  if (!loginFormRef.value) return
+  if (submitting.value) return
+  const form = loginFormRef.value
+  if (!form) return
 
-  await loginFormRef.value.validate(async (valid: boolean) => {
-    if (valid) {
-      loading.value = true
+  const valid = await form.validate().catch(() => false)
+  if (!valid) return
 
-      try {
-        // 使用新的登录接口进行身份验证
-        const response = await authAPI.login(loginForm.username, loginForm.password)
-
-        // 现在我们可以确保response是一个对象，包含success和msg属性
-        if (response && typeof response === 'object' && response.success) {
-          // 登录成功，获取用户信息（包含角色）
-          const userData = response.data || { username: loginForm.username, role: 'user' }
-          authStore.login({
-            username: userData.username || loginForm.username,
-            role: userData.role || 'user',
-            accessToken: userData.access_token,
-            accessTokenExpiresAt: userData.access_token_expires_at,
-            refreshToken: userData.refresh_token,
-            refreshTokenExpiresAt: userData.refresh_token_expires_at
-          })
-
-          ElMessage.success(response.msg || t('login.successMessage'))
-          router.push('/chat')
-        } else {
-          throw new Error(response.msg || t('login.failedMessage'))
-        }
-      } catch (error: any) {
-        console.error('Login error:', error)
-        let errorMessage = t('login.failedMessage')
-        if (error.message) {
-          errorMessage = error.message
-        } else if (error?.response?.data?.msg) {
-          errorMessage = error.response.data.msg
-        } else if (typeof error === 'object' && error.msg) {
-          errorMessage = error.msg
-        }
-        ElMessage.error(errorMessage)
-      } finally {
-        loading.value = false
-      }
+  submitting.value = true
+  try {
+    const response: any = await authAPI.login(loginForm.value.username, loginForm.value.password)
+    if (!response?.success) {
+      throw new Error(response?.msg || t('login.failedMessage'))
     }
-  })
+    authStore.login(response.data || {})
+    authStore.setLastApp(selectedApp.value)
+
+    if (!authStore.canAccessApp(selectedApp.value)) {
+      // 认证成功但目标未开通：保留登录态，展示权限引导。
+      ElMessage.warning(t('login.notEnabledTitle'))
+      return
+    }
+    ElMessage.success(response.msg || t('login.successMessage'))
+    await enterApp(selectedApp.value)
+  } catch (error: any) {
+    const message = error?.response?.data?.msg || error?.msg || error?.message || t('login.failedMessage')
+    ElMessage.error(message)
+    await nextTick()
+    usernameInputRef.value?.focus?.()
+  } finally {
+    submitting.value = false
+  }
 }
 
 const handleRegister = async () => {
-  if (!registerFormRef.value) return
+  if (registering.value) return
+  const form = registerFormRef.value
+  if (!form) return
 
-  await registerFormRef.value.validate(async (valid: boolean) => {
-    if (valid) {
-      registerLoading.value = true
+  const valid = await form.validate().catch(() => false)
+  if (!valid) return
 
-      try {
-        const response = await authAPI.register(
-          registerForm.username,
-          registerForm.password,
-          registerForm.apiKey || undefined
-        )
-
-        if (response && typeof response === 'object' && response.success) {
-          ElMessage.success(response.msg || t('login.registerSuccess'))
-
-          // 注册成功后切换到登录模式并预填用户名
-          showRegisterModal.value = false
-          loginForm.username = registerForm.username
-          loginForm.password = ''
-
-          // 清空注册表单
-          registerForm.username = ''
-          registerForm.password = ''
-          registerForm.confirmPassword = ''
-          registerForm.apiKey = ''
-        } else {
-          throw new Error(response.msg || t('login.registerFailed'))
-        }
-      } catch (error: any) {
-        console.error('Registration error:', error)
-        let errorMessage = t('login.registerFailed')
-        if (error.message) {
-          errorMessage = error.message
-        } else if (error?.response?.data?.msg) {
-          errorMessage = error.response.data.msg
-        } else if (typeof error === 'object' && error.msg) {
-          errorMessage = error.msg
-        }
-        ElMessage.error(errorMessage)
-      } finally {
-        registerLoading.value = false
-      }
+  registering.value = true
+  try {
+    const response: any = await authAPI.register(
+      registerForm.value.username,
+      registerForm.value.password,
+      registerForm.value.apiKey || undefined
+    )
+    if (!response?.success) {
+      throw new Error(response?.msg || t('login.registerFailed'))
     }
-  })
+    ElMessage.success(response.msg || t('login.registerSuccess'))
+    // 注册成功回到登录表单：预填用户名、清空密码、目标设为聊天。
+    loginForm.value.username = registerForm.value.username
+    loginForm.value.password = ''
+    registerForm.value = { username: '', password: '', confirmPassword: '', apiKey: '' }
+    advancedOpen.value = false
+    mode.value = 'login'
+    explicitSelection.value = true
+    selectedApp.value = 'chat'
+    await nextTick()
+    usernameInputRef.value?.focus?.()
+  } catch (error: any) {
+    const message = error?.response?.data?.msg || error?.msg || error?.message || t('login.registerFailed')
+    ElMessage.error(message)
+  } finally {
+    registering.value = false
+  }
 }
+
+const toggleLanguage = () => {
+  const nextLocale = currentLang.value === 'zh' ? 'en' : 'zh'
+  locale.value = nextLocale
+  currentLang.value = nextLocale
+  localStorage.setItem('locale', nextLocale)
+}
+
+const toggleTheme = () => {
+  setThemeManually(!isDarkTheme.value)
+}
+
+const refreshAuthorization = async () => {
+  syncing.value = true
+  syncFailed.value = false
+  const snapshot = await syncCurrentRoles()
+  syncFailed.value = !snapshot && isLoggedIn.value
+  syncing.value = false
+  return Boolean(snapshot)
+}
+
+watch(() => route.fullPath, () => {
+  explicitSelection.value = false
+  applyQueryDestination()
+})
+
+onMounted(async () => {
+  initThemeManager()
+  authStore.isAuthenticated()
+  if (isLoggedIn.value) await refreshAuthorization()
+  applyQueryDestination()
+  const destination = requestedDestination.value
+  if (isLoggedIn.value && authStore.rolesConfirmed && destination.fromDeepLink && hasRole(authStore.roles, destination.requiredRole)) {
+    authStore.setLastApp(destination.app)
+    await router.replace(destination.route)
+  }
+})
+
 </script>
 
 <style scoped>
-.login-page-v2 {
+.login-page {
   background:
     radial-gradient(900px 520px at 20% 16%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 72%),
     radial-gradient(860px 540px at 88% 84%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 74%),
     linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)));
+  color: var(--text-1);
+}
+
+.login-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px clamp(16px, 4vw, 48px);
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-brand__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: var(--text-1);
+  background: var(--overlay-1);
+  border: 1px solid var(--line-1);
+}
+
+.login-brand__title {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.login-topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.login-topbar__action {
+  margin-left: 0;
 }
 
 .login-shell {
   width: 100%;
   max-width: 1160px;
-  padding: 34px 22px 8px;
+  margin: 0 auto;
+  padding: 12px clamp(16px, 4vw, 32px) 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  gap: 28px;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: clamp(20px, 3vw, 40px);
+  align-items: start;
 }
 
-.login-hero {
-  position: relative;
-  min-height: 520px;
-  border-radius: 24px;
-  border: 1px solid color-mix(in srgb, var(--line-1) 76%, transparent);
-  background: color-mix(in srgb, var(--overlay-1) 78%, transparent);
-  overflow: hidden;
-  padding: 36px 34px;
-  display: flex;
-  align-items: flex-end;
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+.login-features__title {
+  margin: 0 0 6px;
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 650;
 }
 
-.hero-vector {
-  position: absolute;
-  pointer-events: none;
-}
-
-.hero-vector-main {
-  inset: -8% -16% auto auto;
-  width: 68%;
-  height: 68%;
-  border-radius: 42% 58% 52% 48%;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-1) 36%, transparent),
-    color-mix(in srgb, var(--accent-2) 14%, transparent)
-  );
-  filter: blur(2px);
-  animation: hero-float 16s ease-in-out infinite;
-}
-
-.hero-vector-grid {
-  left: 8%;
-  top: 10%;
-  width: 76%;
-  height: 76%;
-  background-image:
-    linear-gradient(to right, color-mix(in srgb, var(--line-1) 66%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in srgb, var(--line-1) 66%, transparent) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: radial-gradient(circle at 38% 48%, black 30%, transparent 82%);
-  opacity: 0.24;
-}
-
-.hero-vector-wave {
-  inset: auto 0 0;
-  height: 42%;
-  background:
-    radial-gradient(120% 100% at 32% 82%, color-mix(in srgb, var(--accent-2) 22%, transparent), transparent 68%),
-    radial-gradient(100% 90% at 66% 86%, color-mix(in srgb, var(--accent-1) 14%, transparent), transparent 68%);
-  transform-origin: center;
-  animation: hero-wave 20s ease-in-out infinite;
-}
-
-.hero-copy {
-  position: relative;
-  z-index: 2;
-  max-width: 540px;
-}
-
-.hero-copy-label {
-  margin: 0 0 12px;
+.login-features__subtitle {
+  margin: 0 0 20px;
   font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-2);
 }
 
-.hero-copy-title {
-  margin: 0;
-  font-size: clamp(34px, 4.2vw, 54px);
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: var(--text-1);
-  word-break: break-word;
-  overflow-wrap: break-word;
+.login-feature-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.login-panel {
+.login-feature-card {
+  position: relative;
   display: flex;
-  justify-content: center;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line-1);
+  background: var(--overlay-1);
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.login-feature-card:hover {
+  transform: translateY(-1px);
+}
+
+.login-feature-card.is-selected {
+  border-color: var(--accent-1);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.login-feature-card:focus-within {
+  outline: 2px solid var(--accent-1);
+  outline-offset: 2px;
+}
+
+.login-feature-card__input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.login-feature-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.login-feature-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.login-feature-card__icon {
+  color: var(--text-2);
+}
+
+.login-feature-card.is-selected .login-feature-card__icon {
+  color: var(--accent-1);
+}
+
+.login-feature-card__name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.login-feature-card__tag {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-1);
+  color: var(--text-2);
+}
+
+.login-feature-card__tag.is-included {
+  color: var(--text-1);
+}
+
+.login-feature-card__desc {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.login-feature-card__check {
+  margin-left: auto;
+  color: var(--accent-1);
+}
+
+.login-admin-entry {
+  margin-top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.login-admin-entry:hover {
+  color: var(--text-1);
+  text-decoration: underline;
 }
 
 .login-card {
-  width: min(460px, 100%);
-  margin: 0 auto;
-  background: var(--overlay-1) !important;
-  border: 1px solid var(--line-1) !important;
-  border-radius: 20px !important;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
-  padding: 28px 22px !important;
-}
-
-.login-head {
-  margin-bottom: 22px;
-}
-
-.login-title {
-  margin-bottom: 6px !important;
-  color: var(--text-1) !important;
-  font-size: 26px;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.login-subtitle {
-  color: var(--text-2) !important;
-  font-size: 14px;
-}
-
-.login-form :deep(.el-input__wrapper) {
-  border-radius: 12px;
+  border-radius: 18px;
   border: 1px solid var(--line-1);
-  box-shadow: none !important;
-  background: var(--bg-1);
+  background: var(--overlay-1);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  padding: 24px 22px;
 }
 
-.login-form :deep(.el-input__inner) {
-  color: var(--text-1);
+.login-account {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line-1);
 }
 
-.login-form :deep(.el-input__inner::placeholder) {
+.login-account__label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.login-account__name {
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.login-account__roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.login-account__actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.login-grant {
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 42%, var(--line-1));
+  background: color-mix(in srgb, var(--accent-2) 8%, transparent);
+}
+
+.login-grant__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.login-grant__desc {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.login-grant__entries {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.login-grant__entries-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.login-grant__contact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-grant__contact-text {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.login-form__item {
+  margin-bottom: 16px;
+}
+
+.login-form__submit {
+  margin-bottom: 8px;
+}
+
+.login-form__submit--standalone {
+  margin-top: 4px;
+}
+
+.login-form__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.login-notice {
+  margin: 0 0 14px;
+  font-size: 13px;
   color: var(--text-2);
 }
 
 .login-primary-btn {
-  border: 1px solid var(--line-1) !important;
-  background: var(--bg-1) !important;
-  color: var(--text-1) !important;
-  height: 44px !important;
-  border-radius: 12px !important;
-  box-shadow: none !important;
-  transform: none !important;
+  width: 100%;
+  height: 46px;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 12px;
 }
 
-.login-primary-btn:hover {
-  background: var(--bg-2) !important;
-  box-shadow: none !important;
+.login-advanced {
+  margin-bottom: 14px;
 }
 
-.login-secondary-btn {
-  border: 1px solid var(--line-1) !important;
-  border-radius: 999px !important;
-  color: var(--text-2) !important;
-  background: var(--bg-1) !important;
+.login-advanced__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
 }
 
-.login-secondary-btn:hover {
-  color: var(--text-1) !important;
-  background: var(--bg-2) !important;
+.login-advanced__toggle:hover {
+  color: var(--text-1);
+}
+
+.login-advanced__caret {
+  transition: transform 0.18s ease;
+}
+
+.login-advanced__caret.is-open {
+  transform: rotate(180deg);
+}
+
+.login-permissions {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line-1);
+  background: var(--bg-1);
+}
+
+.login-permissions__title {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.login-permissions__list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.login-permissions__item.is-on {
+  color: var(--text-1);
+}
+
+.login-switch {
+  margin-top: 12px;
+  text-align: center;
 }
 
 .login-footer {
-  margin-top: 14px !important;
+  margin-top: auto;
+  padding: 16px clamp(16px, 4vw, 48px) 28px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 24px;
 }
 
-.login-footer-desc,
-.login-footer-link,
-.login-footer-contact {
-  color: var(--text-2) !important;
+.login-footer__line {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.login-footer-link:hover {
-  color: var(--text-1) !important;
+.login-footer__link,
+.login-footer__contact {
+  font-size: 13px;
+  color: var(--text-2);
 }
 
-@keyframes hero-float {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) scale(1);
-    border-radius: 42% 58% 52% 48%;
-  }
-  50% {
-    transform: translate3d(-12px, 10px, 0) scale(1.04);
-    border-radius: 56% 44% 48% 52%;
-  }
+.login-footer__link:hover {
+  color: var(--text-1);
+  text-decoration: underline;
 }
 
-@keyframes hero-wave {
-  0%, 100% {
-    transform: translateX(0) scaleY(1);
-  }
-  50% {
-    transform: translateX(2%) scaleY(1.06);
-  }
+.login-footer__copy {
+  color: var(--text-2);
+  font-size: 13px;
 }
 
-body.dark-theme .login-page-v2 {
-  background:
-    radial-gradient(900px 520px at 20% 16%, var(--accent-1-soft), transparent 72%),
-    radial-gradient(860px 540px at 88% 84%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 74%),
-    linear-gradient(180deg, var(--bg-0), color-mix(in srgb, var(--bg-0) 90%, var(--bg-2)));
+.login-footer__copy:hover {
+  color: var(--text-1);
 }
 
-body.dark-theme .login-hero,
-.login-page.login-dark .login-hero {
-  background: color-mix(in srgb, var(--overlay-1) 84%, transparent);
-}
-
-body.dark-theme .login-card,
-.login-page.login-dark .login-card {
-  background: var(--overlay-1) !important;
-  border-color: var(--line-1) !important;
-}
-
-body.dark-theme .login-title,
-body.dark-theme .login-subtitle,
-body.dark-theme .login-footer-desc,
-body.dark-theme .login-footer-link,
-body.dark-theme .login-footer-contact {
-  color: var(--text-1) !important;
-}
-
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .login-shell {
-    display: flex;
-    justify-content: center;
-    padding: 12px 10px 6px;
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 560px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-topbar {
+    padding: 14px 14px 4px;
   }
 
-  .login-hero {
+  /* 窄屏收起按钮文案，只留图标，避免顶栏撑出水平滚动 */
+  .login-topbar__action-text {
     display: none;
   }
 
+  .login-shell {
+    padding: 8px 12px 20px;
+  }
+
   .login-card {
-    width: min(460px, 94vw);
-    padding: 20px 16px !important;
-    border-radius: 16px !important;
+    padding: 18px 16px;
   }
 
-  .login-title {
-    font-size: 22px;
+  .login-feature-card {
+    padding: 14px;
   }
 
-  .login-subtitle {
-    font-size: 13px;
+  .login-feature-card__desc {
+    white-space: normal;
   }
 }
 </style>

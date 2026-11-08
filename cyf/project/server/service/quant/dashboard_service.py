@@ -17,6 +17,8 @@ from service.quant.backtest_service import list_backtest_runs
 from service.quant.memory_service import list_memory_files
 from service.quant.ops_service import list_operation_records
 from service.quant.task_dispatch_service import list_tasks
+from service.quant.ownership import scope_by_owner
+from service.quant.strategy_service import visible_strategy_ids
 
 
 def _today_text() -> str:
@@ -90,27 +92,29 @@ def _build_risk_tips(tasks: list[dict], latest_signals: list[dict], operations: 
     return tips[:4]
 
 
-def get_dashboard_overview(created_by: Optional[str] = None) -> dict:
+def get_dashboard_overview(created_by: Optional[str] = None, *, owner_user_id=None, is_admin=False) -> dict:
     latest_trade_date = QuantDailyBar.select(fn.MAX(QuantDailyBar.trade_date)).scalar()
-    active_strategy_count = QuantStrategy.select().where(QuantStrategy.status == "active").count()
+    strategy_ids = visible_strategy_ids(owner_user_id, is_admin)
+    active_strategy_count = QuantStrategy.select().where(QuantStrategy.id.in_(strategy_ids), QuantStrategy.status == "active").count()
+    system_scope = is_admin or owner_user_id is None
     today = _today_text()
 
-    tasks = list_tasks(limit=8)
-    operations = list_operation_records(created_by=created_by, limit=8)
-    backtests = list_backtest_runs(limit=6)
+    tasks = list_tasks(limit=8) if system_scope else []
+    operations = list_operation_records(created_by=created_by, limit=8, owner_user_id=owner_user_id, is_admin=is_admin)
+    backtests = list_backtest_runs(limit=6, owner_user_id=owner_user_id, is_admin=is_admin)
     latest_runs = [
         item.to_dict()
-        for item in QuantStrategyRun.select().order_by(QuantStrategyRun.id.desc()).limit(6).iterator()
+        for item in QuantStrategyRun.select().where(QuantStrategyRun.strategy_id.in_(strategy_ids)).order_by(QuantStrategyRun.id.desc()).limit(6).iterator()
     ]
     recent_reports = [
         item.to_dict()
-        for item in QuantReportRecord.select().order_by(QuantReportRecord.id.desc()).limit(6).iterator()
+        for item in QuantReportRecord.select().where(QuantReportRecord.strategy_id.in_(strategy_ids)).order_by(QuantReportRecord.id.desc()).limit(6).iterator()
     ]
     latest_signals = [
         item.to_dict()
         for item in (
             QuantStrategySignal.select()
-            .where(QuantStrategySignal.passed == True)
+            .where(QuantStrategySignal.passed == True, QuantStrategySignal.strategy_id.in_(strategy_ids))
             .order_by(QuantStrategySignal.id.desc())
             .limit(8)
         ).iterator()
@@ -119,9 +123,9 @@ def get_dashboard_overview(created_by: Optional[str] = None) -> dict:
     today_operation_query = QuantOperationRecord.select().where(QuantOperationRecord.trade_date == date.fromisoformat(today))
     if created_by is not None:
         today_operation_query = today_operation_query.where(QuantOperationRecord.created_by == str(created_by).strip())
-    today_operations = today_operation_query.count()
-    success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success").count()
-    memory_files = list_memory_files(limit=6)
+    today_operations = scope_by_owner(today_operation_query, QuantOperationRecord, owner_user_id, is_admin).count()
+    success_backtests = QuantBacktestRun.select().where(QuantBacktestRun.status == "success", QuantBacktestRun.strategy_id.in_(strategy_ids)).count()
+    memory_files = list_memory_files(limit=6) if system_scope else []
 
     # 批量补 name / custom_name / display_name 三件套：一次 in_ 查询覆盖 signals / operations / memory
     all_symbols = (

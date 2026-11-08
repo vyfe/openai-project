@@ -92,6 +92,25 @@ def fake_run():
     return run
 
 
+@pytest.fixture(autouse=True)
+def system_strategy():
+    """owner 为空的系统策略：由服务进程执行，不受个人账号权限约束。"""
+    from datetime import datetime
+    from quant.entities import QuantStrategy
+    QuantStrategy.create(
+        id=10,
+        name="系统策略",
+        owner_user_id=None,
+        market="A_SHARE",
+        status="active",
+        description="",
+        symbols_json="[]",
+        rule_config_json="{}",
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+    )
+
+
 class TestExecuteAnalysisReportFeishuChain:
     """需求 1 链路通：execute_analysis_report 走完应当用 interactive 卡片推 final_markdown。"""
 

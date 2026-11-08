@@ -231,8 +231,8 @@ def send_channel_content(channel: dict, content: str, *, title: str = "量化推
     return send_feishu_text(channel, content)
 
 
-def render_position_summary_markdown(strategy_id: Optional[int] = None, created_by: str = "") -> str:
-    summary = list_position_summary(strategy_id=strategy_id, created_by=created_by or None)
+def render_position_summary_markdown(strategy_id: Optional[int] = None, created_by: str = "", *, owner_user_id=None) -> str:
+    summary = list_position_summary(strategy_id=strategy_id, created_by=created_by or None, owner_user_id=owner_user_id)
     title = f"策略 #{strategy_id} 持仓快照" if strategy_id else "持仓快照"
     lines = [
         f"# {title}",
@@ -254,6 +254,14 @@ def render_position_summary_markdown(strategy_id: Optional[int] = None, created_
 def send_report_to_channel(report_id: int, *, channel_id: Optional[int] = None) -> dict:
     report = QuantReportRecord.get_by_id(report_id).to_dict()
     channel = load_channel(channel_id=channel_id)
+    from service.quant.ownership import require_quant_user
+    from service.quant.channel_user_resolver import resolve_channel_user
+    from quant.entities import QuantStrategy
+    strategy = QuantStrategy.get_or_none(QuantStrategy.id == report.get("strategy_id"))
+    if strategy is not None and strategy.owner_user_id is not None:
+        target = resolve_channel_user(channel["channel_id"])
+        if not target or require_quant_user(target["username"]).id != strategy.owner_user_id:
+            raise ValueError("个人报告只能发送给仍有量化权限的所属账号")
     title = str(report.get("title") or "量化报告").strip() or "量化报告"
     try:
         result = send_channel_content(channel, report["final_markdown"], title=title)
@@ -283,7 +291,13 @@ def send_report_to_channel(report_id: int, *, channel_id: Optional[int] = None) 
 
 def send_position_summary_to_channel(*, channel_id: Optional[int] = None, strategy_id: Optional[int] = None) -> dict:
     channel = load_channel(channel_id=channel_id)
-    content = render_position_summary_markdown(strategy_id=strategy_id)
+    from service.quant.channel_user_resolver import resolve_channel_user
+    from service.quant.ownership import require_quant_user
+    target = resolve_channel_user(channel["channel_id"])
+    if not target:
+        raise ValueError("持仓摘要需要绑定个人通道")
+    owner = require_quant_user(target["username"])
+    content = render_position_summary_markdown(strategy_id=strategy_id, owner_user_id=owner.id)
     title = f"策略 #{strategy_id} 持仓快照" if strategy_id else "持仓快照"
     try:
         result = send_channel_content(channel, content, title=title)

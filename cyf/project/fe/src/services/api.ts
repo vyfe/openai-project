@@ -22,7 +22,9 @@ export const authAPI = {
       data.api_key = apiKey
     }
     return api.post('/never_guess_my_usage/register', data)
-  }
+  },
+  /** 当前账号快照（角色以服务端为准）。 */
+  me: () => api.get('/never_guess_my_usage/auth/me')
 }
 
 export const fileAPI = {

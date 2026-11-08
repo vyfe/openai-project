@@ -9,6 +9,7 @@ export type Voice = {
   status: 'active' | 'pending' | 'unknown'
 }
 export type VoiceAudio = {
+  has_audio?: boolean
   id: string; title: string; voice_id: string; model: string; speed: number
   volume: number; pitch: number; duration_seconds: number | null
   usage_characters: number | null; usage_voice_count: number; created_at: string; size: number

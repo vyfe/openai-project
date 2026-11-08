@@ -56,8 +56,23 @@ def success_response(data=None, msg=None):
     return {"success": True, "data": data, "msg": msg or "操作成功"}
 
 
-def error_response(msg):
-    return {"success": False, "msg": msg}
+def error_response(msg, error_type=None, **extra):
+    """统一 JSON 错误体。
+
+    ``error_type`` 使用稳定枚举，便于前端区分「未认证 / 权限不足 / 资源不存在 / 参数非法」。
+    """
+    body = {"success": False, "msg": msg}
+    if error_type:
+        body["error_type"] = error_type
+    body.update(extra)
+    return body
+
+
+# 稳定错误类型枚举
+ERROR_TYPE_UNAUTHENTICATED = "UNAUTHENTICATED"
+ERROR_TYPE_PERMISSION_DENIED = "PERMISSION_DENIED"
+ERROR_TYPE_RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
+ERROR_TYPE_VALIDATION_ERROR = "VALIDATION_ERROR"
 
 
 def parse_json_list(raw_value, default=None):

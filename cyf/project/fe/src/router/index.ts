@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import VersionService from '@/services/version'
 import { useAuthStore } from '@/stores/auth'
+import { appForPath, registerKnownPaths } from '@/auth/destination'
+import { syncCurrentRoles } from '@/auth/sync'
+import type { AppRole } from '@/auth/permissions'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -18,20 +21,20 @@ const router = createRouter({
       path: '/chat',
       name: 'Chat',
       component: () => import('@/views/Chat-New.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true, requiredRole: 'chat' }
     },
     {
       path: '/admin',
       name: 'Admin',
       component: () => import('@/views/Admin.vue'),
-      meta: { requiresAuth: true, requiresAdmin: true }
+      meta: { requiresAuth: true, requiredRole: 'admin' }
     },
     {
       path: '/studio',
       name: 'Studio',
       component: () => import('@/views/studio/StudioLayout.vue'),
       redirect: '/studio/voice',
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: { requiresAuth: true, requiredRole: 'sound' },
       children: [
         {
           path: 'voice',
@@ -50,7 +53,7 @@ const router = createRouter({
       name: 'Quant',
       component: () => import('@/views/quant/QuantLayout.vue'),
       redirect: '/quant/overview',
-      meta: { requiresAuth: true, requiresAdmin: true },
+      meta: { requiresAuth: true, requiredRole: 'quant' },
       children: [
         {
           path: 'overview',
@@ -88,70 +91,62 @@ const router = createRouter({
           component: () => import('@/views/quant/pages/QuantBacktestPage.vue')
         },
         {
+          // 以下子页本期保持管理员边界
           path: 'scheduler',
           name: 'QuantScheduler',
-          component: () => import('@/views/quant/pages/QuantSchedulerPage.vue')
+          component: () => import('@/views/quant/pages/QuantSchedulerPage.vue'),
+          meta: { requiredRole: 'admin' }
         },
         {
           path: 'ai-memory',
           name: 'QuantAiMemory',
-          component: () => import('@/views/quant/pages/QuantAiMemoryPage.vue')
+          component: () => import('@/views/quant/pages/QuantAiMemoryPage.vue'),
+          meta: { requiredRole: 'admin' }
         },
         {
           path: 'im-positions',
           name: 'QuantImPositions',
-          component: () => import('@/views/quant/pages/QuantImPositionsPage.vue')
+          component: () => import('@/views/quant/pages/QuantImPositionsPage.vue'),
+          meta: { requiredRole: 'admin' }
         }
       ]
     }
   ]
 })
 
-// 路由守卫
-router.beforeEach((to, from, next) => {
-  const user = localStorage.getItem('user')
-  const refreshToken = localStorage.getItem('refresh_token')
+registerKnownPaths(router.getRoutes().filter((route) => router.resolve(route.path).meta.requiresAuth).map((route) => ({
+  path: route.path, requiredRole: router.resolve(route.path).meta.requiredRole as AppRole
+})))
 
-  // 解析 role（存储的是 JSON 字符串）
-  let role = null
-  const roleStr = localStorage.getItem('role')
-  if (roleStr) {
-    try {
-      const parsedRole = JSON.parse(roleStr)
-      role = parsedRole.value
-    } catch (e) {
-      console.error('Failed to parse role from localStorage:', e)
-    }
-  }
+// 路由守卫：统一按 requiredRole 判定，不再各处硬编码管理员路径。
+router.beforeEach(async (to, _from, next) => {
+  VersionService.checkAndHandleVersionChange()
 
-  // 检查版本更新并处理缓存
-  VersionService.checkAndHandleVersionChange();
+  const authStore = useAuthStore()
+  const requiredRole = to.meta.requiredRole as AppRole | undefined
+  const authenticated = authStore.isAuthenticated()
 
-  // 检查admin权限
-  if (to.meta.requiresAdmin && role !== 'admin') {
-    next('/chat')
+  if (!to.meta.requiresAuth) {
+    next()
     return
   }
 
-  if (to.meta.requiresAuth && (!user || !refreshToken)) {
-    next('/login')
-  } else if (to.path === '/login' && user && refreshToken) {
-    next('/chat')
-  } else {
-    next()
+  if (!authenticated) {
+    next({ path: '/login', query: { redirect: to.fullPath } })
+    return
   }
-})
 
-
-// 量化工作台路由守卫：普通用户不能访问管理页面
-router.beforeEach((to, _from, next) => {
-  const adminOnlyPaths = ['/quant/strategy', '/quant/backtest', '/quant/scheduler']
-  if (adminOnlyPaths.some(p => to.path.startsWith(p))) {
-    const authStore = useAuthStore()
-    if (!authStore.isAdmin()) {
-      return next('/quant/overview')
-    }
+  if (!await syncCurrentRoles()) {
+    next({ path: '/login', query: { redirect: to.fullPath, authError: '1' } })
+    return
   }
+
+  if (requiredRole && !authStore.hasRole(requiredRole)) {
+    // 权限不足：回到入口页展示权限引导，不重放原业务操作。
+    next({ path: '/login', query: { app: appForPath(to.path), denied: '1', required: requiredRole } })
+    return
+  }
+
   next()
 })
 

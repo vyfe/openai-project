@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional
 
-from peewee import fn
+from peewee import DoesNotExist, fn
 
 from quant.db import quant_db
 
@@ -19,6 +19,11 @@ from quant.entities import (
 )
 from service.quant.common import normalize_symbol, parse_trade_date
 from service.quant.indicator_service import compute_indicators
+from service.quant.ownership import (
+    ResourceNotFoundError,
+    assert_owned,
+    scope_by_owner,
+)
 from service.quant.rule_engine import (
     INDICATOR_RULE_TYPES,
     evaluate_series,
@@ -49,20 +54,40 @@ def _normalize_rule_config(rule_config) -> Dict:
     raise ValueError("rule_config 格式不正确")
 
 
-def list_strategies(status: Optional[str] = None) -> List[dict]:
+def list_strategies(status: Optional[str] = None, owner_user_id: Optional[int] = None, is_admin: bool = False) -> List[dict]:
     query = QuantStrategy.select().order_by(QuantStrategy.id.desc())
     if status:
         query = query.where(QuantStrategy.status == status)
+    else:
+        query = query.where(QuantStrategy.status != "archived")
+    query = scope_by_owner(query, QuantStrategy, owner_user_id, is_admin)
     return [item.to_dict() for item in query.iterator()]
 
 
-def get_strategy(strategy_id: int) -> dict:
-    return QuantStrategy.get_by_id(strategy_id).to_dict()
+def get_visible_strategy(strategy_id: int, owner_user_id: Optional[int] = None, is_admin: bool = False) -> QuantStrategy:
+    """按归属取策略；不可见时按「不存在」处理。"""
+    try:
+        strategy = QuantStrategy.get_by_id(strategy_id)
+    except DoesNotExist as exc:
+        raise ResourceNotFoundError("策略不存在") from exc
+    return assert_owned(strategy, owner_user_id, is_admin, "策略")
 
 
-def create_strategy(name: str, description: str = "", symbols=None, rule_config=None, status: str = "active") -> dict:
+def get_strategy(strategy_id: int, owner_user_id: Optional[int] = None, is_admin: bool = False) -> dict:
+    return get_visible_strategy(strategy_id, owner_user_id, is_admin).to_dict()
+
+
+def create_strategy(
+    name: str,
+    description: str = "",
+    symbols=None,
+    rule_config=None,
+    status: str = "active",
+    owner_user_id: Optional[int] = None,
+) -> dict:
     strategy = QuantStrategy.create(
         name=name.strip(),
+        owner_user_id=owner_user_id,
         description=description or "",
         market="A_SHARE",
         status=status or "active",
@@ -74,8 +99,8 @@ def create_strategy(name: str, description: str = "", symbols=None, rule_config=
     return strategy.to_dict()
 
 
-def update_strategy(strategy_id: int, **updates) -> dict:
-    strategy = QuantStrategy.get_by_id(strategy_id)
+def update_strategy(strategy_id: int, owner_user_id: Optional[int] = None, is_admin: bool = False, **updates) -> dict:
+    strategy = get_visible_strategy(strategy_id, owner_user_id, is_admin)
     if "name" in updates:
         strategy.name = str(updates["name"]).strip()
     if "description" in updates:
@@ -91,14 +116,11 @@ def update_strategy(strategy_id: int, **updates) -> dict:
     return strategy.to_dict()
 
 
-def delete_strategy(strategy_id: int) -> bool:
-    strategy = QuantStrategy.get_by_id(strategy_id)
-    run_ids = [item.id for item in QuantStrategyRun.select(QuantStrategyRun.id).where(QuantStrategyRun.strategy_id == strategy_id)]
-    with quant_db.atomic():
-        if run_ids:
-            QuantStrategySignal.delete().where(QuantStrategySignal.run_id.in_(run_ids)).execute()
-        QuantStrategyRun.delete().where(QuantStrategyRun.strategy_id == strategy_id).execute()
-        strategy.delete_instance()
+def delete_strategy(strategy_id: int, owner_user_id: Optional[int] = None, is_admin: bool = False) -> bool:
+    strategy = get_visible_strategy(strategy_id, owner_user_id, is_admin)
+    strategy.status = "archived"
+    strategy.updated_at = datetime.now()
+    strategy.save()
     return True
 
 
@@ -167,8 +189,14 @@ def _build_indicator_context(history: List[QuantDailyBar], rule_config: Dict) ->
     return compute_indicators(asc_history, indicator_names=names or None)
 
 
-def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_signals: bool = True) -> dict:
-    strategy = QuantStrategy.get_by_id(strategy_id)
+def run_strategy(
+    strategy_id: int,
+    trade_date: Optional[str] = None,
+    save_all_signals: bool = True,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> dict:
+    strategy = get_visible_strategy(strategy_id, owner_user_id, is_admin)
     if strategy.status != "active":
         raise ValueError("策略未启用")
 
@@ -248,10 +276,17 @@ def run_strategy(strategy_id: int, trade_date: Optional[str] = None, save_all_si
         raise
 
 
-def list_strategy_runs(strategy_id: Optional[int] = None, limit: int = 50) -> List[dict]:
+def list_strategy_runs(
+    strategy_id: Optional[int] = None,
+    limit: int = 50,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
+) -> List[dict]:
+    """Run 继承策略归属：只返回当前用户可见策略下的执行记录。"""
     query = QuantStrategyRun.select()
     if strategy_id:
         query = query.where(QuantStrategyRun.strategy_id == strategy_id)
+    query = query.where(QuantStrategyRun.strategy_id.in_(visible_strategy_ids(owner_user_id, is_admin)))
     query = query.order_by(QuantStrategyRun.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
 
@@ -261,7 +296,10 @@ def list_strategy_signals(
     run_id: Optional[int] = None,
     passed_only: bool = False,
     limit: int = 200,
+    owner_user_id: Optional[int] = None,
+    is_admin: bool = False,
 ) -> List[dict]:
+    """Signal 继承策略归属。"""
     query = QuantStrategySignal.select()
     if strategy_id:
         query = query.where(QuantStrategySignal.strategy_id == strategy_id)
@@ -269,8 +307,16 @@ def list_strategy_signals(
         query = query.where(QuantStrategySignal.run_id == run_id)
     if passed_only:
         query = query.where(QuantStrategySignal.passed == True)
+    query = query.where(QuantStrategySignal.strategy_id.in_(visible_strategy_ids(owner_user_id, is_admin)))
     query = query.order_by(QuantStrategySignal.id.desc()).limit(limit)
     return [item.to_dict() for item in query.iterator()]
+
+
+def visible_strategy_ids(owner_user_id: Optional[int] = None, is_admin: bool = False):
+    """当前用户可见的策略 ID 列表（用于子资源继承归属）。"""
+    query = QuantStrategy.select(QuantStrategy.id)
+    query = scope_by_owner(query, QuantStrategy, owner_user_id, is_admin)
+    return query
 
 
 def list_available_symbols(limit: int = 500, offset: int = 0, keyword: Optional[str] = None) -> List[dict]:

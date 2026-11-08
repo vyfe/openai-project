@@ -76,6 +76,17 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
         except Exception:
             user_info = None
 
+        from quant.entities import QuantStrategy
+        from service.quant.ownership import require_quant_user
+        strategy = QuantStrategy.get_or_none(QuantStrategy.id == report.get("strategy_id"))
+        try:
+            target_user = require_quant_user(user_info["username"]) if user_info else None
+        except ValueError:
+            results.append({"channel_id": cid, "skipped": "账号权限已撤销"})
+            continue
+        if strategy is not None and strategy.owner_user_id is not None and (target_user is None or target_user.id != strategy.owner_user_id):
+            results.append({"channel_id": cid, "skipped": "报告归属不匹配"})
+            continue
         if not user_info:
             # 群聊 / 无绑定用户：推全量报告（保持现有行为）
             try:
@@ -100,7 +111,7 @@ def push_report_filtered_per_channel(channel_ids: list[int], report_id: int) -> 
 
         # 拿用户持仓 symbol 集合
         try:
-            positions = list_position_summary(created_by=user_info["username"])
+            positions = list_position_summary(owner_user_id=target_user.id)
         except Exception as exc:
             results.append({
                 "channel_id": cid,

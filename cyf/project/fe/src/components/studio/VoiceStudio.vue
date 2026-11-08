@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useStudioPage } from '@/composables/useStudioPage'
@@ -18,7 +19,8 @@ const reader = ref<InstanceType<typeof VoiceReader>>()
 const player = ref<HTMLAudioElement>()
 const types = { system: '系统音色', voice_cloning: '录音复刻', voice_generation: '文字设计' }
 const statusLabels = { active: '可使用', pending: '待首次合成', unknown: '创建结果待确认' }
-const tabs = [{ id: 'library', name: '音色库' }, { id: 'clone', name: '复刻我的音色' }, { id: 'reader', name: '语音合成' }, { id: 'history', name: '合成记录' }, { id: 'settings', name: '连接配置' }]
+const isAdmin = computed(() => useAuthStore().isAdmin())
+const tabs = computed(() => [{ id: 'library', name: '音色库' }, { id: 'clone', name: '复刻我的音色' }, { id: 'reader', name: '语音合成' }, { id: 'history', name: '合成记录' }, { id: 'settings', name: '连接配置' }].filter(item => isAdmin.value || item.id !== 'settings'))
 const visibleVoices = computed(() => {
   const search = keyword.value.toLocaleLowerCase().trim()
   return (state.value?.voices || []).filter(v =>
@@ -49,7 +51,7 @@ const { busy, failure, playing, playerUrl, action, prepareAudio, download, copyL
 async function load() {
   const previousRegion = state.value?.config.region
   state.value = await voiceAPI.state()
-  keepalive.value = await voiceAPI.keepalive()
+  keepalive.value = isAdmin.value ? await voiceAPI.keepalive() : null
   if (playing.value && !state.value.history.some(row => row.id === playing.value?.id)) page.clearPlayer()
   if (!selectedVoice.value || previousRegion !== state.value.config.region || !state.value.voices.some(v => v.voice_id === selectedVoice.value)) {
     selectedVoice.value = state.value.default_voice_id || state.value.voices.find(v => v.voice_type !== 'system')?.voice_id || ''
@@ -61,7 +63,7 @@ async function sync() {
 }
 async function saveKeepalive(data: KeepaliveInput) {
   const result = await action('keepalive', () => voiceAPI.saveKeepalive(data), true, '保活设置已保存')
-  if (result !== undefined) keepalive.value = await voiceAPI.keepalive()
+  if (result !== undefined) keepalive.value = isAdmin.value ? await voiceAPI.keepalive() : null
 }
 async function runKeepalive() {
   const result = await action('keepalive', () => voiceAPI.runKeepalive(), true, '保活执行完成')
@@ -69,7 +71,7 @@ async function runKeepalive() {
     const failed = result.results.filter(row => !row.ok)
     if (failed.length) ElMessage.warning(`${result.attempted} 个待保活音色中 ${failed.length} 个失败：${failed[0].error || '未知错误'}`)
     else if (result.attempted) ElMessage.success(`已激活 ${result.attempted} 个到期音色`)
-    keepalive.value = await voiceAPI.keepalive()
+    keepalive.value = isAdmin.value ? await voiceAPI.keepalive() : null
   }
 }
 async function create(data: FormData) {
@@ -116,37 +118,37 @@ onMounted(() => action('load', load))
         <svg viewBox="0 0 72 72" class="studio-emblem" aria-hidden="true"><rect x="1" y="1" width="70" height="70" rx="20" fill="currentColor" opacity=".08" /><path d="M45 14a17 17 0 1 0 13 28A19 19 0 0 1 45 14Z" fill="currentColor" opacity=".85" /><path d="M12 49c9-7 18 7 28 0s16-5 20-2M13 57c9-7 18 7 28 0s16-5 20-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
         <div><span class="studio-eyebrow">MiniMax · 声音工坊</span><h2>声音工坊</h2><p>收藏熟悉的声音，让每一段内容都有温度。</p></div>
       </div>
-      <div class="studio-connection"><span :class="['studio-dot', { ready: state?.config.clone_ready }]" />{{ state?.config.clone_ready ? `复刻 ${state.config.clone_dedicated ? '计费密钥' : '同密钥'} · 合成 ${keyKind}` : '等待配置密钥' }}</div>
+      <div class="studio-connection"><span :class="['studio-dot', { ready: state?.config.clone_ready }]" />{{ !isAdmin ? (state?.config.ready ? '语音服务已就绪' : '服务暂不可用，请联系管理员') : state?.config.clone_ready ? `复刻 ${state.config.clone_dedicated ? '计费密钥' : '同密钥'} · 合成 ${keyKind}` : '等待配置密钥' }}</div>
     </header>
     <nav class="studio-tabs" aria-label="声音工坊功能"><button v-for="item in tabs" :key="item.id" :class="{ active: tab === item.id }" :aria-current="tab === item.id ? 'page' : undefined" @click="tab = item.id">{{ item.name }}<span v-if="item.id === 'library' && customCount">{{ customCount }}</span></button></nav>
     <div v-if="failure" class="studio-error" role="alert">{{ failure }}</div>
     <div v-if="busy" class="studio-progress" role="status">{{ busy === 'clone' ? '正在上传并复刻录音，请保持页面打开…' : busy === 'synthesize' ? '正在生成语音，请等待完成；请勿重复提交…' : '正在处理…' }}</div>
     <template v-if="state">
-      <div v-if="!state.config.clone_ready && tab !== 'settings'" class="studio-info">先在后端配置 MiniMax 密钥，再开始管理音色。<button class="studio-link" @click="tab = 'settings'">查看配置方法 →</button></div>
-      <div v-if="state.config.clone_ready && !state.config.ready && tab !== 'settings'" class="studio-info">复刻凭据已就绪，但语音合成密钥未配置，合成功能暂不可用。<button class="studio-link" @click="tab = 'settings'">查看配置方法 →</button></div>
+      <div v-if="isAdmin && !state.config.clone_ready && tab !== 'settings'" class="studio-info">先在后端配置 MiniMax 密钥，再开始管理音色。<button class="studio-link" @click="tab = 'settings'">查看配置方法 →</button></div>
+      <div v-if="isAdmin && state.config.clone_ready && !state.config.ready && tab !== 'settings'" class="studio-info">复刻凭据已就绪，但语音合成密钥未配置，合成功能暂不可用。<button class="studio-link" @click="tab = 'settings'">查看配置方法 →</button></div>
       <section v-show="tab === 'library'" class="studio-card">
-        <div class="studio-section-title"><div><h3>我的音色库</h3><p>录音复刻与文字设计的音色集中保存在这里。</p></div><div class="studio-actions"><button class="studio-button" :disabled="!!busy || !state.config.clone_ready" @click="sync">同步云端音色</button><button class="studio-button primary" @click="tab = 'clone'">＋ 复刻我的音色</button></div></div>
-        <VoiceKeepalive :status="keepalive" :busy="!!busy" @save="saveKeepalive" @run="runKeepalive" />
+        <div class="studio-section-title"><div><h3>我的音色库</h3><p>录音复刻与文字设计的音色集中保存在这里。</p></div><div class="studio-actions"><button v-if="isAdmin" class="studio-button" :disabled="!!busy || !state.config.clone_ready" @click="sync">同步云端音色</button><button class="studio-button primary" @click="tab = 'clone'">＋ 复刻我的音色</button></div></div>
+        <VoiceKeepalive v-if="isAdmin" :status="keepalive" :busy="!!busy" @save="saveKeepalive" @run="runKeepalive" />
         <div class="studio-filters"><input v-model="keyword" type="search" aria-label="搜索音色" placeholder="搜索名称、ID 或声音描述" /><select v-model="filter" aria-label="音色类型"><option value="custom">我的自定义音色</option><option value="system">系统音色</option><option value="all">全部音色</option></select><span class="studio-note">{{ visibleVoices.length }} 个音色</span></div>
         <div v-if="!visibleVoices.length" class="studio-empty"><span class="studio-empty-glyph" aria-hidden="true">∿</span><h4>{{ keyword ? '没有匹配的音色' : '在这里，留下你的声音' }}</h4><p>{{ keyword ? '换个关键词，或切换音色类型。' : '上传一段录音创建音色；已有音色可通过“同步云端音色”载入。' }}</p><button v-if="!keyword" class="studio-button" @click="tab = 'clone'">创建第一个音色</button></div>
         <div v-else class="studio-grid"><article v-for="voice in visibleVoices" :key="voice.voice_id" class="studio-tile" :class="{ 'is-default': voice.voice_id === state.default_voice_id }">
           <div class="studio-tile-top"><span class="studio-wave" aria-hidden="true">▂ ▅ ▇ ▃ ▆ ▂</span><span class="studio-badge">{{ types[voice.voice_type] }}</span></div>
-          <h4>{{ voice.alias }}</h4><code>{{ voice.voice_id }}</code><p class="studio-tile-description">{{ voice.description || '已保存在你的 MiniMax 账户中' }}</p>
+          <h4>{{ voice.alias }}</h4><code>{{ voice.voice_id }}</code><p class="studio-tile-description">{{ voice.description || '已保存的音色' }}</p>
           <div class="studio-tile-status"><span :class="['studio-status', { pending: voice.status !== 'active' }]">{{ statusLabels[voice.status] }}</span><span v-if="voice.voice_id === state.default_voice_id" class="studio-default">默认音色</span><span v-if="keepaliveText(voice.voice_id)" :class="['studio-keepalive-badge', { urgent: (keepaliveMap.get(voice.voice_id)?.days_left ?? 99) <= 1 }]">{{ keepaliveText(voice.voice_id) }}</span></div>
           <p v-if="voice.status === 'pending'" class="studio-note">创建于 {{ date(voice.created_time) }}；请在 7 天内合成一次。</p>
-          <div class="studio-tile-actions"><button class="studio-button" :disabled="!!busy" @click="useVoice(voice)">试听 / 朗读</button><button class="studio-link" :disabled="!!busy || voice.voice_id === state.default_voice_id" @click="makeDefault(voice)">设为默认</button><button class="studio-link" :disabled="!!busy" @click="rename(voice)">改名</button><button v-if="voice.voice_type !== 'system'" class="studio-link danger" :disabled="!!busy" @click="remove(voice)">删除</button></div>
+          <div class="studio-tile-actions"><button class="studio-button" :disabled="!!busy" @click="useVoice(voice)">试听 / 朗读</button><button class="studio-link" :disabled="!!busy || voice.voice_id === state.default_voice_id" @click="makeDefault(voice)">设为默认</button><button v-if="isAdmin || voice.voice_type !== 'system'" class="studio-link" :disabled="!!busy" @click="rename(voice)">改名</button><button v-if="voice.voice_type !== 'system'" class="studio-link danger" :disabled="!!busy" @click="remove(voice)">删除</button></div>
         </article></div>
-        <footer class="studio-card-footer"><span>最近同步：{{ date(state.last_sync) }}</span><button class="studio-link" :disabled="!!busy || !state.default_voice_id" @click="exportProfile">导出默认音色配置 ↗</button></footer>
+        <footer v-if="isAdmin" class="studio-card-footer"><span>最近同步：{{ date(state.last_sync) }}</span><button class="studio-link" :disabled="!!busy || !state.default_voice_id" @click="exportProfile">导出默认音色配置 ↗</button></footer>
       </section>
       <VoiceCloneForm v-show="tab === 'clone'" :busy="!!busy" :ready="state.config.clone_ready" @create="create" />
       <VoiceReader ref="reader" v-show="tab === 'reader'" :state="state" :selected-voice="selectedVoice" :busy="!!busy" @select="selectedVoice = $event" @synthesize="synthesize" />
       <section v-show="tab === 'history'" class="studio-card">
-        <div class="studio-section-title"><div><h3>合成记录</h3><p>正文与音频链接存入 SQLite；临时链接有效期为 24 小时，本地备份可长期下载。</p></div><span class="studio-badge">最近 {{ state.history.length }} 条</span></div>
+        <div class="studio-section-title"><div><h3>合成记录</h3><p>正文和音频保存在这里，本地备份可长期下载。</p></div><span class="studio-badge">最近 {{ state.history.length }} 条</span></div>
         <div v-if="!state.history.length" class="studio-empty"><h4>还没有合成记录</h4><p>提交合成后，这里会保存音频、时长和所用音色。</p><button class="studio-button" @click="tab = 'reader'">去生成语音</button></div>
-        <article v-for="row in state.history" :key="row.id" class="studio-history-row"><div><h4>{{ row.title }}</h4><p>{{ date(row.created_at) }} · {{ row.voice_id }}</p><small>{{ row.model }} · {{ row.speed }} 倍速 · 计费字符 {{ row.usage_characters ?? '未返回' }}</small><p v-if="row.audio_url" :class="{ 'studio-expired': row.url_expired }">链接{{ row.url_expired ? '已过期' : `有效至 ${date(row.url_expires_at)}` }} · {{ row.status === 'ready' ? '本地 MP3 已保存' : '本地备份待下载' }}</p><p v-if="row.error_message" class="studio-record-error">{{ row.error_message }}</p><small v-if="row.status === 'generating'">生成请求已提交；若服务重启前未返回，请先检查云端结果。</small></div><strong>{{ formatDuration(row.duration_seconds) }}</strong><div class="studio-actions"><button v-if="row.audio_url" class="studio-button" :disabled="!!busy || (row.url_expired && row.status !== 'ready')" @click="action('audio', () => prepareAudio(row, true), true)">播放</button><button v-if="row.audio_url" class="studio-link" :disabled="!!busy || (row.url_expired && row.status !== 'ready')" @click="download(row, 'mp3')">MP3 ↓</button><button class="studio-link" :disabled="!!busy" @click="download(row, 'txt')">正文 ↓</button><button class="studio-link" :disabled="!!busy" @click="reuseText(row)">载入正文</button><button v-if="row.audio_url" class="studio-link" :disabled="!!busy" @click="copyLink(row)">复制音频链接</button></div></article>
+        <article v-for="row in state.history" :key="row.id" class="studio-history-row"><div><h4>{{ row.title }}</h4><p>{{ date(row.created_at) }} · {{ row.voice_id }}</p><small>{{ row.model }} · {{ row.speed }} 倍速 · 计费字符 {{ row.usage_characters ?? '未返回' }}</small><p v-if="row.audio_url" :class="{ 'studio-expired': row.url_expired }">链接{{ row.url_expired ? '已过期' : `有效至 ${date(row.url_expires_at)}` }} · {{ row.status === 'ready' ? '本地 MP3 已保存' : '本地备份待下载' }}</p><p v-if="row.error_message" class="studio-record-error">{{ row.error_message }}</p><small v-if="row.status === 'generating'">生成请求已提交；若服务重启前未返回，请先检查云端结果。</small></div><strong>{{ formatDuration(row.duration_seconds) }}</strong><div class="studio-actions"><button v-if="row.has_audio || row.audio_url" class="studio-button" :disabled="!!busy || (row.url_expired && row.status !== 'ready')" @click="action('audio', () => prepareAudio(row, true), true)">播放</button><button v-if="row.has_audio || row.audio_url" class="studio-link" :disabled="!!busy || (row.url_expired && row.status !== 'ready')" @click="download(row, 'mp3')">MP3 ↓</button><button class="studio-link" :disabled="!!busy" @click="download(row, 'txt')">正文 ↓</button><button class="studio-link" :disabled="!!busy" @click="reuseText(row)">载入正文</button><button v-if="isAdmin && row.audio_url" class="studio-link" :disabled="!!busy" @click="copyLink(row)">复制音频链接</button></div></article>
       </section>
-      <section v-show="tab === 'settings'" class="studio-card studio-settings">
-        <div class="studio-section-title"><div><h3>连接 MiniMax</h3><p>复刻与合成可能用两把不同的密钥；密钥只由后端读取，页面不会返回或保存密钥。</p></div><button class="studio-button" :disabled="!!busy || !state.config.clone_ready" @click="sync">检测连接并同步</button></div>
+      <section v-if="isAdmin" v-show="tab === 'settings'" class="studio-card studio-settings">
+        <div class="studio-section-title"><div><h3>连接 MiniMax</h3><p>复刻与合成可能用两把不同的密钥；密钥只由后端读取，页面不会返回或保存密钥。</p></div><button v-if="isAdmin" class="studio-button" :disabled="!!busy || !state.config.clone_ready" @click="sync">检测连接并同步</button></div>
         <dl><dt>当前配置文件</dt><dd><code>{{ state.config.config_path || '由测试环境提供' }}</code></dd><dt>复刻凭据</dt><dd>{{ state.config.clone_dedicated ? '独立计费密钥（[minimax_music]）' : '与合成共用同一密钥' }} · {{ state.config.clone_region === 'cn' ? '中国站' : '国际站' }} · {{ state.config.clone_base_url }} · {{ state.config.clone_ready ? '已配置' : '未配置' }}</dd><dt>合成凭据</dt><dd>{{ state.config.region === 'cn' ? '中国站' : '国际站' }} · {{ state.config.base_url }} · {{ state.config.ready ? '已配置' : '未配置' }}</dd><dt>密钥类型标记</dt><dd>{{ keyKind }}（仅作记录，实际权限由 MiniMax 返回）</dd><dt>本地音频目录</dt><dd><code>{{ state.config.storage_dir }}</code></dd></dl>
         <h4>在当前配置文件末尾加入</h4><pre>[minimax]
 api_key=&lt;填入你的 MiniMax API Key&gt;

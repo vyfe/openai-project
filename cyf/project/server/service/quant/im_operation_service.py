@@ -292,12 +292,16 @@ def _require_bound_user(parsed: dict) -> str:
     username = get_username_by_feishu(sender_id) if sender_id else None
     if not username:
         raise ValueError("当前飞书账号尚未绑定慧聊用户，请私聊机器人发送 /bind 用户名 密码 完成绑定")
+    from service.quant.ownership import require_quant_user
+    require_quant_user(username)
     return username
 
 
 def _operation_from_payload(payload: dict, *, username: str) -> dict:
     """将解析结果转换为 create_operation_record 接受的字段并入库。"""
     op = dict(payload)
+    from service.quant.ownership import require_quant_user
+    op["owner_user_id"] = require_quant_user(username).id
     op["created_by"] = username
     return create_operation_record(**op)
 
@@ -351,7 +355,8 @@ def _format_history(records: list[dict], query: dict) -> str:
 def _history_command(text: str, parsed: dict) -> tuple[str, str]:
     username = _require_bound_user(parsed)
     query = _parse_history_query(text)
-    records = list_operation_records(created_by=username, **query)
+    from service.quant.ownership import require_quant_user
+    records = list_operation_records(owner_user_id=require_quant_user(username).id, **query)
     return "operation_history", _format_history(records, query)
 
 
@@ -414,6 +419,8 @@ def handle_operation_command(text: str, parsed: dict, event_record_id: int) -> O
         try:
             username = _require_bound_user(parsed)
             payload = _parse_position_payload(command_text)
+            from service.quant.ownership import require_quant_user
+            payload["owner_user_id"] = require_quant_user(username).id
             payload["created_by"] = username
             operation = _operation_from_payload(payload, username=username)
             return "operation_created", _render_operation_created(operation)

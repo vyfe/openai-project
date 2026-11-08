@@ -113,15 +113,20 @@
         </el-table-column>
       </el-table>
     </section>
+    <el-dialog v-model="reportVisible" title="策略报告" width="min(900px, 94vw)">
+      <pre style="white-space: pre-wrap">{{ reportText }}</pre>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { RefreshRight, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 
+const reportText = ref('')
+const reportVisible = ref(false)
 const router = useRouter()
 const workbench = useQuantWorkbench()
 
@@ -132,7 +137,10 @@ const openOperationFromSignal = (signal: any) => {
 
 const generateReportAndOpenAiMemory = async () => {
   const report = await workbench.generateReportFromRun()
-  if (report?.id) router.push('/quant/ai-memory')
+  if (report?.id) {
+    reportText.value = report.final_markdown || ''
+    reportVisible.value = true
+  }
 }
 
 // 下拉选择 run：用 computed proxy 绑 workbench.selectedRunId，

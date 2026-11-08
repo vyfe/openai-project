@@ -1,14 +1,6 @@
 <template>
   <div class="studio-page min-h-screen" :class="{ dark: isDarkTheme, 'studio-dark': isDarkTheme }">
-    <AppHeader :title="t('chat.studioWorkbench')" :logo-icon="Headset" variant="studio">
-      <template #left>
-        <button class="app-back-btn" @click="goBack" aria-label="返回聊天" title="返回聊天">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </button>
-      </template>
-    </AppHeader>
+    <AppHeader :title="t('chat.studioWorkbench')" :logo-icon="Headset" variant="studio" />
 
     <div class="studio-shell">
       <div class="studio-workspace">
@@ -41,7 +33,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { Headset, Microphone } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useThemeManager } from '@/composables/useThemeManager'
@@ -50,15 +42,12 @@ import '@/styles/studio.css'
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
 const { isDarkTheme, initThemeManager } = useThemeManager()
 
 const navItems = [
   { label: '音色与语音', to: '/studio/voice', icon: Microphone },
   { label: '音乐创作', to: '/studio/music', icon: Headset }
 ]
-
-const goBack = () => router.push('/chat')
 
 onMounted(() => initThemeManager())
 </script>

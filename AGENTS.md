@@ -429,6 +429,72 @@ HTTP ──► routes/  (Flask Blueprint)
 ```
 
 调用方：`chat_service.run_chat_completion`、`handoff_service.run_handoff`、`claude_service.run_claude_chat_completion` 等在捕获 `APIError/AuthenticationError/RateLimitError` 后统一转发到 `handle_api_exception`，附带 `user / model / dialog_content / url_index` 用于日志与黑名单。
+### 3.7 认证与授权（复合角色模型）
+
+> **项目原则**。授权的唯一来源是平台库 `user_role` 表；`User.role` 与 token 内嵌的旧角色只是兼容投影，**永远不能**恢复已撤销的权限。设计依据见 `doc/huiliao-login-permissions-development-plan.md`。
+
+#### 3.7.1 角色语义
+
+| 存储角色 | 用户标签 | 生效范围 |
+| --- | --- | --- |
+| `chat` | 聊天用户 | 聊天能力及本人对话数据 |
+| `quant` | 量化用户 | 量化业务能力、共享行情只读及本人研究数据 |
+| `sound` | 声音用户 | 音色、语音、音乐业务及本人作品 |
+| `admin` | 管理员 | 全部业务能力、全部资源及平台管理 |
+
+- 普通账号可自由组合三种业务角色；管理员规范化为 `["admin"]`，业务角色不能推导出管理员身份。
+- 新注册账号固定只授予 `["chat"]`；注册请求携带 `role` / `roles` 直接 400，不创建越权账号。
+- 角色集合顺序固定为 `chat, quant, sound`（管理员单独）。
+
+#### 3.7.2 服务端落点
+
+| 位置 | 职责 |
+| --- | --- |
+| `service/permission_service.py` | 角色规范化、有效权限换算、模块/管理员检查、请求上下文（`AuthContext`） |
+| `service/auth_service.py` | `require_auth` / `require_module_auth(role)` / `require_admin_auth` 装饰器、token 签发与刷新 |
+| `model/repositories/user_repository.py` | `user_role` 读写、批量角色查询、原子替换角色 |
+| `service/quant/ownership.py` | 量化资源归属策略（`owner_user_id`）、关联资源一致性校验 |
+| `service/platform_migration.py` | 平台权限迁移版本检查与旧角色回填 |
+| `tools/platform_permissions_migrate.py` | 平台库显式迁移工具（dry-run / soft / hard） |
+| `tools/quant_db_migrate.py` | 量化库归属迁移（`--change-name user_ownership`） |
+
+#### 3.7.3 错误协议
+
+| 状态码 | 语义 | `error_type` |
+| --- | --- | --- |
+| 401 | 凭据缺失 / 失效 / 账号停用或软删除 | `UNAUTHENTICATED` |
+| 403 | 已认证但缺少模块或操作权限（可附 `required_role`） | `PERMISSION_DENIED` |
+| 404 | 资源不存在，或跨用户私有资源（统一按不存在处理） | `RESOURCE_NOT_FOUND` |
+| 400 | 参数非法（含未知 / 空角色、与兼容 role 矛盾） | `VALIDATION_ERROR` |
+
+- 显式携带无效 bearer 时返回 401，**不**回退到请求体里的另一账号身份。
+- 跨用户私有资源统一返回 404，避免暴露资源存在性。
+- 撤权后旧 access 仍可认证但不再有权限；refresh 不会恢复已撤销的角色。
+
+#### 3.7.4 资源归属
+
+- 量化库用普通整数 `owner_user_id` 引用平台用户 `User.id`（两库之间不声明跨库外键）。
+- `QuantStrategy` / `QuantOperationRecord` / `QuantPositionJournal` / `VoiceReading` / `MusicTrack` 带 `owner_user_id`；Run / Signal / Backtest / Report 继承策略归属。
+- 自定义音色归属记在 `voice_asset_ownership`（唯一 `(scope, voice_id)`）；系统音色共享。
+- 归属缺失的历史记录默认**仅管理员**可见和操作；普通用户不能把他人的资源链接到自己的记录。
+- 策略名唯一约束为 `(owner_user_id, name)`，空 owner 另有独立 name 唯一索引。
+
+#### 3.7.5 迁移与启动
+
+- 存量库必须**显式**执行迁移工具后再启动；启动只校验迁移版本，缺失即阻止业务启动：
+
+  ```bash
+  # 平台库（先备份再写）
+  .venv/bin/python tools/platform_permissions_migrate.py --db <平台库绝对路径> --mode soft \
+      --output ddl/2026-11-08_platform_permissions.sql
+  # 量化库（补 owner 列 + 重建策略唯一约束）
+  .venv/bin/python tools/quant_db_migrate.py --db <量化库绝对路径> --mode soft \
+      --change-name user_ownership --output ddl/2026-11-08_user_ownership.sql
+  ```
+
+- 回填与「完成标记」同事务；重复执行 / 重启不会补回已撤销的权限。
+- 接口授权清单见 `doc/huiliao-permission-route-matrix.md`（由 `tools/gen_permission_matrix.py` 生成）；路由新增或变更必须同步更新清单与测试。
+
 ## 4. 前端详解
 
 ### 4.1 路由
@@ -463,8 +529,12 @@ HTTP ──► routes/  (Flask Blueprint)
 
 - `services/httpClient.ts` 提供 `createApiClient({ requireAuthByDefault, publicPathPrefixes })`。
 - `API_BASE_URL`：优先读取 `VITE_API_BASE_URL`；默认开发 `http://localhost:39997`、生产 `window.location.origin`。独立托管文件入口由 `VITE_FILE_BASE_URL` 指定，地址处理统一在 `services/backendUrl.ts`。
-- **JWT 自动刷新**：拦截器在请求前调用 `getValidAccessToken()`，剩 30s 内提前刷新；401 后 `originalRequest._retry` 标记再重试一次。
-- **公开路径白名单**：通过 `publicPathPrefixes`（如 `login`、`token/refresh`、`test`、`download`）跳过鉴权。
+- **自动刷新**：拦截器在请求前调用 `getValidAccessToken()`，剩 30s 内提前刷新；401 后 `originalRequest._retry` 标记再重试一次。
+- **公开路径白名单**：通过 `publicPathPrefixes`（如 `login`、`token/refresh`、`test`）跳过鉴权。
+- **401 / 403 分流**：401 走刷新重试（至多一次）；403 **不**刷新 token、**不**重放业务请求，只触发 `onPermissionDenied` 事件，由上层同步角色并展示权限引导。
+- **会话版本**：`stores/auth.ts` 的 `sessionVersion` 在登录 / 退出 / 切换账号时自增；请求与刷新期间若版本变化，说明账号已变，直接放弃响应，避免跨账号串数据。
+- **角色同步**：`auth/sync.ts::syncCurrentRoles()` 调 `/auth/me` 拉取服务端角色快照；并发调用复用同一个进行中请求。localStorage 里的 roles 只是恢复线索，受保护导航前必须完成服务端确认。
+- **权限与功能入口**：`auth/permissions.ts`（角色类型与规范化）、`auth/apps.ts`（角色 → 入口 / 标签 / 图标 / 路由）、`auth/destination.ts`（目的地与深链解析）三份配置是唯一事实来源；路由用 `meta.requiredRole` 声明要求，页面与顶栏不再各自硬编码。
 - **SSE 取消**：聊天页用浏览器原生 `AbortController` 调 `/split_stream_cancel`。
 
 ### 4.4 样式策略
@@ -690,6 +760,8 @@ npm run test:coverage                  # 覆盖率
 ### 10.1 项目级（`doc/`）
 
 - `doc/huiliao-login-permissions-development-plan.md` —— 慧聊登录入口、复合角色与资源隔离的开发任务、测试回归及发布验收。
+- `doc/huiliao-permission-route-matrix.md` —— 全量接口授权清单（方法、路径、角色、读写范围、关联资源、旧认证兼容、对应测试）。
+- `doc/huiliao-permissions-acceptance-report.md` —— 本期改造的验收报告（执行记录、证据、遗留项与回滚说明）。
 - `doc/minimax-voice-management.md` —— MiniMax 音色配置、复刻/激活、后台操作与 API。
 - `doc/minimax-music-management.md` —— MiniMax 音乐创作配置、生成流程、记录保存与 API。
 - `doc/web-search-tool.md` —— 服务端本地网络搜索工具的工作方式与配置。

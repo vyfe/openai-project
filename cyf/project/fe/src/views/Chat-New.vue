@@ -52,10 +52,6 @@
 
         <el-button :icon="Document" circle :aria-label="t('chat.latexHelp')" :title="t('chat.latexHelp')" @click="showLatexHelp = true" class="header-icon-btn" />
 
-        <div class="notification-button-wrapper">
-          <el-button :icon="Bell" circle :aria-label="t('chat.notifications')" :title="t('chat.notifications')" @click="openNotifications" class="header-icon-btn" />
-          <span v-if="hasNewNotifications" class="notification-dot" />
-        </div>
       </template>
     </AppHeader>
 
@@ -142,27 +138,6 @@
     </div>
     </el-dialog>
 
-    <!-- 通知模态框 -->
-    <Teleport to="body">
-      <div
-        v-if="showNotificationPanel"
-        class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        @click="handleNotificationBackdropClick"
-      >
-        <div
-          class="relative"
-          @click.stop
-        >
-          <NotificationPanel
-            :isDarkTheme="formData.isDarkTheme"
-            isModal
-            :notifications="notifications"
-            :loading="notificationsLoading"
-            @close="closeNotifications"
-          />
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -171,14 +146,12 @@ import { reactive, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Expand, Fold, Coin, Document, Loading, Bell, ChatDotRound } from '@element-plus/icons-vue'
+import { Expand, Fold, Coin, Document, Loading, ChatDotRound } from '@element-plus/icons-vue'
 import ChatSidebar from '../components/chat/ChatSidebar.vue'
 import ChatContent from '../components/chat/ChatContent.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import { useAuthStore } from '../stores/auth'
 import { chatAPI } from '../services/api'
-import NotificationPanel from '../components/NotificationPanel.vue'
-import { useNotifications } from '@/composables/useNotifications'
 import { useThemeManager } from '@/composables/useThemeManager'
 
 // 国际化和认证
@@ -260,8 +233,6 @@ const formData = reactive({
 // 页面级浮层状态
 const showLatexHelp = ref(false)
 const showUsagePopover = ref(false)
-const showNotificationPanel = ref(false)
-const { notifications, notificationsLoading, hasNewNotifications, fetchNotifications, markNotificationsRead } = useNotifications()
 
 const getRoleStateFromForm = () => ({
   enhancedRoleEnabled: !!formData.enhancedRoleEnabled,
@@ -315,15 +286,6 @@ const chatTabs = ref<ChatTab[]>([{
   contextTotalTokens: 0,
 }])
 const activeTabKey = ref(chatTabs.value[0].key)
-
-const openNotifications = () => {
-  showNotificationPanel.value = true
-}
-
-const closeNotifications = () => {
-  showNotificationPanel.value = false
-  markNotificationsRead()
-}
 
 // 用量查询相关
 const loadingUsage = ref(false)
@@ -552,11 +514,6 @@ const loadDialogHistory = async () => {
   }
 }
 
-// 处理点击通知面板外部区域关闭面板
-const handleNotificationBackdropClick = () => {
-  closeNotifications()
-}
-
 // 获取用量信息
 const fetchUsage = async () => {
   loadingUsage.value = true
@@ -639,8 +596,6 @@ onMounted(() => {
       formData.systemPrompt = activeRole.prompt
     }
   }
-
-  fetchNotifications()
 })
 
 // 组件卸载

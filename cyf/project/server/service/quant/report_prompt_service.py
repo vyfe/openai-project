@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Optional
 
 from quant.entities import QuantPromptTemplate
+from service.quant.ownership import ResourceNotFoundError
+from service.quant.strategy_service import visible_strategy_ids
 
 
 DEFAULT_REPORT_TEMPLATE = """你是量化研究助理。基于结构化 AnalysisBundle 输出受约束的 ReportDraft。
@@ -82,17 +84,25 @@ def latest_prompt(strategy_id: Optional[int] = None, report_type: str = "test_re
     return global_prompt.to_dict() if global_prompt else None
 
 
-def list_prompt_templates(strategy_id: Optional[int] = None, report_type: Optional[str] = None) -> list[dict]:
+def list_prompt_templates(strategy_id: Optional[int] = None, report_type: Optional[str] = None, *, owner_user_id=None, is_admin=False) -> list[dict]:
     query = QuantPromptTemplate.select().order_by(QuantPromptTemplate.id.desc())
     if strategy_id is not None:
         query = query.where(QuantPromptTemplate.strategy_id == strategy_id)
     if report_type:
         query = query.where(QuantPromptTemplate.report_type == report_type)
+    if owner_user_id is not None and not is_admin:
+        query = query.where(QuantPromptTemplate.status == "active", (QuantPromptTemplate.strategy_id.is_null(True) | (QuantPromptTemplate.strategy_id == 0) | QuantPromptTemplate.strategy_id.in_(visible_strategy_ids(owner_user_id, False))))
     return [item.to_dict() for item in query.iterator()]
 
 
-def get_prompt_template(template_id: int) -> dict:
-    return QuantPromptTemplate.get_by_id(template_id).to_dict()
+def get_prompt_template(template_id: int, *, owner_user_id=None, is_admin=False) -> dict:
+    query = QuantPromptTemplate.select().where(QuantPromptTemplate.id == template_id)
+    if owner_user_id is not None and not is_admin:
+        query = query.where(QuantPromptTemplate.status == "active", (QuantPromptTemplate.strategy_id.is_null(True) | (QuantPromptTemplate.strategy_id == 0) | QuantPromptTemplate.strategy_id.in_(visible_strategy_ids(owner_user_id, False))))
+    row = query.get_or_none()
+    if row is None:
+        raise ResourceNotFoundError("模板不存在")
+    return row.to_dict()
 
 
 def create_prompt_template(
