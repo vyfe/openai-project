@@ -470,7 +470,7 @@ HTTP ──► routes/  (Flask Blueprint)
 ### 4.4 样式策略
 
 - TailwindCSS v4 + 主题 CSS（`styles/theme-{light,dark}.css` + `tokens.css`）。
-- 组件作用域样式内用 `:deep()` 穿透第三方组件库。
+- 组件作用域样式内用 `:deep()` 穿透第三方组件库 —— **仅限 `<style scoped>` 块内**。通过非 scoped `<style>@import</style>` 引入的全局样式文件（如 `styles/admin.css`）里 `:deep()` 会失效，见 §4.7。
 - 长内容容器必须设置 `max-width: 100%`、`overflow-x: auto`、`white-space: pre-wrap`。
 - 表格使用 `table-layout: fixed` + `word-break: break-word`。
 - 响应式断点：(max-width: 768px) / (max-width: 480px)。
@@ -506,9 +506,15 @@ HTTP ──► routes/  (Flask Blueprint)
 应用的明暗由 `useThemeManager` 控制（`.dark` class 挂在 `html` 与 `body`），**与操作系统配色无关**。改主题相关的样式时注意两条：
 
 - **Tailwind v4 的 `dark:` 变体默认是 `prefers-color-scheme`**（跟随系统），`tailwind.config.js` 里的 `darkMode: 'class'` 在 v4 已失效（v4 不读该文件）。已用 `@custom-variant dark (&:where(.dark, .dark *));` 改为跟随应用主题。**项目有两份 Tailwind 入口**（`src/App.vue` 与 `src/styles/chat.css`），**两处都要声明**，否则其中一份仍是系统策略。
-- **Element Plus 的暗色变量表没有引入**（未引 `element-plus/theme-chalk/dark/css-vars.css`），`--el-fill-color-*` 在暗色下会停留在冷白值，导致表格行底、斑马纹、输入框等在暗色下仍是白的。已在 `theme-dark.css` / `theme-light.css` 里把 `--el-fill-color-{blank,lighter,light,extra-light,dark,darker}` 映射到项目 token。**`theme-light.css` 用 `:root:root`** 提高特异性压过 Element Plus 自带的 `:root`（同特异性时靠加载顺序决胜，实测会输）。
+- **Element Plus 的暗色变量表没有引入**（未引 `element-plus/theme-chalk/dark/css-vars.css`），`--el-fill-color-*` 在暗色下会停留在冷白值，导致表格行底、斑马纹、输入框等在暗色下仍是白的。已在 `tokens.css`（亮）与 `theme-dark.css`（暗）里把 `--el-fill-color-*` 与 `--el-color-*` 映射到项目 token。
+- **Element Plus 的桥接变量必须用 `:root:root`（0,2,0）压过它自己的 `:root`（0,1,0）。** 两者特异性相同时只能靠加载顺序决胜，而 Element Plus 的样式表在后 → 它赢，结果是全站 Element Plus 组件退回冷白 / EP 蓝：主按钮 `#409eff`、成功绿 `#67c23a`、边框 `#dcdfe6`、正文 `#606266`，跟项目的暖色 token 完全对不上。所以：`tokens.css` 的亮色桥接写在 `:root:root`，`theme-dark.css` 的暗色桥接写在 `:root.dark:root`（0,3,0，再高一级压过亮色块）。**新增 Element Plus 变量时按这条走，不要写进普通 `:root`。**
+- 暗色下 Element Plus 的 `color-light-N` 色阶语义要反转：官方暗色表把 `light-9` 设为最深色（标签底色）、`light-3` 才最亮（hover）。沿用亮色值会让 `el-tag` 在暗色下出现亮米色底。
 
-> ⚠️ `src/styles/admin.css` 里有约 124 条 `:deep(...)` 规则。该文件通过非 scoped 的 `<style>@import` 引入，`:deep()` 在非 scoped CSS 里是**无效选择器**，这些规则**从未生效**。改动 admin 页样式前不要依赖它们；需要启用时先把 `:deep()` 去掉再逐页回归。
+> ⚠ **`:deep()` 只能在 `<style scoped>` 里用。** Vue 编译器只对 scoped 样式做 `:deep()` 转换；非 scoped 样式里的 `:deep()` 会原样交给浏览器，成为**无效选择器**，整条规则被丢弃。
+>
+> `src/styles/admin.css` 通过 Admin.vue 的**非 scoped** `<style>@import</style>` 引入。该文件曾有 124 条 `:deep()` 规则：2026-03-18（提交 `1597423`）把 Admin.vue 的 `<style scoped>` 改成 `<style>` 之前它们是生效的，之后全部失效 —— 准确表述是「**当前构建下不生效**」，不是「从未生效」。本轮已全部清理：重复 / 过时 / 与有效规则冲突的直接删除，有设计意图的改写成 `.admin-page` 作用域下的普通选择器，硬编码冷色换成项目 token。
+>
+> 往 admin 页加样式时：**用 `.admin-page` 前缀 + 普通选择器**，不要用 `:deep()`。注意 `el-select` / `el-dropdown` / `el-message-box` 会 teleport 到 body，`.admin-page` 作用域命不中，它们的暗色样式由 `App.vue` 的 `body.dark-theme` 规则统一处理；`el-dialog` 默认 `appendToBody=false`，渲染在组件原位，`.admin-page .el-dialog` 可以命中。
 
 ---
 

@@ -240,7 +240,6 @@ onMounted(() => {
 
     <div class="mt-4 flex justify-end">
       <el-pagination
-        class="my-custom-pagination"
         background
         layout="total, sizes, prev, pager, next"
         :total="pagination.total"
@@ -295,8 +294,5 @@ onMounted(() => {
 <style scoped>
 .model-meta-table {
   padding: 16px;
-}
-body.dark-theme, .my-custom-pagination {
-    --el-pagination-button-bg-color: var(--bg-1);
 }
 </style>
