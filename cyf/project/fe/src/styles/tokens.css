@@ -43,7 +43,28 @@
   --bg-app-gradient: linear-gradient(135deg, #f8f4ee 0%, #f1ece4 55%, #edf2ea 100%);
   --overlay-1: rgba(252, 250, 247, 0.88);
 
-  /* Element Plus bridging */
+  /* Element Plus 字号桥接：目前是「声明了但没生效」—— Element Plus 自带的 :root
+     同样定义了这几个变量且加载更靠后。字号改动会影响全站观感，需要单独做一轮视觉回归，
+     所以这里先保持原样，不要顺手提高本块的特异性。 */
+  --el-font-size-base: var(--message-font-size-medium);
+  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
+  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
+  --el-font-size-medium: var(--message-font-size-medium);
+  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
+  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
+}
+
+/* Element Plus bridging — 颜色
+ *
+ * 必须用 `:root:root`（特异性 0,2,0）而不是 `:root`（0,1,0）：
+ * Element Plus 自己的样式表里也有一份 `:root{--el-color-primary:#409eff; …}`，
+ * 两者特异性相同、只能靠加载顺序决胜，而 Element Plus 的样式表在后 → 它赢。
+ * 结果是全站 Element Plus 组件全部退回冷白/EP 蓝：主按钮 #409eff、成功绿 #67c23a、
+ * 边框 #dcdfe6、正文 #606266，跟项目的暖色 token 完全对不上。
+ * 用 `:root:root` 稳定压过它（与 theme-light.css 里 `--el-fill-color-*` 同一手法）。
+ *
+ * 暗色覆盖见 theme-dark.css 的 `:root.dark:root`（0,3,0），同样是靠特异性压过本块。 */
+:root:root {
   --el-color-primary: var(--accent-1);
   --el-color-primary-light-3: #d89a60;
   --el-color-primary-light-5: #e5b88c;
@@ -61,19 +82,21 @@
 
   --el-bg-color: var(--bg-1);
   --el-bg-color-page: var(--bg-0);
+  --el-fill-color: var(--bg-2);
   --el-fill-color-light: var(--bg-2);
   --el-fill-color-blank: var(--bg-1);
+  --el-fill-color-lighter: color-mix(in srgb, var(--bg-0) 72%, var(--bg-1));
+  --el-fill-color-extra-light: var(--bg-0);
   --el-border-color: var(--line-1);
   --el-border-color-light: color-mix(in srgb, var(--line-1) 84%, white);
   --el-text-color-primary: var(--text-1);
   --el-text-color-regular: var(--text-2);
 
-  --el-font-size-base: var(--message-font-size-medium);
-  --el-font-size-extra-small: calc(var(--message-font-size-medium) * 0.75);
-  --el-font-size-small: calc(var(--message-font-size-medium) * 0.875);
-  --el-font-size-medium: var(--message-font-size-medium);
-  --el-font-size-large: calc(var(--message-font-size-medium) * 1.25);
-  --el-font-size-extra-large: calc(var(--message-font-size-medium) * 1.5);
+  /* 无 type 的 el-tag：Element Plus 默认是纯白底 + 冷灰字，跟暖色面板不搭。
+     这里给基线值；有 type 的标签在自己的元素上声明同名变量，会覆盖这里的继承值。 */
+  --el-tag-bg-color: var(--bg-2);
+  --el-tag-border-color: var(--line-1);
+  --el-tag-text-color: var(--text-2);
 }
 
 /* Respect user's motion preferences */

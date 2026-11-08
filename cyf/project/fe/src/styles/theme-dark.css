@@ -16,25 +16,54 @@ html.dark,
 
   --bg-app-gradient: linear-gradient(180deg, #1f1b18 0%, #26211d 52%, #222720 100%);
   --overlay-1: rgba(41, 35, 31, 0.88);
+}
 
+/* 暗色下的 Element Plus 变量
+ *
+ * 特异性必须压过 tokens.css 的 `:root:root`（0,2,0），这里用 `:root.dark:root`（0,3,0）。
+ * useThemeManager 的 applyThemeClasses 永远同时给 html 和 body 打 `.dark`，
+ * 所以 `:root.dark`（即 html.dark）一定命中。
+ *
+ * Element Plus 的暗色变量表没有引入（未引 element-plus/theme-chalk/dark/css-vars.css），
+ * 填充色会停留在亮色值，导致表格行底 / 斑马纹 / 输入框在暗色下仍是白的 —— 一并映射到项目 token。
+ *
+ * color-light-N 的语义在暗色下要反转：Element Plus 官方暗色表把 light-9 设为最深色
+ * （用于标签底色），light-3 才是最亮色（用于 hover）。这里照此调整，否则 el-tag 的
+ * 底色/边框在暗色下会是亮米色。 */
+:root.dark:root {
   --el-color-primary: var(--accent-1);
   --el-color-primary-light-3: #e2b288;
   --el-color-primary-light-5: #ebc7a9;
-  --el-color-primary-light-8: #f5e2cd;
-  --el-color-primary-light-9: #faefe2;
+  --el-color-primary-light-7: #4a3a2c;
+  --el-color-primary-light-8: #3a2f26;
+  --el-color-primary-light-9: #2b221b;
   --el-color-primary-dark-2: #ba7f49;
 
   --el-color-success: var(--accent-2);
   --el-color-success-light-3: #9abd9e;
   --el-color-success-light-5: #b3cfb6;
-  --el-color-success-light-8: #dce9dd;
+  --el-color-success-light-7: #2e3c30;
+  --el-color-success-light-8: #263329;
+  --el-color-success-light-9: #1e2a21;
   --el-color-success-dark-2: #67876c;
+
+  /* warning / danger / info / error 只补暗色色阶的「底色端」：
+     light-8 / light-9 在暗色下必须是最深色，否则 el-tag--danger 这类会渲染成亮粉块。 */
+  --el-color-warning-light-7: #453521;
+  --el-color-warning-light-8: #372c1d;
+  --el-color-warning-light-9: #2b2318;
+  --el-color-danger-light-7: #462422;
+  --el-color-danger-light-8: #381d1b;
+  --el-color-danger-light-9: #2c1817;
+  --el-color-error-light-7: #462422;
+  --el-color-error-light-8: #381d1b;
+  --el-color-error-light-9: #2c1817;
+  --el-color-info-light-7: #3b3b3d;
+  --el-color-info-light-8: #323234;
+  --el-color-info-light-9: #29292b;
 
   --el-bg-color: var(--bg-1);
   --el-bg-color-page: var(--bg-0);
-  --el-fill-color-light: var(--bg-2);
-  /* Element Plus 暗色变量表未引入，填充色会停留在亮色值，
-     导致表格行底/斑马纹在暗色下仍是白底。统一映射到项目 token。 */
   --el-fill-color: var(--bg-2);
   --el-fill-color-lighter: color-mix(in srgb, var(--bg-1) 88%, var(--text-1));
   --el-fill-color-extra-light: var(--bg-0);
@@ -45,6 +74,11 @@ html.dark,
   --el-border-color-light: color-mix(in srgb, var(--line-1) 80%, black);
   --el-text-color-primary: var(--text-1);
   --el-text-color-regular: var(--text-2);
+
+  /* 无 type 的 el-tag 基线值（与亮色同一套 token 引用，明暗自动跟随） */
+  --el-tag-bg-color: var(--bg-2);
+  --el-tag-border-color: var(--line-1);
+  --el-tag-text-color: var(--text-2);
 
   /* Element Plus disabled states in dark mode */
   --el-disabled-bg-color: #383027;

@@ -63,7 +63,6 @@ body.dark-theme .el-input__inner::placeholder {
 /* Element Plus dark theme unified by tokens */
 body.dark-theme .el-button,
 body.dark-theme .el-select__wrapper,
-body.dark-theme .el-tag,
 body.dark-theme .el-dialog,
 body.dark-theme .el-dropdown-menu,
 body.dark-theme .el-message-box,
@@ -75,6 +74,10 @@ body.dark-theme .el-select-dropdown {
   border-color: var(--line-1);
   color: var(--text-1);
 }
+
+/* el-tag 不在上面的拍平名单里：标签靠 type 区分语义，暗色下拍平成同色会丢掉
+   success/danger/warning 的区分。它的明暗配色走 --el-tag-* 变量
+   （tokens.css / theme-dark.css 里给基线值，typed 标签用 Element Plus 自己的色阶）。 */
 
 body.dark-theme .el-select__wrapper:hover,
 body.dark-theme .el-upload-dragger:hover {
@@ -153,23 +156,8 @@ body.dark-theme .el-overlay-dialog {
   background: rgba(0, 0, 0, 0.45);
 }
 
-body.dark-theme .admin-page .el-table,
-body.dark-theme .admin-page .el-table__inner-wrapper,
-body.dark-theme .admin-page .el-table__header-wrapper,
-body.dark-theme .admin-page .el-table__body-wrapper,
-body.dark-theme .admin-page .el-table tr,
-body.dark-theme .admin-page .el-table th.el-table__cell,
-body.dark-theme .admin-page .el-table td.el-table__cell,
-body.dark-theme .admin-page .el-table__empty-block,
-body.dark-theme .admin-page .el-empty__description {
-  background-color: var(--bg-1) !important;
-  color: var(--text-1) !important;
-  border-color: var(--line-1) !important;
-}
-
-body.dark-theme .admin-page .el-table th.el-table__cell {
-  background-color: var(--bg-2) !important;
-  color: var(--text-2) !important;
-}
+/* 管理页表格的明暗配色统一在 styles/admin.css 里用项目 token 处理，
+   这里不再重复一份 body.dark-theme 覆盖 —— 两处 !important 互相踩，
+   反而会把 admin.css 的斑马纹行与 hover 高亮压掉。 */
 
 </style>
