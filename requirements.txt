@@ -4,7 +4,7 @@ Flask-sock==0.7.0
 requests
 openai
 anthropic
-peewee
+peewee>=3.17,<4
 pandas
 akshare
 baostock
