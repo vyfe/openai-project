@@ -12,6 +12,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderMermaidPlaceholders } from '@/utils/mermaid'
 import { extractMermaidBlocks } from '@/utils/mermaidExtract'
 
+
+async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
+  const start = Date.now()
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) throw new Error('waitFor timeout')
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+}
+
 describe('v-html 重渲染覆盖场景', () => {
   beforeEach(async () => {
     const mod = await import('@/utils/mermaid')
@@ -40,10 +49,10 @@ describe('v-html 重渲染覆盖场景', () => {
     const html1 = extractMermaidBlocks('<pre><code class="language-mermaid">graph TD\n  A-->B</code></pre>')
     container.innerHTML = html1
 
-    // 等 observer + renderMermaidPlaceholders 跑完
-    await new Promise(r => setTimeout(r, 200))
-
+    // 等 observer + renderMermaidPlaceholders 跑完（CI 较慢，轮询而非固定等待）
     const first = container.querySelector('.mermaid-diagram') as HTMLElement
+    await waitFor(() => first.dataset.rendered === '1')
+
     // mermaid 在 happy-dom 下渲染会失败回退到 mermaid-failed —— 但占位已被标记为 rendered
     expect(first.dataset.rendered).toBe('1')
 
@@ -51,10 +60,10 @@ describe('v-html 重渲染覆盖场景', () => {
     const html2 = extractMermaidBlocks('<pre><code class="language-mermaid">graph LR\n  X--&gt;Y</code></pre>')
     container.innerHTML = html2
 
-    // 等 observer 触发 + renderMermaidPlaceholders 跑完
-    await new Promise(r => setTimeout(r, 200))
-
+    // 等 observer 触发 + renderMermaidPlaceholders 跑完（轮询，避免 CI 定时抖动）
     const second = container.querySelector('.mermaid-diagram') as HTMLElement
+    await waitFor(() => second.dataset.rendered === '1')
+
     // 新占位 div 也应该被标记（说明 renderMermaidPlaceholders 被调用）
     expect(second.dataset.rendered).toBe('1')
     expect(second.classList.contains('mermaid-rendered') || second.classList.contains('mermaid-failed')).toBe(true)

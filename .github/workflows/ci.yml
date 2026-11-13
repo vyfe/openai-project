@@ -41,7 +41,19 @@ jobs:
       - name: Run pytest
         env:
           TZ: Asia/Shanghai
-        run: python -m pytest -q
+        run: |
+          set +e
+          python -m pytest -q 2>&1 | tee /tmp/pytest.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            {
+              echo '### pytest failed (exit '"$code"')'
+              echo '```'
+              tail -120 /tmp/pytest.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
 
   frontend:
     name: Frontend typecheck + tests + build
