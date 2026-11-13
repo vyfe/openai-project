@@ -15,7 +15,8 @@ permissions:
 jobs:
   backend:
     name: Backend tests (pytest)
-    runs-on: ubuntu-latest
+    # 固定 22.04：ubuntu-latest 已切到 26.04，不再提供 Python 3.9
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: cyf/project/server
@@ -34,6 +35,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r ../../../requirements.txt
 
+      - name: Prepare runtime config
+        run: cp conf/conf.ini.tpl conf/conf.ini
+
       - name: Run pytest
         env:
           TZ: Asia/Shanghai
@@ -41,7 +45,7 @@ jobs:
 
   frontend:
     name: Frontend typecheck + tests + build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: cyf/project/fe

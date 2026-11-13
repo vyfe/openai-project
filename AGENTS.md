@@ -738,10 +738,11 @@ npm run test:coverage                  # 覆盖率
 
 | Job | 内容 |
 | --- | --- |
-| `backend` | Python 3.9 + `requirements.txt`，`python -m pytest -q`（全量，含 API） |
-| `frontend` | Node 20 + `npm ci`，依次跑 `npm run typecheck`（`vue-tsc --noEmit`）、`npm run test`（vitest）、`npm run build` |
+| `backend` | `ubuntu-22.04` + Python 3.9 + `requirements.txt`；先 `cp conf/conf.ini.tpl conf/conf.ini`，再 `python -m pytest -q`（全量，含 API） |
+| `frontend` | `ubuntu-22.04` + Node 20 + `npm ci`，依次跑 `npm run typecheck`（`vue-tsc --noEmit`）、`npm run test`（vitest）、`npm run build` |
 
 - `npm run build` 本身**不做类型检查**，类型门禁只有 `typecheck`；本地改完前端必须自己先跑一遍。
+- 不要改回 `ubuntu-latest`：它已切到 26.04，不再提供 Python 3.9；`conf.ini` 被 gitignore，CI 必须先从模板生成。
 - CI 与生产部署解耦：EdgeOne 仍从生产分支构建前端，CI 只负责拦截回归。
 
 ---
