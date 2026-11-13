@@ -182,12 +182,6 @@
               {{ t('chat.continueGenerate') }}
             </el-button>
           </div>
-          <!-- <div v-if="message.file" class="message-file">
-            <el-icon>
-              <Document />
-            </el-icon>
-            <span>{{ message.file.name }}</span>
-          </div> -->
         </div>
       </div>
 
@@ -214,12 +208,6 @@
           <Top />
         </el-icon>
       </div>
-      <!-- 移动端：输入框显示/隐藏按钮，放在回到顶部按钮的右侧 -->
-      <!-- <div v-if="formData.isMobile" class="toggle-input-btn" @click="toggleMobileInput">
-        <el-icon>
-          <component :is="showMobileInput ? 'Hide' : 'View'" />
-        </el-icon>
-      </div> -->
     </div>
 
     <!-- 输入区域 -->
@@ -267,9 +255,10 @@
   <img :src="previewImageUrl" style="width: 100%; height: auto;" />
 </el-dialog>
 </template>
+
 <script setup lang="ts">
-import { ref, reactive, nextTick, onMounted, onBeforeUnmount, watch, onUnmounted, computed } from "vue"
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import {
   UserFilled,
@@ -284,53 +273,60 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { chatAPI } from '@/services/api'
-import { normalizeFileUrl } from '@/services/backendUrl'
 import { FormData } from '@/utils/main'
 import WeChatIcon from '@/components/common/WeChatIcon.vue'
 import InputArea from './InputArea.vue'
 import ChatToolbar from './ChatToolbar.vue'
 import 'highlight.js/styles/github-dark.css'
-import katex from 'katex'
 import 'katex/dist/katex.min.css'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
-import { highlightCode } from '@/utils/highlight'
-import { extractMermaidBlocks } from '@/utils/mermaidExtract'
-import { renderMermaidPlaceholders } from '@/utils/mermaid'
+import { renderRichText } from '@/composables/chat/chatMarkdown'
+import {
+  extractFileUrls,
+  getCopyText,
+  getCurrentTime,
+  getTextContent,
+  getToolResultParts,
+  getToolSources,
+  isImageUrl,
+} from '@/composables/chat/messageUtils'
+import type { ChatMessage, RoleSetting } from '@/composables/chat/types'
+import { useChatExport } from '@/composables/chat/useChatExport'
+import { useChatMermaid } from '@/composables/chat/useChatMermaid'
+import { useChatMessageActions } from '@/composables/chat/useChatMessageActions'
+import { useChatScroll } from '@/composables/chat/useChatScroll'
+import { useChatStream } from '@/composables/chat/useChatStream'
 
-// 配置 marked 启用 GFM（GitHub Flavored Markdown）支持
-// 确保 **粗体** 和 *斜体* 语法能正确解析
-marked.use({
-  gfm: true,          // 启用 GitHub Flavored Markdown
-  breaks: true,        // 启用换行符
-})
-
-// 定义 props 和 emits
 const props = defineProps<{
   modelValue: FormData
   sessionKey?: string
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: any]
+  'update:modelValue': [value: FormData]
   'refresh-history': []
   'clear-session': []
   'loading-change': [payload: { sessionKey: string, loading: boolean }]
   'session-dialog-created': [payload: { sessionKey: string, dialogId: number }]
-  'role-setting-loaded': [payload: { sessionKey: string, roleSetting: any }]
-  'handoff-created': [payload: { dialogId: number, dialogName: string, modelName: string, usage?: any }]
+  'role-setting-loaded': [payload: { sessionKey: string, roleSetting: RoleSetting }]
+  'handoff-created': [payload: { dialogId: number, dialogName: string, modelName: string, usage?: unknown }]
 }>()
 
-const buildRoleSetting = () => ({
+const { t } = useI18n()
+const authStore = useAuthStore()
+
+const formData = (props.modelValue || {}) as FormData
+const WELCOME_MESSAGE = t('chat.aiWelcomeMessage')
+
+const buildRoleSetting = (): RoleSetting => ({
   enhanced_role_enabled: !!formData.enhancedRoleEnabled,
   system_prompt_id: formData.enhancedRoleEnabled ? (formData.systemPromptId || null) : null,
   active_enhanced_group: formData.enhancedRoleEnabled ? (formData.activeEnhancedGroup || '') : '',
   selected_enhanced_role: formData.enhancedRoleEnabled ? (formData.selectedEnhancedRole || '') : '',
   system_prompt: formData.enhancedRoleEnabled ? '' : (formData.systemPrompt || ''),
-  active_role_id: formData.enhancedRoleEnabled ? '' : (formData.activeRoleId || 'default')
+  active_role_id: formData.enhancedRoleEnabled ? '' : (formData.activeRoleId || 'default'),
 })
 
-const applyRoleSetting = (roleSetting: any) => {
+const applyRoleSetting = (roleSetting: RoleSetting | null | undefined) => {
   if (!roleSetting || typeof roleSetting !== 'object') return
   formData.enhancedRoleEnabled = !!roleSetting.enhanced_role_enabled
   formData.systemPromptId = roleSetting.system_prompt_id ? Number(roleSetting.system_prompt_id) : undefined
@@ -340,9 +336,99 @@ const applyRoleSetting = (roleSetting: any) => {
   formData.activeRoleId = roleSetting.active_role_id || 'default'
 }
 
+const getSessionKey = () => props.sessionKey || 'default'
+
+const messages = reactive<ChatMessage[]>([
+  {
+    type: 'ai',
+    content: WELCOME_MESSAGE,
+    time: getCurrentTime(),
+  },
+])
+
+const sessionMessageStore = ref<Record<string, ChatMessage[]>>({})
+const sessionLoadingStore = ref<Record<string, boolean>>({})
+const sessionAbortControllers = ref<Record<string, AbortController | null>>({})
+const sessionRequestIds = ref<Record<string, string | null>>({})
+const sessionAiIndexes = ref<Record<string, number | null>>({})
+const sessionWaitingTimers = ref<Record<string, number | null>>({})
+const sessionWaitingShown = ref<Record<string, boolean>>({})
+
+const isLoading = ref(false)
+const inputMessage = ref('')
+const uploadRef = ref()
+const uploadedFile = ref<File | null>(null)
+const handoffLoading = ref(false)
+const CONTEXT_HANDOFF_THRESHOLD = 100000
+
+const saveMessagesToSession = (sessionKey: string) => {
+  sessionMessageStore.value[sessionKey] = messages.map((msg) => ({ ...msg }))
+}
+
+const getSessionMessages = (sessionKey: string): ChatMessage[] => {
+  if (sessionKey === getSessionKey()) return messages
+  if (!Array.isArray(sessionMessageStore.value[sessionKey])) {
+    sessionMessageStore.value[sessionKey] = [{
+      type: 'ai',
+      content: WELCOME_MESSAGE,
+      time: getCurrentTime(),
+    }]
+  }
+  return sessionMessageStore.value[sessionKey]
+}
+
+const restoreMessagesFromSession = (sessionKey: string) => {
+  const saved = sessionMessageStore.value[sessionKey]
+  messages.splice(0, messages.length)
+  if (Array.isArray(saved) && saved.length > 0) {
+    saved.forEach((msg) => messages.push({ ...msg }))
+    return
+  }
+  messages.push({
+    type: 'ai',
+    content: WELCOME_MESSAGE,
+    time: getCurrentTime(),
+  })
+}
+
+const mutateSessionMessages = (sessionKey: string, mutator: (target: ChatMessage[]) => void) => {
+  const target = getSessionMessages(sessionKey)
+  mutator(target)
+  if (sessionKey === getSessionKey()) {
+    saveMessagesToSession(sessionKey)
+  } else {
+    sessionMessageStore.value[sessionKey] = target.map((item) => ({ ...item }))
+  }
+}
+
+const setSessionLoading = (sessionKey: string, loading: boolean) => {
+  sessionLoadingStore.value[sessionKey] = loading
+  emit('loading-change', { sessionKey, loading })
+  if (sessionKey === getSessionKey()) {
+    isLoading.value = loading
+  }
+}
+
+const contextTotalTokens = computed(() => Number(formData.contextTotalTokens || 0))
+const formattedContextTokens = computed(() => contextTotalTokens.value > 0 ? contextTotalTokens.value.toLocaleString() : '--')
+const isContextWindowHigh = computed(() => !!formData.currentDialogId && contextTotalTokens.value >= CONTEXT_HANDOFF_THRESHOLD)
+const canTriggerHandoff = computed(() => isContextWindowHigh.value && !isLoading.value && !handoffLoading.value)
+const contextWindowHint = computed(() => {
+  if (!formData.currentDialogId) return '当前会话保存后可统计上下文窗口'
+  if (!contextTotalTokens.value) return '等待模型返回 token 统计'
+  if (isContextWindowHigh.value) return '上下文已超过 100k，可点击压缩并创建交接新会话'
+  return '上下文未超过 100k，暂不需要压缩'
+})
+
+const setContextUsage = (usage?: { total_tokens?: number }) => {
+  formData.contextTotalTokens = Number(usage?.total_tokens || 0)
+}
+
+const filterSystemMessages = (list: Array<{ role?: string }>) => list.filter((msg) => msg.role !== 'system')
+
 // 添加加载对话内容的方法
 const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) => {
-  if (!useAuthStore().user) {
+  if (!authStore.user) {
     ElMessage.warning('请先登录')
     return
   }
@@ -355,35 +441,33 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
     if (targetSessionKey !== getSessionKey()) {
       return
     }
-    if (response && response.content) {
-      const roleSetting = response.content.role_setting
+    if (response?.content) {
+      const roleSetting = response.content.role_setting as RoleSetting | undefined
       if (roleSetting) {
         applyRoleSetting(roleSetting)
         emit('role-setting-loaded', { sessionKey: targetSessionKey, roleSetting })
       }
       setContextUsage(response.content.usage)
       const context = response.content.context
-      const toMessage = (msg: any) => ({
+      const toMessage = (msg: any): ChatMessage => ({
         type: msg.role === 'user' ? 'user' : 'ai',
-        content: msg.content || msg.desc || '', // 支持desc字段作为内容
-        url: msg.url, // 添加url字段支持
-        parts: msg.parts, // 多模态部件
-        time: msg.time || getCurrentTime()
+        content: msg.content || msg.desc || '',
+        url: msg.url,
+        parts: msg.parts,
+        time: msg.time || getCurrentTime(),
       })
 
-      let loadedMessages: any[] = []
+      let loadedMessages: ChatMessage[] = []
       if (Array.isArray(context)) {
-        // 如果返回的是消息数组，过滤掉 role 为 system 的消息
         loadedMessages = filterSystemMessages(context).map(toMessage)
-      } else if (typeof response.data.content === 'string') {
-        // 如果返回的是序列化的字符串，需要解析
+      } else if (typeof context === 'string') {
         try {
           const contentObj = JSON.parse(context)
           if (Array.isArray(contentObj)) {
             loadedMessages = filterSystemMessages(contentObj).map(toMessage)
           }
-        } catch (e) {
-          // 如果不是JSON格式，可能是单条消息
+        } catch {
+          // 非 JSON 时把整段内容当成单条 AI 消息
           loadedMessages = [{ type: 'ai', content: response.content, time: getCurrentTime() }]
         }
       }
@@ -397,279 +481,75 @@ const loadDialogContent = async (dialogId: number, sessionKeyOverride?: string) 
   }
 }
 
-// 监听来自父组件的load-dialog事件
-defineExpose({
-  loadDialogContent
-})
+defineExpose({ loadDialogContent })
 
-// 过滤掉role为"system"的消息的辅助函数
-const filterSystemMessages = (messages: any[]) => {
-  return messages.filter((msg: any) => msg.role !== 'system')
-}
-
-// 统一的异常消息过滤函数
-const filterAbnormalMessages = (messages: any[], options: { excludeIndex?: number, includeCurrent?: boolean } = {}) => {
-  const welcomeMessage = t('chat.aiWelcomeMessage');
-  return messages.filter((msg, msgIndex) => {
-    // 保留欢迎消息
-    if (msg.type === 'ai' && msg.content === welcomeMessage) {
-      return true;
-    }
-
-    // 如果指定了excludeIndex，跳过该索引的消息（用于重试等场景）
-    if (options.excludeIndex !== undefined && msgIndex === options.excludeIndex) {
-      return options.includeCurrent || false;
-    }
-
-    // 过滤掉带有错误标记的消息
-    if (msg.isError) {
-      return false;
-    }
-    // 过滤掉内容为空的AI消息（这些通常是有重新提问按钮的消息）
-    if (msg.type === 'ai' && msg.content === '') {
-      return false;
-    }
-    // 过滤掉带有截断标记的消息
-    if (msg.isTruncated) {
-      return false;
-    }
-    return true;
-  });
-}
-
-// 国际化
-const { t } = useI18n()
-
-// 统一的欢迎消息常量
-const WELCOME_MESSAGE = t('chat.aiWelcomeMessage')
-
-// 待发送的消息队列
-const messages = reactive<Array<{
-  type: 'user' | 'ai'
-  content: string
-  time: string
-  parts?: import('@/components/chat/types').MessagePart[]  // 多模态部件
-  file?: File
-  url?: string  // 添加url字段支持图片链接
-  isError?: boolean  // 添加错误状态
-  finishReason?: 'stop' | 'length' | 'content_filter' | 'tool_calls'  // 新增
-  isTruncated?: boolean  // 新增
-  selected?: boolean  // 新增：选中状态
-}>>([
-  {
-    type: 'ai',
-    content: t('chat.aiWelcomeMessage'),
-    time: getCurrentTime()
-  }
-])
-const sessionMessageStore = ref<Record<string, any[]>>({})
-const sessionLoadingStore = ref<Record<string, boolean>>({})
-const getSessionKey = () => props.sessionKey || 'default'
-
-const saveMessagesToSession = (sessionKey: string) => {
-  sessionMessageStore.value[sessionKey] = messages.map((msg) => ({ ...msg }))
-}
-
-const restoreMessagesFromSession = (sessionKey: string) => {
-  const saved = sessionMessageStore.value[sessionKey]
-  messages.splice(0, messages.length)
-  if (Array.isArray(saved) && saved.length > 0) {
-    saved.forEach((msg) => messages.push({ ...msg }))
-    return
-  }
-  messages.push({
-    type: 'ai',
-    content: t('chat.aiWelcomeMessage'),
-    time: getCurrentTime()
-  })
-}
-
-const getSessionMessages = (sessionKey: string) => {
-  if (sessionKey === getSessionKey()) return messages
-  if (!Array.isArray(sessionMessageStore.value[sessionKey])) {
-    sessionMessageStore.value[sessionKey] = [{
-      type: 'ai',
-      content: t('chat.aiWelcomeMessage'),
-      time: getCurrentTime()
-    }]
-  }
-  return sessionMessageStore.value[sessionKey]
-}
-
-const mutateSessionMessages = (sessionKey: string, mutator: (arr: any[]) => void) => {
-  const target = getSessionMessages(sessionKey)
-  mutator(target)
-  if (sessionKey === getSessionKey()) {
-    saveMessagesToSession(sessionKey)
-  } else {
-    sessionMessageStore.value[sessionKey] = target.map((item: any) => ({ ...item }))
-  }
-}
-
-const setSessionLoading = (sessionKey: string, loading: boolean) => {
-  sessionLoadingStore.value[sessionKey] = loading
-  emit('loading-change', { sessionKey, loading })
-  if (sessionKey === getSessionKey()) {
-    isLoading.value = loading
-  }
-}
-
-// 自定义 renderer 用于处理数学公式
-const mathRenderer = {
-  inlineMath: (math: string) => {
-    try {
-      return katex.renderToString(math, {
-        throwOnError: false,
-        displayMode: false
-      });
-    } catch (error) {
-      console.warn('KaTeX rendering error:', error);
-      // 如果渲染失败，返回原始公式文本
-      return `$${math}$`;
-    }
-  },
-  displayMath: (math: string) => {
-    try {
-      return katex.renderToString(math, {
-        throwOnError: false,
-        displayMode: true
-      });
-    } catch (error) {
-      console.warn('KaTeX rendering error:', error);
-      // 如果渲染失败，返回原始公式文本
-      return `$$${math}$$`;
-    }
-  }
-};
-
-const formData = (props.modelValue || {}) as FormData
-
-const getToolResultParts = (parts?: import('@/components/chat/types').MessagePart[]) =>
-  (parts || []).filter((part: any) => part?.type === 'tool_result') as Array<any>
-
-const getToolSources = (part: any) => {
-  const sources = part?.data?.sources
-  return Array.isArray(sources) ? sources : []
-}
-
-const authStore = useAuthStore()
-// 使用formData中的状态，不再定义局部状态
-const inputMessage = ref('')
-const uploadRef = ref()
-const isLoading = ref(false)
-const uploadedFile = ref<File | null>(null)
-const sessionAbortControllers = ref<Record<string, AbortController | null>>({})
-const sessionRequestIds = ref<Record<string, string | null>>({})
-const sessionAiIndexes = ref<Record<string, number | null>>({})
-const sessionWaitingTimers = ref<Record<string, number | null>>({})
-const sessionWaitingShown = ref<Record<string, boolean>>({})
-const handoffLoading = ref(false)
-const CONTEXT_HANDOFF_THRESHOLD = 100000
-
-const contextTotalTokens = computed(() => Number(formData.contextTotalTokens || 0))
-const formattedContextTokens = computed(() => contextTotalTokens.value > 0 ? contextTotalTokens.value.toLocaleString() : '--')
-const isContextWindowHigh = computed(() => !!formData.currentDialogId && contextTotalTokens.value >= CONTEXT_HANDOFF_THRESHOLD)
-const canTriggerHandoff = computed(() => isContextWindowHigh.value && !isLoading.value && !handoffLoading.value)
-const contextWindowHint = computed(() => {
-  if (!formData.currentDialogId) return '当前会话保存后可统计上下文窗口'
-  if (!contextTotalTokens.value) return '等待模型返回 token 统计'
-  if (isContextWindowHigh.value) return '上下文已超过 100k，可点击压缩并创建交接新会话'
-  return '上下文未超过 100k，暂不需要压缩'
-})
-
-const setContextUsage = (usage?: any) => {
-  formData.contextTotalTokens = Number(usage?.total_tokens || 0)
-}
-
-// 添加字体大小控制 对话框
+// 字体大小
 const fontSize = computed({
   get() {
-    if (!formData) return 'medium'
     return formData.fontSize || 'medium'
   },
-  set(value) {
-    if (!formData) return
+  set(value: string) {
     formData.fontSize = value
     localStorage.setItem('fontSize', value)
-  }
+  },
 })
 
-// 全局字体大小类切换函数
 const updateGlobalFontSizeClass = (size: string) => {
-  // 移除现有的字体大小类
   document.body.classList.remove('font-size-small', 'font-size-medium', 'font-size-large')
-  // 添加当前选择的字体大小类
   document.body.classList.add(`font-size-${size}`)
 }
 
-// 根据主题调整字体大小选择器样式
 const updateFontSizeSelectorTheme = () => {
-  const selector = document.querySelector('.font-size-selector');
-  if (selector) {
-    if (formData.isDarkTheme) {
-      selector.classList.add('dark-theme');
-      selector.classList.remove('light-theme');
-    } else {
-      selector.classList.add('light-theme');
-      selector.classList.remove('dark-theme');
-    }
+  const selector = document.querySelector('.font-size-selector')
+  if (!selector) return
+  if (formData.isDarkTheme) {
+    selector.classList.add('dark-theme')
+    selector.classList.remove('light-theme')
+  } else {
+    selector.classList.add('light-theme')
+    selector.classList.remove('dark-theme')
   }
 }
 
-// 监听主题变化并更新字体大小选择器样式
 const setupThemeWatcher = () => {
-  // 监听主题变化
   watch(() => formData.isDarkTheme, (newVal) => {
     document.body.classList.toggle('dark-theme', newVal)
     document.body.classList.toggle('dark', newVal)
     document.documentElement.classList.toggle('dark', newVal)
-    // 更新字体大小选择器的主题样式
     updateFontSizeSelectorTheme()
   }, { immediate: true })
 }
 
-// 初始化主题和字体大小设置
 const initializeSettings = () => {
-  // 从localStorage获取字体大小设置
   const savedFontSize = localStorage.getItem('fontSize')
   if (savedFontSize && ['small', 'medium', 'large'].includes(savedFontSize)) {
     formData.fontSize = savedFontSize
     updateGlobalFontSizeClass(savedFontSize)
   }
 
-  // 从localStorage获取主题设置
   const savedTheme = localStorage.getItem('isDarkTheme')
   if (savedTheme !== null) {
     formData.isDarkTheme = savedTheme === 'true'
   }
 }
 
-// TODO(human): 添加一个函数来在页面加载时根据localStorage中的主题设置来初始化主题
-// 这样用户在刷新页面后仍能保持他们选择的主题和字体大小设置
+const handleFontSizeChange = (size: string) => {
+  formData.fontSize = size
+  localStorage.setItem('fontSize', size)
+  updateGlobalFontSizeClass(size)
+  updateFontSizeSelectorTheme()
+}
 
-// 控制是否显示回到顶部按钮
-const showBackToTop = ref(false)
+const clearCurrentSession = () => {
+  // 统一交由父组件处理新建会话 tab 逻辑，避免子组件直接改 currentDialogId 导致 tab 行为不一致
+  emit('clear-session')
+}
 
-
-// 添加侧边栏折叠状态
-const isMobile = ref(false)
-// 控制移动端输入框显示/隐藏
-const showMobileInput = ref(true)
-
-// 记录之前的设备类型状态
-const previousIsMobile = ref(false)
-const messagesContainer = ref<HTMLElement>()
-// 图片预览相关状态
-const previewImageUrl = ref('')
-const showImagePreview = ref(false)
-
-// 当用户点击更新标题按钮时
 const updateDialogTitle = async () => {
   if (!formData.currentDialogId) {
     ElMessage.warning('当前没有打开的对话，无法更新标题')
     return
   }
-
   if (!formData.dialogTitle.trim()) {
     ElMessage.warning('对话标题不能为空')
     return
@@ -677,44 +557,19 @@ const updateDialogTitle = async () => {
 
   try {
     const response: any = await chatAPI.updateDialogTitle(formData.currentDialogId, formData.dialogTitle.trim())
-    if (response && response.success) {
+    if (response?.success) {
       ElMessage.success('对话标题更新成功')
-
-      // 更新对话历史列表中的标题
-      const dialogItem = formData.dialogHistory.find(d => d.id === formData.currentDialogId)
+      const dialogItem = formData.dialogHistory.find((d: any) => d.id === formData.currentDialogId)
       if (dialogItem) {
         dialogItem.dialog_name = formData.dialogTitle.trim()
       }
     } else {
-      ElMessage.error(response.msg || '更新对话标题失败')
+      ElMessage.error(response?.msg || '更新对话标题失败')
     }
   } catch (error: any) {
     console.error('更新对话标题错误:', error)
     ElMessage.error('更新对话标题失败')
   }
-}
-
-// 处理字体大小变化
-const handleFontSizeChange = (size: string) => {
-  // 保存当前的字体大小到formData
-  if (formData) {
-    formData.fontSize = size
-  }
-
-  // 更新localStorage
-  localStorage.setItem('fontSize', size)
-
-  // 更新全局字体大小类
-  updateGlobalFontSizeClass(size)
-
-  // 更新字体大小选择器的主题样式
-  updateFontSizeSelectorTheme()
-}
-
-// 清空当前会话
-const clearCurrentSession = () => {
-  // 统一交由父组件处理新建会话tab逻辑，避免子组件直接改 currentDialogId 导致tab行为不一致
-  emit('clear-session')
 }
 
 const handleHandoff = async () => {
@@ -748,7 +603,7 @@ const handleHandoff = async () => {
       dialogId: newDialogId,
       dialogName: data.dialog_name || `对话 ${newDialogId}`,
       modelName: data.modelname || formData.selectedModel,
-      usage: data.usage
+      usage: data.usage,
     })
     ElMessage.success('上下文压缩完成，已打开交接新会话')
   } catch (error: any) {
@@ -759,1598 +614,33 @@ const handleHandoff = async () => {
   }
 }
 
-// 切换单条消息的选中状态
-const toggleMessageSelection = (index: number, selected: boolean) => {
-  if (index >= 0 && index < messages.length) {
-    messages[index].selected = selected
-  }
-}
+// 移动端 / 图片预览
+const showMobileInput = ref(true)
+const isMobile = ref(false)
+const previousIsMobile = ref(false)
+const messagesContainer = ref<HTMLElement>()
+const previewImageUrl = ref('')
+const showImagePreview = ref(false)
 
-// 获取当前选中的消息数量
-const selectedCount = computed(() => {
-  return messages.filter(msg => msg.selected).length
-})
-
-const enableExportDebug = true
-
-const logExportStep = (step: string, details?: Record<string, any>) => {
-  if (!enableExportDebug) return
-  const payload = details ? ` ${JSON.stringify(details)}` : ''
-  console.info(`[export] ${step}${payload}`)
-}
-
-const buildPreviewHtml = (imageUrl: string, filename: string) => {
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>对话截图预览</title>
-    <style>
-      body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #0f1115; color: #e5e7eb; }
-      .bar { position: sticky; top: 0; z-index: 10; display: flex; gap: 12px; align-items: center; padding: 12px 16px; background: rgba(15, 17, 21, 0.9); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.08); }
-      .title { font-size: 14px; opacity: 0.9; flex: 1; }
-      .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; background: #aa6624; color: #fff; text-decoration: none; font-size: 14px; }
-      .btn.secondary { background: #374151; }
-      .container { padding: 16px; display: flex; justify-content: center; }
-      img { max-width: 100%; height: auto; box-shadow: 0 12px 40px rgba(0,0,0,0.4); border-radius: 8px; }
-    </style>
-  </head>
-  <body>
-    <div class="bar">
-      <div class="title">截图已生成，可直接下载或右键保存</div>
-      <a class="btn" href="${imageUrl}" download="${filename}">下载图片</a>
-      <a class="btn secondary" href="${imageUrl}" target="_blank" rel="noopener">新标签打开</a>
-    </div>
-    <div class="container">
-      <img src="${imageUrl}" alt="截图预览" />
-    </div>
-  </body>
-</html>`
-}
-
-const schedulePreviewCleanup = (previewUrl: string, imageUrl: string) => {
-  setTimeout(() => {
-    URL.revokeObjectURL(previewUrl)
-    if (imageUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(imageUrl)
-    }
-  }, 120000)
-}
-
-const openPreview = (imageUrl: string, filename: string) => {
-  const previewHtml = buildPreviewHtml(imageUrl, filename)
-  const previewBlob = new Blob([previewHtml], { type: 'text/html' })
-  const previewUrl = URL.createObjectURL(previewBlob)
-  const previewWindow = window.open(previewUrl, '_blank')
-  if (!previewWindow) {
-    ElMessageBox.confirm('浏览器拦截了预览弹窗，请允许此站点弹窗后重试。', '弹窗被拦截', {
-      confirmButtonText: '我已允许，重试',
-      cancelButtonText: '取消',
-      type: 'warning',
-      closeOnClickModal: false,
-    }).then(() => {
-      const retryWindow = window.open(previewUrl, '_blank')
-      if (!retryWindow) {
-        ElMessage.warning('仍然无法打开预览窗口，请检查浏览器弹窗设置')
-        return
-      }
-      retryWindow.opener = null
-      schedulePreviewCleanup(previewUrl, imageUrl)
-      ElMessage.success('已打开预览，可右键保存')
-    }).catch(() => {
-      URL.revokeObjectURL(previewUrl)
-    })
-    return false
-  }
-  previewWindow.opener = null
-
-  schedulePreviewCleanup(previewUrl, imageUrl)
-  return true
-}
-
-// 导出对话截屏（长截图）
-const exportConversationScreenshot = async (options: { skipImageCheck?: boolean } = {}) => {
-  const exportStart = performance.now()
-  logExportStep('start', { t: exportStart })
-  const downloadFilename = `conversation_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.jpeg`
-  // 先通过 DOM 查询获取容器，确保在任何情况下都能获取到
-  let messagesContainerEl = document.querySelector('.messages-container') as HTMLElement;
-
-  // 如果 DOM 查询失败，尝试使用 ref
-  if (!messagesContainerEl && messagesContainer.value) {
-    messagesContainerEl = messagesContainer.value;
-  }
-
-  if (!messagesContainerEl) {
-    ElMessage.error('无法找到对话容器');
-    return;
-  }
-
-  // 检查页面中是否存在图片，如果有则弹出警告
-  if (!options.skipImageCheck) {
-    const images = messagesContainerEl.querySelectorAll('img.attachment-preview');
-    if (images.length > 0) {
-      ElMessageBox.alert('当前页面包含图片，暂不支持导出含图片的对话截图。请移除图片后再尝试导出。', '提示', {
-        confirmButtonText: '确定',
-        type: 'warning'
-      });
-      return;
-    }
-  }
-
-  // 用于存储需要隐藏的元素，以便在截图后恢复
-  const hiddenElements: HTMLElement[] = [];
-
-  try {
-    // 检测是否为移动设备，如果是则应用更快的导出设置
-    const isMobileDevice = window.innerWidth < 768;
-
-    // 动态导入html-to-image库
-    const htmlToImageModule = await import('html-to-image');
-    const { toJpeg } = htmlToImageModule;
-    logExportStep('lib_ready', { t: performance.now() })
-
-    // 添加截图模式类，以应用备用字体样式
-    document.body.classList.add('screenshot-mode');
-
-    // 为了优化性能，在移动设备上先隐藏一些不必要的元素
-    // if (isMobileDevice) {
-    //   // 隐藏一些在截图时不必要的元素，减少渲染负担
-    //   const elementsToHide = document.querySelectorAll('.message-actions, .typing, .streaming-indicator, .back-to-top-btn, .github-link-inline');
-    //   elementsToHide.forEach(el => {
-    //     if (el instanceof HTMLElement) {
-    //       el.style.visibility = 'hidden';
-    //       hiddenElements.push(el);
-    //     }
-    //   });
-    // }
-
-    // 保存原始样式
-    const originalStyles = {
-      overflow: messagesContainerEl.style.overflow,
-      maxHeight: messagesContainerEl.style.maxHeight,
-      height: messagesContainerEl.style.height,
-      position: messagesContainerEl.style.position,
-      flex: messagesContainerEl.style.flex,
-    };
-
-    // 临时修改样式以显示全部内容
-    // 获取容器的完整高度（包括滚动部分）
-    const scrollHeight = messagesContainerEl.scrollHeight;
-
-    // 设置父容器样式，确保子元素完全展开
-    const parent = messagesContainerEl.parentElement;
-    const parentOriginalStyles: any = {};
-    if (parent) {
-      parentOriginalStyles.overflow = parent.style.overflow;
-      parentOriginalStyles.height = parent.style.height;
-      parentOriginalStyles.maxHeight = parent.style.maxHeight;
-      parent.style.overflow = 'visible';
-      parent.style.height = 'auto';
-      parent.style.maxHeight = 'none';
-    }
-
-    messagesContainerEl.style.overflow = 'visible';
-    messagesContainerEl.style.maxHeight = 'none';
-    messagesContainerEl.style.height = `${scrollHeight}px`;
-    messagesContainerEl.style.flex = 'none';
-    messagesContainerEl.style.position = 'relative';
-
-    // 根据设备类型设置不同的等待时间，移动端使用较短的等待时间
-    const waitTime = 100; // 增加等待时间以确保DOM更新
-
-    // 等待内容渲染
-    await new Promise(resolve => setTimeout(resolve, waitTime));
-    logExportStep('dom_ready', { t: performance.now(), waitTime })
-
-    // 根据设备性能调整参数
-    const pixelRatio = 2;
-    const quality = 1.5;
-
-    // 显示导出提示
-    const loadingMessage = ElMessage({
-      message: isMobileDevice ? '正在导出截图，请稍候...' : '正在导出截图...',
-      type: 'info',
-      duration: 0 // 不自动关闭
-    });
-
-    // 使用html-to-image生成图像
-    // 首先尝试获取完整的 scrollHeight 作为截图高度
-    const fullHeight = Math.max(messagesContainerEl.scrollHeight, messagesContainerEl.offsetHeight);
-
-    const captureOptions = {
-      cacheBust: true, // 防止缓存问题
-      pixelRatio: pixelRatio, // 根据设备调整清晰度
-      skipFonts: false, // 不跳过字体，确保正确渲染
-      style: {
-        // 确保元素在截图中显示完整内容
-        overflow: 'visible',
-        maxHeight: 'none',
-        height: `${fullHeight}px`, // 使用明确的高度值
-        width: `${messagesContainerEl.offsetWidth}px`, // 使用明确的宽度值
-        filter: 'contrast(110%)', // 微调对比度，解决截图可能发灰的问题
-        // 临时覆盖字体以避免Google Fonts加载问题
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      },
-      backgroundColor: formData.isDarkTheme ? '#000000' : '#efefef',
-      quality: quality, // 根据设备调整质量
-      // 排除不需要截图的元素
-      // 排除回到顶部按钮（桌面端 .back-to-top-btn-normal，移动端 .back-to-top-btn）
-      filter: (node: Node) => {
-        if (!(node instanceof HTMLElement)) return true;
-        return !node.closest('.back-to-top-btn-normal') && !node.closest('.back-to-top-btn');
-      },
-    };
-
-    const { toBlob } = htmlToImageModule as typeof htmlToImageModule & { toBlob?: Function };
-    let downloadUrl = '';
-
-    if (toBlob) {
-      const blob = await toBlob(messagesContainerEl, captureOptions);
-      if (blob) {
-        downloadUrl = URL.createObjectURL(blob);
-        logExportStep('blob_ready', { t: performance.now(), size: blob.size })
-      }
-    }
-
-    if (!downloadUrl) {
-      const dataUrl = await toJpeg(messagesContainerEl, captureOptions);
-      downloadUrl = dataUrl;
-      logExportStep('dataurl_ready', { t: performance.now(), length: dataUrl.length })
-    }
-
-    // 关闭加载提示
-    loadingMessage.close();
-
-    // 恢复隐藏的元素（如果有的话）
-    hiddenElements.forEach(el => {
-      el.style.visibility = 'visible';
-    });
-
-    // 恢复父容器样式
-    if (parent) {
-      parent.style.overflow = parentOriginalStyles.overflow;
-      parent.style.height = parentOriginalStyles.height;
-      parent.style.maxHeight = parentOriginalStyles.maxHeight;
-    }
-
-    // 恢复原始样式
-    messagesContainerEl.style.overflow = originalStyles.overflow;
-    messagesContainerEl.style.maxHeight = originalStyles.maxHeight;
-    messagesContainerEl.style.height = originalStyles.height;
-    messagesContainerEl.style.position = originalStyles.position;
-    messagesContainerEl.style.flex = originalStyles.flex;
-
-    // 移除截图模式类
-    document.body.classList.remove('screenshot-mode');
-
-    logExportStep('preview_prompt', { t: performance.now() })
-    try {
-      await ElMessageBox({
-        title: '截图已生成',
-        message: '截图已生成，点击“预览”在新标签页打开，可右键另存为。',
-        showCancelButton: true,
-        confirmButtonText: '预览',
-        cancelButtonText: '取消',
-        type: 'success',
-        closeOnClickModal: false,
-        beforeClose: (action, _instance, done) => {
-          if (action === 'confirm') {
-            logExportStep('preview_confirm', { t: performance.now() })
-            const opened = openPreview(downloadUrl, downloadFilename)
-            if (opened) {
-              logExportStep('preview_opened', { t: performance.now() })
-              ElMessage.success('已打开预览，可右键保存')
-              logExportStep('toast_shown', { t: performance.now(), cost: Math.round(performance.now() - exportStart) })
-            }
-          } else {
-            logExportStep('preview_cancel', { t: performance.now() })
-            if (downloadUrl.startsWith('blob:')) {
-              URL.revokeObjectURL(downloadUrl as string);
-            }
-          }
-          done()
-        }
-      })
-    } catch {
-      // ignore cancel
-    }
-  } catch (error) {
-    console.error('导出截图失败:', error);
-    console.error('错误详情:', JSON.stringify(error, null, 2));
-
-    // 关闭可能存在的加载提示
-    try {
-      // 即使出现错误也要确保移除截图模式类
-      document.body.classList.remove('screenshot-mode');
-      // 恢复隐藏的元素
-      hiddenElements.forEach(el => {
-        el.style.visibility = 'visible';
-      });
-    } catch(e) {
-      console.error('清理截图状态时出错:', e);
-    }
-
-    let errorMessage = '导出截图失败，请稍后重试';
-    if (error instanceof Error) {
-      errorMessage = `导出截图失败: ${error.message}`;
-    }
-    ElMessage.error(errorMessage);
-  }
-}
-
-// 导出选中的消息
-const exportSelectedMessages = async () => {
-  const selectedMessages = messages.filter(msg => msg.selected)
-
-  if (selectedMessages.length === 0) {
-    await exportConversationScreenshot()
-    return
-  }
-
-  // 检查选中的消息中是否包含图片
-  const hasImages = selectedMessages.some(msg => {
-    if (msg.url && isImageUrl(msg.url)) return true
-    const fileUrls = extractFileUrls(msg.content)
-    return fileUrls.some(url => isImageUrl(url))
-  })
-
-  if (hasImages) {
-    ElMessageBox.alert('选中的消息中包含图片，暂不支持导出含图片的消息。请取消选择包含图片的消息后再尝试导出。', '提示', {
-      confirmButtonText: '确定',
-      type: 'warning'
-    })
-    return
-  }
-
-  // 使用现有容器，临时隐藏未选中的消息和复选框
-  const messagesContainerEl = messagesContainer.value
-  if (!messagesContainerEl) {
-    ElMessage.error('无法找到对话容器')
-    return
-  }
-
-  // 获取所有消息元素
-  const messageElements = messagesContainerEl.querySelectorAll('.message')
-
-  // 保存需要恢复的显示状态
-  const hiddenElements: { el: HTMLElement, originalDisplay: string }[] = []
-
-  try {
-    // 隐藏未选中的消息
-    messageElements.forEach((el, index) => {
-      const msg = messages[index]
-      if (msg && !msg.selected) {
-        const htmlEl = el as HTMLElement
-        hiddenElements.push({ el: htmlEl, originalDisplay: htmlEl.style.display || '' })
-        htmlEl.style.display = 'none'
-      }
-    })
-
-    // 隐藏所有复选框
-    const checkboxes = messagesContainerEl.querySelectorAll('.message-checkbox')
-    checkboxes.forEach(cb => {
-      const htmlEl = cb as HTMLElement
-      hiddenElements.push({ el: htmlEl, originalDisplay: htmlEl.style.display || '' })
-      htmlEl.style.visibility = 'hidden'
-    })
-
-    // 隐藏回到顶部按钮
-    const backToTopBtns = messagesContainerEl.querySelectorAll('.back-to-top-btn-normal')
-    backToTopBtns.forEach(btn => {
-      hiddenElements.push({ el: btn as HTMLElement, originalDisplay: (btn as HTMLElement).style.display || '' })
-      ;(btn as HTMLElement).style.display = 'none'
-    })
-
-    // 调用原有的导出函数，但传递一个标志表示这是选中的消息导出
-    await exportConversationScreenshot({ skipImageCheck: true })
-  } catch (error) {
-    console.error('导出失败:', error)
-    ElMessage.error('导出失败，请稍后重试')
-  } finally {
-    // 恢复所有隐藏的元素
-    hiddenElements.forEach(({ el, originalDisplay }) => {
-      if (el.style.visibility === 'hidden') {
-        el.style.visibility = ''
-      } else {
-        el.style.display = originalDisplay
-      }
-    })
-  }
-}
-
-const decodeMathEntities = (text: string) =>
-  text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-
-const renderMathInPlainTextSegment = (text: string) => {
-  const decodedText = decodeMathEntities(text)
-  let processedText = decodedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, math) => {
-    return mathRenderer.displayMath(String(math || '').trim())
-  })
-
-  processedText = processedText.replace(/\$([^{][^$]*?)\$/g, (_, math) => {
-    const mathText = String(math || '')
-    if (mathText.includes('katex') || mathText.includes('class="katex')) {
-      return `$${mathText}$`
-    }
-    // 价格文本不按数学公式渲染
-    const pricePattern = /^\s*\d+(\.\d{1,2})?\s*$/
-    if (pricePattern.test(mathText)) {
-      return `$${mathText}$`
-    }
-    return mathRenderer.inlineMath(mathText.trim())
-  })
-
-  return processedText
-}
-
-const renderMathOutsideHtmlTags = (html: string) => {
-  const htmlTagRegex = /<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)?)>|<!--[\s\S]*?-->/g
-  const parts: Array<{ content: string; isHtml: boolean }> = []
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = htmlTagRegex.exec(html)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push({ content: html.substring(lastIndex, match.index), isHtml: false })
-    }
-    parts.push({ content: match[0], isHtml: true })
-    lastIndex = htmlTagRegex.lastIndex
-  }
-
-  if (lastIndex < html.length) {
-    parts.push({ content: html.substring(lastIndex), isHtml: false })
-  }
-
-  return parts.map((part) => (part.isHtml ? part.content : renderMathInPlainTextSegment(part.content))).join('')
-}
-
-const patchOrderedListStart = (html: string) => {
-  return html.replace(
-    /<ol(\s+(?:[^>]*?\s+)?start\s*=\s*["']?(\d+)["']?(?:\s+[^>]*)?|\s+[^>]*?)>/gi,
-    (match, attributes, startNum) => {
-      if (!startNum) return match
-      const num = parseInt(startNum, 10)
-      const cssCounterValue = num - 1
-      const cleanedAttributes = String(attributes || '').replace(/\s*start\s*=\s*["']?\d+["']?\s*/i, '').trim()
-      return `<ol${cleanedAttributes} start="${num}" style="--ol-start: ${cssCounterValue};" class="ordered-list-with-start">`
-    }
-  )
-}
-
-const parseMarkdownToHtml = (content: string) => {
-  const preprocessedContent = (content || '').replace(/\*\*“([^”]*?)”\*\*/g, '**$1**')
-  try {
-    const parsed = marked.parse(preprocessedContent)
-    if (parsed instanceof Promise) {
-      return preprocessedContent
-    }
-    return typeof parsed === 'string' ? parsed.trim() : String(parsed)
-  } catch (error) {
-    console.error('Markdown parsing error:', error)
-    return preprocessedContent
-  }
-}
-
-const protectCodeBlocks = (html: string) => {
-  const protectedBlocks: string[] = []
-  const protectedHtml = html.replace(/<pre><code[^>]*>[\s\S]*?<\/code><\/pre>|<code[^>]*>[\s\S]*?<\/code>/g, (match) => {
-    protectedBlocks.push(match)
-    return `__CODE_BLOCK_PLACEHOLDER_${protectedBlocks.length - 1}__`
-  })
-  return { protectedHtml, protectedBlocks }
-}
-
-const restoreCodeBlocks = (html: string, protectedBlocks: string[]) => {
-  let restoredHtml = html
-  for (let i = 0; i < protectedBlocks.length; i++) {
-    restoredHtml = restoredHtml.replace(`__CODE_BLOCK_PLACEHOLDER_${i}__`, protectedBlocks[i])
-  }
-  return restoredHtml
-}
-
-const sanitizeRichHtml = (html: string) => {
-  return DOMPurify.sanitize(html, {
-    ADD_ATTR: ['target', 'rel', 'class', 'style', 'start', 'aria-hidden', 'data-code', 'type', 'data-source', 'data-source-hash', 'data-rendered'],
-  })
-}
-
-const renderRichText = (content: string) => {
-  if (!content) return ''
-
-  let html = parseMarkdownToHtml(content)
-  html = patchOrderedListStart(html)
-
-  // 把 ```mermaid 代码块转为占位 div，供 mermaid 异步渲染
-  html = extractMermaidBlocks(html)
-
-  const { protectedHtml, protectedBlocks } = protectCodeBlocks(html)
-  let rendered = renderMathOutsideHtmlTags(protectedHtml)
-  rendered = restoreCodeBlocks(rendered, protectedBlocks)
-  rendered = normalizeAsciiDiagramBlocks(rendered)
-
-  // 为 Markdown 图片追加预览样式
-  rendered = rendered.replace(/<img\s+([^>]*?)>/gi, '<img $1 class="attachment-preview" />')
-  rendered = highlightCode(rendered)
-
-  return sanitizeRichHtml(rendered)
-}
-
-const normalizeAsciiDiagramBlocks = (html: string) => {
-  if (!html) return html
-  return html.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
-    const text = String(inner || '')
-    if (!text.includes('\t') && text.indexOf('  ') === -1) {
-      return match
-    }
-    const normalized = text
-      .replace(/\t/g, '    ')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/&nbsp;/g, ' ')
-      .trim()
-    const lines = normalized.split('\n')
-    const looksLikeDiagram = lines.length >= 2 && lines.some((line) => /[+\-|│┌┐└┘├┤┬┴┼]/.test(line))
-    if (!looksLikeDiagram) {
-      return match
-    }
-    return `<pre class="ascii-diagram"><code>${normalized}</code></pre>`
-  })
-}
-
-function getCurrentTime() {
-  return new Date().toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-function getCurrentDateTime() {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
-}
-
-// 从消息对象提取可复制文本：优先用 parts 中的 text 部分，回退到 content
-const getCopyText = (msg: any): string => {
-  if (msg.parts && msg.parts.length > 0) {
-    const textParts = msg.parts
-      .filter((p: any) => p.type === 'text' && p.text)
-      .map((p: any) => p.text)
-    if (textParts.length > 0) {
-      return textParts.join('\n')
-    }
-  }
-  return msg.content || ''
-}
-
-// 复制消息内容到剪贴板
-const copyMessageContent = async (content: string) => {
-  try {
-    // 直接复制原始内容，而不是转换后的HTML
-    await navigator.clipboard.writeText(content);
-    ElMessage.success('内容已复制到剪贴板');
-  } catch (err) {
-    console.error('复制失败:', err);
-    // 如果 navigator.clipboard 不可用，回退到老方法
-    try {
-      const textArea = document.createElement('textarea');
-      textArea.value = content; // 直接使用原始内容
-      document.body.appendChild(textArea);
-      textArea.select();
-      // 现代浏览器使用 Clipboard API，老浏览器使用 execCommand
-      let successful = false;
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(content); // 直接使用原始内容
-        successful = true;
-      } else {
-        successful = document.execCommand('copy'); // 保留，但作为备用方案
-      }
-      document.body.removeChild(textArea);
-      if (successful) {
-        ElMessage.success('内容已复制到剪贴板');
-      } else {
-        throw new Error('复制失败');
-      }
-    } catch (fallbackErr) {
-      console.error('复制失败:', fallbackErr);
-      ElMessage.error('复制失败，请手动选择内容');
-    }
-  }
-}
-
-const handleMessageContainerClick = async (event: Event) => {
-  const target = event.target as HTMLElement | null
-  if (!target) return
-  const copyBtn = target.closest('.code-copy-btn') as HTMLElement | null
-  if (!copyBtn) return
-  event.preventDefault()
-  const encoded = copyBtn.getAttribute('data-code') || ''
-  let rawCode = encoded
-  try {
-    rawCode = decodeURIComponent(encoded)
-  } catch {
-    rawCode = encoded
-  }
-  await copyMessageContent(rawCode)
-}
-
-
-// 删除指定的消息
-const deleteMessage = (index: number) => {
-  if (index >= 0 && index < messages.length) {
-    // 检查是否是AI欢迎消息，如果是则不允许删除
-    const welcomeMessage = t('chat.aiWelcomeMessage');
-    if (messages[index].content === welcomeMessage && messages[index].type === 'ai') {
-      ElMessage.warning(t('chat.cannotDeleteWelcomeMessage'));
-      return;
-    }
-
-    messages.splice(index, 1);
-    ElMessage.success('消息已删除');
-  }
-}
-
-// 批量删除选中的消息
-const deleteSelectedMessages = async () => {
-  const totalSelected = selectedCount.value
-  if (totalSelected === 0) return
-
-  try {
-    await ElMessageBox.confirm(
-      t('chat.batchDeleteConfirm', { count: totalSelected }),
-      t('chat.batchDelete'),
-      {
-        confirmButtonText: t('chat.confirm'),
-        cancelButtonText: t('chat.cancel'),
-        type: 'warning'
-      }
-    )
-  } catch {
-    return
-  }
-
-  const welcomeMessage = t('chat.aiWelcomeMessage')
-  const selectedIndexes = messages
-    .map((msg, idx) => (msg.selected ? idx : -1))
-    .filter(idx => idx >= 0)
-    .sort((a, b) => b - a)
-
-  let deletedCount = 0
-  let skippedWelcome = false
-
-  selectedIndexes.forEach(idx => {
-    const msg = messages[idx]
-    if (!msg) return
-    if (msg.type === 'ai' && msg.content === welcomeMessage) {
-      skippedWelcome = true
-      msg.selected = false
-      return
-    }
-    messages.splice(idx, 1)
-    deletedCount += 1
-  })
-
-  messages.forEach(msg => {
-    if (msg.selected) msg.selected = false
-  })
-
-  if (deletedCount > 0) {
-    ElMessage.success(t('chat.batchDeleteSuccess', { count: deletedCount }))
-  }
-  if (skippedWelcome) {
-    ElMessage.warning(t('chat.cannotDeleteWelcomeMessage'))
-  }
-}
-
-const isLatestAiMessage = (index: number) => {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].type === 'ai') {
-      return i === index
-    }
-  }
-  return false
-}
-
-const canRetryLastExchange = () => {
-  if (isLoading.value) return false
-  if (messages.length < 2) return false
-  const lastTwo = messages.slice(-2)
-  return lastTwo[0]?.type === 'user' && lastTwo[1]?.type === 'ai'
-}
-
-const retryLastExchange = async () => {
-  if (!canRetryLastExchange()) {
-    ElMessage.warning('没有可重试的对话记录')
-    return
-  }
-  const lastUserMessage = messages[messages.length - 2]
-  if (lastUserMessage?.type === 'user') {
-    inputMessage.value = lastUserMessage.content || ''
-  }
-  messages.splice(messages.length - 2, 2)
-  await nextTick()
-  scrollToBottomOnNewMessage()
-}
-
-const generateRequestId = () => {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-  return `req_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
-
-const clearWaitingChoiceTimer = () => {
-  const sessionKey = getSessionKey()
-  const timerId = sessionWaitingTimers.value[sessionKey]
-  if (timerId) {
-    clearTimeout(timerId)
-    sessionWaitingTimers.value[sessionKey] = null
-  }
-}
-
-const startWaitingChoiceTimer = () => {
-  const sessionKey = getSessionKey()
-  clearWaitingChoiceTimer()
-  sessionWaitingShown.value[sessionKey] = false
-  sessionWaitingTimers.value[sessionKey] = window.setTimeout(async () => {
-    if (!sessionLoadingStore.value[sessionKey] || sessionWaitingShown.value[sessionKey]) return
-    sessionWaitingShown.value[sessionKey] = true
-    try {
-      await ElMessageBox.confirm(
-        t('chat.streamWaitTimeoutMessage'),
-        t('chat.streamWaitTimeoutTitle'),
-        {
-          confirmButtonText: t('chat.continueWait'),
-          cancelButtonText: t('chat.stopStream'),
-          type: 'warning',
-          closeOnClickModal: false
-        }
-      )
-    } catch {
-      await handleStopStream('timeout')
-    }
-  }, 30000)
-}
-
-const handleStopStream = async (reason: 'user' | 'timeout' = 'user') => {
-  const sessionKey = getSessionKey()
-  const activeController = sessionAbortControllers.value[sessionKey]
-  if (!activeController) {
-    return
-  }
-  const requestId = sessionRequestIds.value[sessionKey]
-  activeController.abort()
-  sessionAbortControllers.value[sessionKey] = null
-  sessionRequestIds.value[sessionKey] = null
-  clearWaitingChoiceTimer()
-
-  try {
-    if (requestId) {
-      await chatAPI.cancelChatStream(requestId)
-    }
-  } catch (error) {
-    console.error('终止流式请求失败:', error)
-  }
-
-  const activeAiIdx = sessionAiIndexes.value[sessionKey]
-  if (activeAiIdx !== null && activeAiIdx !== undefined && messages[activeAiIdx]) {
-    const message = messages[activeAiIdx]
-    message.isError = true
-    if (!message.content) {
-      message.content = t('chat.streamStopped')
-    }
-  }
-
-  isLoading.value = false
-
-  if (reason === 'user') {
-    ElMessage.info(t('chat.streamStopped'))
-  }
-}
-
-// 通用API调用函数
-const callApi = async (
-  userMessage: any,
-  contextSnapshot: any[],
-  options: {
-    isRetry?: boolean,
-    originalIndex?: number,
-    isContinue?: boolean,
-    imageSize?: string  // 添加图片尺寸参数
-  } = {}
-) => {
-  const { isRetry = false, originalIndex, isContinue = false, imageSize = '1024x1024' } = options;
-  let wasUserAborted = false;
-  const requestSessionKey = getSessionKey()
-  const roleSetting = buildRoleSetting()
-
-  setSessionLoading(requestSessionKey, true)
-
-  try {
-    // 检查模型类型：2=图片生成类(dall-e等), 3=多模态类(gpt-5.4/5.5等)
-    const isImageModel = formData.selectedModelType === 2;
-    const isMultimodalModel = formData.selectedModelType === 3;
-
-    if (isImageModel) {
-      // 图像生成模型使用图片生成API
-      const aiResponse: any = await chatAPI.sendImageGeneration(
-        formData.selectedModel,
-        userMessage.content,
-        'single',
-        buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time),
-        formData.dialogTitle,
-        imageSize,  // 添加图片尺寸参数
-        formData.currentDialogId || 0,
-        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
-        roleSetting
-      );
-
-      // 处理响应 - 简化逻辑，只关注URL字段
-      let responseContent = '';
-
-      if (typeof aiResponse === 'object') {
-        // 优先检查直接的url字段
-        if (aiResponse.url) {
-          responseContent = aiResponse.url;
-        }
-        // 检查content.context格式
-        else if (aiResponse.content && aiResponse.content.context) {
-          const context = aiResponse.content.context;
-          if (Array.isArray(context) && context.length > 0) {
-            // 查找assistant角色的消息
-            const assistantMsg = context.find(msg => msg.role === 'assistant');
-            if (assistantMsg && assistantMsg.url) {
-              responseContent = assistantMsg.url;
-            }
-          }
-        }
-
-        // 检查并更新对话ID（如果后端返回了新的对话ID）
-        if (aiResponse.dialog_id && !formData.currentDialogId) {
-          emit('session-dialog-created', {
-            sessionKey: requestSessionKey,
-            dialogId: Number(aiResponse.dialog_id)
-          })
-          formData.currentDialogId = aiResponse.dialog_id;
-          // 如果没有设置标题，使用新对话的ID作为标题
-          if (!formData.dialogTitle.trim()) {
-            formData.dialogTitle = `对话 ${aiResponse.dialog_id}`;
-          }
-        }
-
-        // 如果找到了URL，根据是否是图片决定是否显示预览
-        if (responseContent) {
-          // 直接使用完整的URL，不再添加origin前缀
-          const finalUrl = responseContent;
-
-          // 检查URL后缀名判断是否为图片
-          if (isImageUrl(finalUrl)) {
-            // 如果是图片，使用FILE_URL格式以便触发预览功能
-            responseContent = `[FILE_URL:${finalUrl}]`;
-          } else {
-            // 如果不是图片，只显示链接文本
-            responseContent = `文件链接: ${finalUrl}`;
-          }
-        } else {
-          // 没有找到URL，返回原始响应
-          responseContent = JSON.stringify(aiResponse);
-        }
-      } else {
-        responseContent = String(aiResponse);
-      }
-
-      // 根据是新消息还是重试消息决定如何添加到消息列表
-      const imageMsgBase: any = {
-        type: 'ai',
-        content: responseContent,
-        time: aiResponse?.time || getCurrentTime()
-      }
-      // 从图片生成响应提取多模态 parts
-      if (aiResponse?.parts) {
-        imageMsgBase.parts = aiResponse.parts
-      }
-      if (isRetry && originalIndex !== undefined) {
-        // 替换重试的消息
-        messages.splice(originalIndex, 1, imageMsgBase);
-      } else {
-        // 添加新AI消息 - 如果responseContent是图片URL，也设置url字段
-        let finalUrl = '';
-        if (responseContent.startsWith('[FILE_URL:') && responseContent.endsWith(']')) {
-          // 提取URL
-          finalUrl = responseContent.substring(10, responseContent.length - 1);
-        }
-        imageMsgBase.url = finalUrl
-        messages.push(imageMsgBase);
-      }
-    } else {
-      // 根据开关决定使用流式还是非流式API
-      if (formData.streamEnabled) {
-        // 使用流式API
-        let aiMessageIndex: number;
-
-        if (isRetry && originalIndex !== undefined) {
-          // 重试时替换原消息
-          messages[originalIndex] = {
-            type: 'ai',
-            content: '',  // 初始内容为空
-            time: getCurrentTime()
-          };
-          aiMessageIndex = originalIndex;
-        } else {
-          // 新消息时添加
-          aiMessageIndex = messages.length;
-          messages.push({
-            type: 'ai',
-            content: '',  // 初始内容为空
-            time: getCurrentTime()
-          });
-        }
-
-        const requestId = generateRequestId()
-        const abortController = new AbortController()
-        sessionAbortControllers.value[requestSessionKey] = abortController
-        sessionRequestIds.value[requestSessionKey] = requestId
-        sessionAiIndexes.value[requestSessionKey] = aiMessageIndex
-        startWaitingChoiceTimer()
-
-        // 使用之前保存的上下文快照构建对话数组，避免因异步操作造成的混乱
-        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time);
-
-        await chatAPI.sendChatStream(
-          formData.selectedModel,
-          userMessage.content,
-          (content, done, finishReason, response) => {
-            // 处理非文本 part 事件（图片/文件等）
-            if (response?.part) {
-              mutateSessionMessages(requestSessionKey, (targetMessages) => {
-                if (!targetMessages[aiMessageIndex]) return
-                if (!targetMessages[aiMessageIndex].parts) {
-                  targetMessages[aiMessageIndex].parts = []
-                }
-                targetMessages[aiMessageIndex].parts!.push(response.part)
-              })
-              return
-            }
-            // 工具调用状态仅用于协议层通知，具体搜索结果通过 part 事件展示。
-            if (response?.type === 'tool_status') {
-              return
-            }
-
-            mutateSessionMessages(requestSessionKey, (targetMessages) => {
-              if (!targetMessages[aiMessageIndex]) {
-                targetMessages[aiMessageIndex] = {
-                  type: 'ai',
-                  content: '',
-                  time: getCurrentTime()
-                }
-              }
-              targetMessages[aiMessageIndex].content = `${targetMessages[aiMessageIndex].content || ''}${content || ''}`
-            })
-            if (done) {
-              if (response?.usage) {
-                setContextUsage(response.usage)
-              }
-              setSessionLoading(requestSessionKey, false)
-              clearWaitingChoiceTimer()
-              sessionAbortControllers.value[requestSessionKey] = null
-              sessionRequestIds.value[requestSessionKey] = null
-              sessionAiIndexes.value[requestSessionKey] = null
-              mutateSessionMessages(requestSessionKey, (targetMessages) => {
-                if (!targetMessages[aiMessageIndex]) return
-                if (finishReason === 'length') {
-                  targetMessages[aiMessageIndex].finishReason = 'length';
-                  targetMessages[aiMessageIndex].isTruncated = true;
-                } else if (targetMessages[aiMessageIndex].content === '') {
-                  targetMessages[aiMessageIndex].isError = true;
-                }
-                if (response?.time) {
-                  targetMessages[aiMessageIndex].time = response.time
-                }
-                // 从 done 事件提取多模态 parts
-                if (response?.parts) {
-                  targetMessages[aiMessageIndex].parts = response.parts
-                }
-              })
-
-              // 检查并更新对话ID（如果后端返回了新的对话ID）
-              if (response && response.dialog_id) {
-                emit('session-dialog-created', {
-                  sessionKey: requestSessionKey,
-                  dialogId: Number(response.dialog_id)
-                })
-                if (requestSessionKey === getSessionKey() && !formData.currentDialogId) {
-                  formData.currentDialogId = response.dialog_id;
-                  if (!formData.dialogTitle.trim()) {
-                    formData.dialogTitle = `对话 ${response.dialog_id}`;
-                  }
-                }
-              }
-            }
-            // 在每次更新内容后滚动到底部
-            if (requestSessionKey === getSessionKey() && formData.isScrolledToBottom) {
-              nextTick(() => {
-                scrollToBottom();
-              });
-            }
-          },
-          formData.contextCount > 0 ? 'multi' : 'single',
-          dialogArray,
-          formData.dialogTitle,  // 添加dialogTitle参数
-          Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
-          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
-          roleSetting,
-          requestId,
-          abortController.signal,
-          formData.enabledTools
-        );
-      } else {
-        // 使用非流式API
-        let aiMessageIndex: number;
-
-        if (isRetry && originalIndex !== undefined) {
-          // 重试时替换原消息
-          messages[originalIndex] = {
-            type: 'ai',
-            content: '',  // 初始内容为空
-            time: getCurrentTime()
-          };
-          aiMessageIndex = originalIndex;
-        } else {
-          // 新消息时添加
-          aiMessageIndex = messages.length;
-          messages.push({
-            type: 'ai',
-            content: '',  // 初始内容为空
-            time: getCurrentTime()
-          });
-        }
-
-        // 使用之前保存的上下文快照构建对话数组
-        const dialogArray = buildDialogArrayFromSnapshot(contextSnapshot, userMessage.content, userMessage.time);
-
-        const response: any = await chatAPI.sendChat(
-          formData.selectedModel,
-          userMessage.content,
-          formData.contextCount > 0 ? 'multi' : 'single',
-          dialogArray,
-          formData.dialogTitle,
-          Math.round(formData.maxResponseChars * 1.2 + 30), // 添加最大回复tokens参数（字数×2）
-          formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
-          roleSetting,
-          formData.enabledTools
-        );
-
-        // 更新AI消息内容
-        if (response.usage) {
-          setContextUsage(response.usage)
-        }
-        mutateSessionMessages(requestSessionKey, (targetMessages) => {
-          if (!targetMessages[aiMessageIndex]) return
-          targetMessages[aiMessageIndex].content = response.content
-          if (response.time) {
-            targetMessages[aiMessageIndex].time = response.time
-          }
-          if (response.parts) {
-            targetMessages[aiMessageIndex].parts = response.parts
-          }
-          if (response.finish_reason === 'length') {
-            targetMessages[aiMessageIndex].finishReason = response.finish_reason as 'length';
-            targetMessages[aiMessageIndex].isTruncated = true;
-          }
-        })
-
-        // 检查并更新对话ID（如果后端返回了新的对话ID）
-        if (response.dialog_id) {
-          emit('session-dialog-created', {
-            sessionKey: requestSessionKey,
-            dialogId: Number(response.dialog_id)
-          })
-          if (requestSessionKey === getSessionKey() && !formData.currentDialogId) {
-            formData.currentDialogId = response.dialog_id;
-            if (!formData.dialogTitle.trim()) {
-              formData.dialogTitle = `对话 ${response.dialog_id}`;
-            }
-          }
-        }
-
-        setSessionLoading(requestSessionKey, false)
-        // 滚动到底部
-        if (requestSessionKey === getSessionKey()) {
-          nextTick(() => {
-            scrollToBottom();
-          });
-        }
-      }
-    }
-  } catch (error: any) {
-    console.error(isRetry ? '重试API Error:' : 'API Error:', error);
-
-    if (error?.name === 'AbortError') {
-      wasUserAborted = true;
-      return;
-    }
-
-    let errorMessage = isRetry ? '重试失败，请稍后再次重试' : '获取AI回复失败，请重试';
-    if (error.response) {
-      errorMessage = isRetry
-        ? `重试失败: ${error.response.data?.msg || error.response.statusText}`
-        : `错误: ${error.response.data?.msg || error.response.statusText}`;
-    } else if (error.request) {
-      errorMessage = '网络请求失败，请检查后端服务是否正常运行';
-    } else if (error.message) {
-      if (error.message.includes('API错误') || error.message.includes('API请求失败') ||
-          error.message.includes('网段') || error.message.includes('白名单') ||
-          error.message.includes('IP') || error.message.includes('ip')) {
-        // 特别处理API错误信息，这通常来自SSE流中的错误消息
-        errorMessage = isRetry ? `重试失败: ${error.message}` : error.message;
-      } else {
-        // 其他类型的错误消息也直接使用
-        errorMessage = isRetry ? `重试失败: ${error.message}` : error.message;
-      }
-    }
-
-    // 根据是新消息还是重试消息决定如何添加到消息列表
-    if (isRetry && originalIndex !== undefined) {
-      // 重试失败时替换消息
-      messages.splice(originalIndex, 0, {
-        type: 'ai',
-        content: errorMessage,
-        time: getCurrentTime(),
-        isError: true  // 保持错误状态，用户仍可以再次重试
-      });
-    } else {
-      // 添加错误AI消息，带有重试功能
-      messages.push({
-        type: 'ai',
-        content: errorMessage,
-        time: getCurrentTime(),
-        isError: true  // 添加错误状态
-      });
-    }
-  } finally {
-    setSessionLoading(requestSessionKey, false)
-    clearWaitingChoiceTimer()
-    sessionAbortControllers.value[requestSessionKey] = null
-    sessionRequestIds.value[requestSessionKey] = null
-    sessionAiIndexes.value[requestSessionKey] = null
-    await nextTick();
-    scrollToBottomOnNewMessage();
-
-    if (!isRetry && !isContinue && !wasUserAborted) {
-      // 刷新对话历史记录（仅新消息发送时）
-      emit('refresh-history');
-    }
-  }
-}
-
-// 处理InputArea组件的发送消息事件
-const handleSendMessage = async (message: string, file?: File, imageSize?: string) => {
-  if (!message.trim()) return
-  if (!formData.selectedModel) {
-    ElMessage.warning('请先选择一个模型')
-    return
-  }
-  // 检查模型类型：2=图片生成类, 3=多模态类
-  const isImageModel = formData.selectedModelType === 2;
-  const isMultimodalModel = formData.selectedModelType === 3;
-
-  // 提取图片尺寸信息（如果存在）
-  let processedMessage = message;
-  let finalImageSize = imageSize || '1024x1024'; // 默认尺寸
-
-  // 优化：获取最新的messages状态，查找上一条AI消息中的url字段（适用于所有模型）
-  // 获取当前用户消息之前的最后一条AI消息（排除系统消息和用户消息）
-  let lastAiMessageIndex = -1;
-  
-  // 从数组末尾向前遍历，跳过可能的当前正在输入的用户消息
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    // 找到第一条AI消息（排除欢迎消息）
-    if (msg.type === 'ai' && msg.content && msg.content !== t('chat.aiWelcomeMessage')) {
-      lastAiMessageIndex = i;
-      break;
-    }
-  }
-
-  if (lastAiMessageIndex !== -1) {
-    const lastAiMessage = messages[lastAiMessageIndex];
-
-    // 检查上一条AI消息是否有url字段（AI返回的图片保存在message.url中）
-    if (lastAiMessage.url) {
-      // 将url字段转化为[FILE_URL]格式并追加到本次入参后面
-      processedMessage = processedMessage + '\n[FILE_URL:' + lastAiMessage.url + ']';
-    } else {
-      // 兼容旧逻辑：检查上一条AI消息的内容中是否包含[FILE_URL]
-      const fileUrls = extractFileUrls(lastAiMessage.content);
-      if (fileUrls.length > 0) {
-        // 提取原始的[FILE_URL:xxx]格式文本
-        const fileUrlMatches = lastAiMessage.content.match(/\[FILE_URL:[^\]]+\]/g);
-        if (fileUrlMatches) {
-          // 将上一条消息中的[FILE_URL]文本追加到本次入参后面
-          processedMessage = processedMessage + '\n' + fileUrlMatches.join('\n');
-        }
-      }
-    }
-  }
-
-  if (isImageModel) {
-    const imageSizeMatch = message.match(/\[IMAGE_SIZE:(.+?)\]/);
-    if (imageSizeMatch) {
-      finalImageSize = imageSizeMatch[1];
-      // 移除尺寸标记，只保留原始消息
-      processedMessage = processedMessage.replace(/\[IMAGE_SIZE:(.+?)\]/, '').trim();
-    }
-  }
-
-  // 清除异常类的消息（包含重试或继续输出按钮的消息）
-  const normalMessages = filterAbnormalMessages(messages);
-
-  // 如果消息数组被过滤，则替换原数组
-  if (normalMessages.length !== messages.length) {
-    // 保留正常的消息
-    messages.splice(0, messages.length, ...normalMessages)
-  }
-
-  const userMessage = {
-    type: 'user' as const,
-    content: processedMessage,
-    time: getCurrentDateTime(),
-    file: file || undefined
-  }
-
-  // 在构建对话数组之前先保存当前的上下文消息
-  const contextSnapshot = [...messages]; // 创建当前消息快照用于构建上下文
-
-  // 添加用户消息到数组
-  messages.push(userMessage)
-
-  // 如果当前没有设置标题，则将用户输入作为对话标题（只在第一次发送时）
-  if (!formData.dialogTitle.trim()) {
-    // 截取前50个字符作为标题
-    const cleanTitle = sanitizeDialogTitle(processedMessage)
-    formData.dialogTitle = cleanTitle.length > 50
-      ? cleanTitle.substring(0, 50) + '...'
-      : cleanTitle
-  }
-
-  // 滚动到底部
-  await nextTick()
-  scrollToBottomOnNewMessage()
-
-  // 根据是否是图像模型调用相应的API
-  if (isImageModel) {
-    // 调用图片生成API并传递尺寸参数
-    try {
-      isLoading.value = true;
-      const roleSetting = buildRoleSetting()
-      const aiResponse: any = await chatAPI.sendImageGeneration(
-        formData.selectedModel,
-        processedMessage,
-        formData.contextCount > 0 ? 'multi' : 'single',
-        buildDialogArrayFromSnapshot(contextSnapshot, processedMessage, userMessage.time),
-        formData.dialogTitle,
-        finalImageSize,  // 传递图片尺寸参数
-        formData.currentDialogId || 0,  // 传递对话ID参数
-        formData.enhancedRoleEnabled ? formData.systemPromptId : undefined,  // 传递 system_prompt_id
-        roleSetting
-      );
-
-      // 处理响应
-      let responseContent = '';
-      let imageUrl = '';
-      
-      if (typeof aiResponse === 'object') {
-        // 优先检查直接的url字段
-        if (aiResponse.url) {
-          imageUrl = normalizeFileUrl(aiResponse.url);
-          responseContent = aiResponse.desc || '图片已生成';
-
-          // 检查并更新对话ID（如果后端返回了新的对话ID）
-          if (aiResponse.dialog_id && !formData.currentDialogId) {
-            emit('session-dialog-created', {
-              sessionKey: getSessionKey(),
-              dialogId: Number(aiResponse.dialog_id)
-            })
-            formData.currentDialogId = aiResponse.dialog_id;
-            // 如果没有设置标题，使用新对话的ID作为标题
-            if (!formData.dialogTitle.trim()) {
-              formData.dialogTitle = `对话 ${aiResponse.dialog_id}`;
-            }
-          }
-        } else {
-          responseContent = JSON.stringify(aiResponse);
-        }
-      } else {
-        responseContent = String(aiResponse);
-      }
-
-      // 添加AI消息 - 如果有图片URL，设置url字段
-      const imgMsg: any = {
-        type: 'ai',
-        content: responseContent,
-        url: imageUrl, // 设置url字段以便直接预览
-        time: aiResponse?.time || getCurrentTime()
-      }
-      // 从图片生成响应提取多模态 parts
-      if (aiResponse?.parts) {
-        imgMsg.parts = aiResponse.parts
-      }
-      messages.push(imgMsg);
-    } catch (error: any) {
-      console.error('图片生成API Error:', error);
-      let errorMessage = '图片生成失败，请重试';
-      if (error.response) {
-        errorMessage = `错误: ${error.response.data?.msg || error.response.statusText}`;
-      } else if (error.request) {
-        errorMessage = '网络请求失败，请检查后端服务是否正常运行';
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-
-      messages.push({
-        type: 'ai',
-        content: errorMessage,
-        time: getCurrentTime(),
-        isError: true
-      });
-    } finally {
-      isLoading.value = false;
-      await nextTick();
-      scrollToBottomOnNewMessage();
-
-      // 刷新对话历史记录
-      emit('refresh-history');
-    }
-  } else {
-    // 调用普通API
-    await callApi(userMessage, contextSnapshot, { imageSize: finalImageSize })
-  }
-}
-
-// 重试发送特定AI消息（重新发送该消息所属的上下文）
-const retryMessage = async (index: number) => {
-  if (index < 0 || index >= messages.length || messages[index].type !== 'ai') {
-    return;
-  }
-
-  // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要重试的消息
-  const currentMessageToRetry = messages[index]; // 保存当前要重试的消息
-  const normalMessages = filterAbnormalMessages(messages, { excludeIndex: index, includeCurrent: true });
-
-  // 如果消息数组被过滤，则替换原数组
-  if (normalMessages.length !== messages.length) {
-    // 保留正常的消息
-    messages.splice(0, messages.length, ...normalMessages)
-  }
-
-  // 重新查找要重试的消息的新索引
-  const newIndexOfRetryMessage = messages.indexOf(currentMessageToRetry);
-
-  // 如果消息不存在（不应该发生），则返回
-  if (newIndexOfRetryMessage === -1) {
-    ElMessage.error('重试的消息不存在');
-    return;
-  }
-
-  // 查找这个AI消息之前的用户消息
-  let userMessageIndex = -1;
-  for (let i = newIndexOfRetryMessage - 1; i >= 0; i--) {
-    if (messages[i].type === 'user') {
-      userMessageIndex = i;
-      break;
-    }
-  }
-
-  if (userMessageIndex === -1) {
-    ElMessage.error('找不到对应的问题消息，无法重试');
-    return;
-  }
-
-  const userMessage = messages[userMessageIndex];
-
-  // 移除错误或空的AI消息
-  messages.splice(newIndexOfRetryMessage, 1);
-
-  // 准备上下文信息（不包括当前错误的AI消息）
-  const contextSnapshot = messages.slice(0, newIndexOfRetryMessage); // 获取到当前位置前的所有消息
-
-  // 调用通用API函数
-  await callApi(userMessage, contextSnapshot, {
-    isRetry: true,
-    originalIndex: newIndexOfRetryMessage
-  });
-
-  ElMessage.success('消息重试成功');
-}
-
-// 继续生成函数
-// TODO 发送的逻辑可以重构到一个函数中，避免重复代码
-const continueGeneration = async (index: number) => {
-  if (formData.contextCount < 3) {
-    ElMessageBox.alert('请将携带历史消息数量设置为3或更高，以支持连续续写功能', '提示', {
-      confirmButtonText: '确定',
-    })
-    return
-  }
-
-  if (isLoading.value) return
-
-  const truncatedMessage = messages[index]
-  if (!truncatedMessage || !truncatedMessage.isTruncated) return
-
-  // 清除异常类的消息（包含重试或继续输出按钮的消息），但保留当前要继续生成的消息
-  const currentMessageToContinue = messages[index]; // 保存当前要继续生成的消息
-  const normalMessages = filterAbnormalMessages(messages, { excludeIndex: index, includeCurrent: true });
-
-  // 如果消息数组被过滤，则替换原数组
-  if (normalMessages.length !== messages.length) {
-    // 保留正常的消息
-    messages.splice(0, messages.length, ...normalMessages)
-  }
-
-  // 重新查找要继续生成的消息的新索引
-  const newIndexOfContinueMessage = messages.indexOf(currentMessageToContinue);
-
-  // 如果消息不存在（不应该发生），则返回
-  if (newIndexOfContinueMessage === -1) {
-    ElMessage.error('继续生成的消息不存在');
-    return;
-  }
-
-  // 创建用户消息对象用于继续生成
-  const userMessage = {
-    type: 'user' as const,
-    content: "请继续生成未完成的内容，直接从上次中断的地方继续，不要重复已生成的内容。",
-    time: getCurrentDateTime()
-  };
-
-  // 准备上下文信息
-  const contextSnapshot = messages.slice(0, newIndexOfContinueMessage + 1);
-
-  // 调用通用API函数
-  await callApi(userMessage, contextSnapshot, {
-    isContinue: true
-  });
-}
-
-// 从消息快照构建对话数组函数
-const buildDialogArrayFromSnapshot = (snapshot: any[], currentMessage: string, currentTime?: string): Array<{role: string, content: string, time?: string}> => {
-  const dialogArray: Array<{role: string, content: string, url?: string, time?: string}> = []
-
-  // 注意：不再在这里拼装 system 消息
-  // system 消息现在由后端根据 system_prompt_id 来获取并添加
-  // 只有在不启用增强角色时，才使用用户输入的 systemPrompt
-  if (!formData.enhancedRoleEnabled && formData.systemPrompt && formData.systemPrompt.trim()) {
-    dialogArray.push({ role: 'system', content: formData.systemPrompt.trim() })
-  }
-
-  // 如果上下文数量为 0，只发送当前消息
-  if (formData.contextCount === 0) {
-    dialogArray.push({ role: 'user', content: currentMessage, time: currentTime || getCurrentDateTime() })
-    return dialogArray
-  }
-
-  // 获取快照中的有效消息（user 和 ai 类型），但排除初始欢迎消息
-  const validMessages = snapshot.filter((msg: any) => (msg.type === 'user' || msg.type === 'ai') && msg.content !== WELCOME_MESSAGE)
-
-  // 获取要包含的上下文消息
-  const messagesToInclude = validMessages.slice(-formData.contextCount) // 只取最新的几条
-
-  for (const msg of messagesToInclude) {
-    const dialogMsg: any = {
-      role: msg.type === 'user' ? 'user' : 'assistant',
-      content: msg.content,
-      url: msg.url || '',
-      time: msg.time
-    }
-    // 传递多模态 parts 到后端
-    if (msg.parts && msg.parts.length > 0) {
-      dialogMsg.parts = msg.parts
-    }
-    dialogArray.push(dialogMsg)
-  }
-
-  dialogArray.push({ role: 'user', content: currentMessage, time: currentTime || getCurrentDateTime() })
-  return dialogArray
-}
-
-// 检查当前消息是否正在流式接收中
-const isStreaming = (index: number) => {
-  // 如果是AI消息并且是当前正在加载的那条消息
-  const message = messages[index];
-  if (message.type === 'ai') {
-    // 检查是否是最新的AI消息且当前处于加载状态
-    const lastAiMessageIndex = messages.reduce((lastIndex, msg, idx) => {
-      if (msg.type === 'ai') {
-        return idx; // 返回最后一个AI消息的索引
-      }
-      return lastIndex;
-    }, -1);
-    return index === lastAiMessageIndex && isLoading.value;
-  }
-  return false;
-}
-// 滚动相关
-// 回到顶部函数
-const scrollToTop = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-  }
-}
-
-// 切换移动端输入框显示/隐藏
 const toggleMobileInput = () => {
   showMobileInput.value = !showMobileInput.value
 }
 
-// 智能滚动到底部函数
-const scrollToBottom = (force = false) => {
-  if (!messagesContainer.value) return
-  if (!force && !formData.isScrolledToBottom) return
-  // 使用最大可能的scrollTop值确保滚动到底部
-  const maxScrollTop = messagesContainer.value.scrollHeight - messagesContainer.value.clientHeight;
-  messagesContainer.value.scrollTop = maxScrollTop;
+const checkIsMobile = () => {
+  const currentIsMobile = window.innerWidth < 768
+  previousIsMobile.value = currentIsMobile
+  isMobile.value = currentIsMobile
 }
 
-// 监听滚动事件，但现在我们始终自动滚动到底部
-const handleScroll = () => {
-  if (messagesContainer.value) {
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
-
-    // 控制回到顶部按钮的显示：当滚动位置超过一屏时显示
-    showBackToTop.value = scrollTop > clientHeight;
-
-    // 计算是否接近底部（误差范围内）
-    const threshold = 10; // 10px阈值
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < threshold;
-
-    // 更新父组件的滚动状态
-    if (formData) {
-      formData.isScrolledToBottom = isNearBottom;
-    }
-  }
+const openImagePreview = (url: string) => {
+  previewImageUrl.value = url
+  showImagePreview.value = true
 }
 
-// 使用防抖函数优化滚动性能
-const debounce = (func: Function, wait: number) => {
-  let timeout: number | null = null;
-  return (...args: any[]) => {
-    if (timeout) clearTimeout(timeout);
-    timeout = window.setTimeout(() => func(...args), wait);
-  };
-};
-
-// 防抖处理滚动事件
-const debouncedHandleScroll = debounce(handleScroll, 100);
-
-// 添加一个专门用于新消息的滚动函数
-const scrollToBottomOnNewMessage = () => {
-  if (!messagesContainer.value) return
-  if (!formData.isScrolledToBottom) return
-  // 确保DOM完全更新后再滚动
-  nextTick(() => {
-    const maxScrollTop = messagesContainer.value!.scrollHeight - messagesContainer.value!.clientHeight;
-    messagesContainer.value!.scrollTop = maxScrollTop;
-  });
-}
-
-// 文件相关处理 - 这里只处理从InputArea传来的文件上传成功后的UI更新
 const handleFileChange = (file: any) => {
   try {
-    // 这个方法现在只负责在InputArea组件完成文件上传后更新UI状态
-    // InputArea组件已经在其内部完成了文件上传到服务器的操作
     if (file) {
-      uploadedFile.value = file;
-      // ElMessage.success(`文件 "${file.name}" 已准备就绪`);
+      uploadedFile.value = file
     }
   } catch (error: any) {
     console.error('处理文件变更错误:', error)
@@ -2365,82 +655,90 @@ const clearFile = () => {
   }
 }
 
-// 实现移动端设备检测逻辑，当屏幕宽度小于768px时将isMobile设为true，并监听窗口大小变化
-const checkIsMobile = () => {
-  // 当窗口宽度小于768px时，认为是移动端
-  const currentIsMobile = window.innerWidth < 768
+// ===== 拆出的 composables =====
+const {
+  showBackToTop,
+  scrollToTop,
+  scrollToBottom,
+  scrollToBottomOnNewMessage,
+  debouncedHandleScroll,
+} = useChatScroll(messagesContainer, formData)
 
-  // 如果设备类型发生变化，则相应地调整抽屉状态
-  if (currentIsMobile !== previousIsMobile.value) {
-    // 在从桌面端切换到移动端时，不自动打开抽屉
-    // ChatToolbar 自行管理移动端抽屉状态
-  }
+const {
+  selectedCount,
+  toggleMessageSelection,
+  copyMessageContent,
+  handleMessageContainerClick,
+  deleteMessage,
+  deleteSelectedMessages,
+} = useChatMessageActions(messages, t)
 
-  isMobile.value = currentIsMobile
-  previousIsMobile.value = currentIsMobile
-}
+const { exportSelectedMessages } = useChatExport(messages, messagesContainer, formData)
 
-// 打开图片预览
-const openImagePreview = (url: string) => {
-  previewImageUrl.value = url
-  showImagePreview.value = true
-}
+useChatMermaid(messagesContainer, messages)
 
-// 初始化时检测是否为移动端
-onMounted(() => {
-  checkIsMobile()
-
-  // 监听窗口大小变化
-  window.addEventListener('resize', checkIsMobile)
+const {
+  handleSendMessage,
+  handleStopStream,
+  retryMessage,
+  continueGeneration,
+  retryLastExchange,
+  canRetryLastExchange,
+  isStreaming,
+  isLatestAiMessage,
+} = useChatStream({
+  messages,
+  formData,
+  isLoading,
+  inputMessage,
+  getSessionKey,
+  sessionAbortControllers,
+  sessionRequestIds,
+  sessionAiIndexes,
+  sessionWaitingTimers,
+  sessionWaitingShown,
+  sessionLoadingStore,
+  setSessionLoading,
+  mutateSessionMessages,
+  buildRoleSetting,
+  setContextUsage,
+  scrollToBottom,
+  scrollToBottomOnNewMessage,
+  onDialogCreated: (sessionKey, dialogId) => emit('session-dialog-created', { sessionKey, dialogId }),
+  onRefreshHistory: () => emit('refresh-history'),
+  t,
+  welcomeMessage: WELCOME_MESSAGE,
 })
 
-// 组件卸载时移除事件监听器
-onUnmounted(() => {
-  window.removeEventListener('resize', checkIsMobile)
-})
-
-// 在组件挂载时应用主题
 onMounted(() => {
-  // 初始化设置
   initializeSettings()
-
   checkIsMobile()
+  window.addEventListener('resize', checkIsMobile)
 
   document.body.classList.toggle('dark-theme', formData.isDarkTheme)
   document.body.classList.toggle('dark', formData.isDarkTheme)
   document.documentElement.classList.toggle('dark', formData.isDarkTheme)
-
-  // 设置主题监听器
   setupThemeWatcher()
 
-  // 添加滚动事件监听器
   const container = messagesContainer.value
   if (container) {
     container.addEventListener('scroll', debouncedHandleScroll)
     container.addEventListener('click', handleMessageContainerClick)
   }
 
-  // 组件挂载后立即滚动到底部
   nextTick(() => {
-    scrollToBottom();
-    // 确保滚动到底部后更新滚动状态
-    if (messagesContainer.value) {
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
-      const threshold = 10;
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < threshold;
-      if (formData) {
-        formData.isScrolledToBottom = isNearBottom;
-      }
+    scrollToBottom()
+    const current = messagesContainer.value
+    if (current) {
+      const { scrollTop, scrollHeight, clientHeight } = current
+      formData.isScrolledToBottom = scrollHeight - scrollTop - clientHeight < 10
     }
-  });
+  })
   restoreMessagesFromSession(getSessionKey())
 })
 
-// 组件卸载时移除事件监听器
 onUnmounted(() => {
   window.removeEventListener('resize', checkIsMobile)
-
-  // 移除滚动事件监听器
   const container = messagesContainer.value
   if (container) {
     container.removeEventListener('scroll', debouncedHandleScroll)
@@ -2448,65 +746,17 @@ onUnmounted(() => {
   }
 })
 
-// 添加监视器，当消息数组发生变化时自动滚动到底部（如果用户在底部）
-// 使用 getter 监听器，只在消息数量变化时触发，避免选中状态变化导致滚动
+// 消息数量变化时保存会话并跟随滚动
 watch(() => messages.length, () => {
   saveMessagesToSession(getSessionKey())
   nextTick(() => {
     if (formData.isScrolledToBottom) {
-      scrollToBottomOnNewMessage();
+      scrollToBottomOnNewMessage()
     }
-  });
-});
+  })
+})
 
-// 从消息内容中提取文件URL列表（兼容新旧格式）
-const extractFileUrls = (content: string): string[] => {
-  if (!content) return [];
-  
-  const urls: string[] = [];
-
-  // 定义URL提取正则表达式 - 支持完整URL和相对路径
-  const patterns = [
-    { regex: /\[FILE_URL:(https?:\/\/[^\]]+)\]/g, name: 'new_full' },     // 新格式: [FILE_URL:http://xxx]
-    { regex: /\[FILE_URL:((?!https?:\/\/)[^\]]+)\]/g, name: 'new_relative' }, // 新格式: [FILE_URL:/xxx] 或 [FILE_URL::4567/xxx]（排除http://）
-    { regex: /文件已上传:\s*(https?:\/\/[^\s]+)/g, name: 'old_full' },     // 旧格式: 文件已上传: http://xxx
-    { regex: /文件已上传:\s*((?!https?:\/\/)[^\s]+)/g, name: 'old_relative' } // 旧格式: 文件已上传: /xxx 或 :4567/xxx（排除http://）
-  ];
-
-  // 遍历所有模式并提取URL
-  patterns.forEach(({ regex }) => {
-    let match;
-    while ((match = regex.exec(content)) !== null) {
-      urls.push(normalizeFileUrl(match[1]));
-    }
-  });
-
-  return urls;
-};
-
-// 获取纯文本内容（移除文件标记）
-const getTextContent = (content: string): string => {
-  if (content === null || content === undefined) {
-    return '';
-  }
-  return String(content)
-    .replace(/\[FILE_URL:[^\]]+\]/g, '')
-    .replace(/\[文件已上传:[^\]]+\]/g, '')
-    .replace(/文件已上传:\s*(https?:\/\/[^\s]+|[^\s]+)/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-}
-
-const sanitizeDialogTitle = (content: string): string => {
-  return getTextContent(content).replace(/\s+/g, ' ').trim() || '对话'
-}
-
-// 判断URL是否为图片
-const isImageUrl = (url: string): boolean => {
-  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?.*)?$/i.test(url)
-}
-
-// 监听对话ID变化，当ID变化时自动加载对话内容
+// 对话 ID 变化时加载内容
 watch(() => formData.currentDialogId, async (newDialogId) => {
   if (newDialogId !== null && newDialogId !== undefined) {
     const currentSessionKey = getSessionKey()
@@ -2515,75 +765,7 @@ watch(() => formData.currentDialogId, async (newDialogId) => {
   }
 })
 
-// 触发 mermaid 占位符渲染的 helper（统一 nextTick + 错误捕获 + 日志）
-const triggerMermaidRender = () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      renderMermaidPlaceholders(messagesContainer.value).catch((err: unknown) => {
-        console.warn('[mermaid] 渲染占位符失败', err)
-      })
-    }
-  })
-}
-
-// MutationObserver：当 v-html 重新渲染产生新的 .mermaid-diagram 占位 div 时
-// （例如响应式数据变化触发整个 message-text 重渲染），
-// 立即重新渲染覆盖之前已渲染的 SVG。
-// 这是 watch(messages) 失效场景的兜底——watch 只在 messages 引用/内容变化时触发，
-// 而 v-html 在任何响应式数据变化时都可能重渲染整个 innerHTML。
-let mermaidObserver: MutationObserver | null = null
-const setupMermaidObserver = () => {
-  if (!messagesContainer.value) {
-    console.warn('[mermaid] setupObserver: messagesContainer is null')
-    return
-  }
-  if (mermaidObserver) {
-    console.log('[mermaid] setupObserver: already exists, skip')
-    return
-  }
-  console.log('[mermaid] setupObserver: observing', messagesContainer.value)
-  mermaidObserver = new MutationObserver((mutations) => {
-    // 仅当新增节点里出现 mermaid 占位时才触发渲染。
-    // 只监听 childList：渲染完成时的 innerHTML=svg / classList.add 不再触发 observer，
-    // 从根源避免"渲染 → observer → 再渲染"的级联风暴。
-    const hasNewPlaceholder = mutations.some((m) =>
-      Array.from(m.addedNodes).some((node) => {
-        if (!(node instanceof HTMLElement)) return false
-        return node.classList?.contains('mermaid-diagram') || node.querySelector?.('.mermaid-diagram') != null
-      })
-    )
-    if (hasNewPlaceholder) {
-      triggerMermaidRender()
-    }
-  })
-  mermaidObserver.observe(messagesContainer.value, {
-    childList: true,
-    subtree: true
-  })
-}
-
-// 监听消息数组变化：DOM 更新后渲染所有 mermaid 占位符为 SVG
-// 用 deep watch 覆盖"内容变化但 length 不变"的场景（如流式追加）
-watch(messages, () => triggerMermaidRender(), { deep: true })
-
-// 组件挂载后扫描一次（覆盖"打开已有对话、消息已就位"的初始化场景）
-// 同时启动 MutationObserver，兜底 v-html 重渲染覆盖 SVG 的场景
-onMounted(() => {
-  console.log('[mermaid] onMounted, messagesContainer =', !!messagesContainer.value)
-  triggerMermaidRender()
-  // nextTick 确保 template ref 完全绑定（虽然 onMounted 后已可用，但加保险）
-  nextTick(() => {
-    console.log('[mermaid] nextTick setupObserver, messagesContainer =', !!messagesContainer.value)
-    setupMermaidObserver()
-  })
-})
-
-// 组件卸载时清理 observer，避免内存泄漏
-onBeforeUnmount(() => {
-  mermaidObserver?.disconnect()
-  mermaidObserver = null
-})
-
+// 切换会话 tab 时保存 / 恢复消息
 watch(() => props.sessionKey, (newKey, oldKey) => {
   if (oldKey) {
     saveMessagesToSession(oldKey)
@@ -2602,8 +784,6 @@ watch(() => formData.isDarkTheme, (newVal) => {
   document.body.classList.toggle('dark', newVal)
   document.documentElement.classList.toggle('dark', newVal)
 }, { immediate: true })
-
-// 监听模型列表变化，自动生成级联选项
 </script>
 
 <style scoped>
