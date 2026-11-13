@@ -74,15 +74,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, defineProps, defineEmits } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { useAuthStore } from '../../stores/auth'
 import { chatAPI } from '../../services/api'
 import { InfoFilled } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
-const authStore = useAuthStore()
+
+// axios 响应拦截器已把 response.data 解包成业务体，这里按实际运行时结构标注。
+type ApiResult = {
+  success: boolean
+  msg?: string
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -108,7 +112,7 @@ const form = reactive({
   apiKey: ''
 })
 
-const validatePassword = (rule: any, value: string, callback: Function) => {
+const validatePassword = (_rule: any, value: string, callback: Function) => {
   if (value === '') {
     callback(new Error(t('chat.passwordRequired')))
   } else if (value.length < 6) {
@@ -118,7 +122,7 @@ const validatePassword = (rule: any, value: string, callback: Function) => {
   }
 }
 
-const validateConfirmPassword = (rule: any, value: string, callback: Function) => {
+const validateConfirmPassword = (_rule: any, value: string, callback: Function) => {
   if (value === '') {
     callback(new Error(t('chat.confirmPasswordRequired')))
   } else if (value !== form.newPassword) {
@@ -150,11 +154,11 @@ const handleSubmit = async () => {
   try {
     // 先验证当前密码
     // 重置密码（可选择更新 API key）
-    const resetResult = await chatAPI.resetPassword(
+    const resetResult = (await chatAPI.resetPassword(
       form.currentPassword,
       form.newPassword,
       form.apiKey || undefined
-    )
+    )) as unknown as ApiResult
 
     if (resetResult.success) {
       ElMessage.success(resetResult.msg || t('chat.passwordUpdatedSuccessfully'))

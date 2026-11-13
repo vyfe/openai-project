@@ -199,7 +199,8 @@ const formData = reactive({
   isMobile: false,
   streamEnabled: JSON.parse(localStorage.getItem('streamEnabled') || 'true'),
   systemPrompt: localStorage.getItem('systemPrompt') || '',
-  sendPreference: localStorage.getItem('sendPreference') || 'ctrl_enter',
+  systemPromptId: undefined as number | undefined,
+  sendPreference: (localStorage.getItem('sendPreference') || 'ctrl_enter') as 'enter' | 'ctrl_enter',
 
   // ===== 新增属性 =====
   // 对话相关
@@ -405,11 +406,6 @@ const loadDialog = (dialogId: number) => {
 // 处理模型变化
 const handleModelChange = (model: string) => {
   formData.selectedModel = model
-}
-
-// 处理对话创建
-const handleDialogCreated = (dialogId: number) => {
-  formData.currentDialogId = dialogId
 }
 
 const handleTabLoadingChange = (payload: { sessionKey: string, loading: boolean }) => {
@@ -662,7 +658,7 @@ watch(() => formData.currentDialogId, (newId) => {
 })
 
 watch(
-  () => [formData.selectedModel, formData.selectedModelType, formData.selectedModelAllowNet, formData.providerValue, formData.modelValue, formData.currentModelDesc],
+  () => [formData.selectedModel, formData.selectedModelType, formData.selectedModelAllowNet, formData.providerValue, formData.modelValue, formData.currentModelDesc] as const,
   ([selectedModel, selectedModelType, selectedModelAllowNet, providerValue, modelValue, currentModelDesc]) => {
     const tab = getActiveTab()
     if (!tab) return
@@ -685,7 +681,7 @@ watch(
 )
 
 watch(
-  () => [formData.enhancedRoleEnabled, formData.systemPrompt, formData.systemPromptId, formData.activeEnhancedGroup, formData.selectedEnhancedRole, formData.activeRoleId],
+  () => [formData.enhancedRoleEnabled, formData.systemPrompt, formData.systemPromptId, formData.activeEnhancedGroup, formData.selectedEnhancedRole, formData.activeRoleId] as const,
   ([enhancedRoleEnabled, systemPrompt, systemPromptId, activeEnhancedGroup, selectedEnhancedRole, activeRoleId]) => {
     const tab = getActiveTab()
     if (!tab) return

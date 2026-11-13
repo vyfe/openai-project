@@ -65,7 +65,6 @@ function createQuantWorkbench() {
   const stockPoolTotal = ref(0)
   const stockPoolPage = reactive({ limit: 20, offset: 0, keyword: '' })
   const stockPoolSelected = ref<string[]>([])
-  const stockPoolLoading = ref(false)
   const clientTasks = ref<any[]>([])
   const dailyBars = ref<any[]>([])
   const weeklyBars = ref<any[]>([])
@@ -230,7 +229,7 @@ function createQuantWorkbench() {
       indicatorState.loading = true
       indicatorState.error = null
       try {
-        const payload: Record<string, any> = {
+        const payload: Parameters<typeof quantDataAPI.computeIndicators>[0] = {
           symbol,
           start_date,
           end_date,
@@ -240,11 +239,17 @@ function createQuantWorkbench() {
         if (interval === 'minute') {
           payload.start_datetime = minuteQuery.startDatetime || `${start_date} 00:00:00`
           payload.end_datetime = minuteQuery.endDatetime || `${end_date} 23:59:59`
-          payload.adjust_flag = minuteQuery.adjustFlag || dailyQuery.adjustFlag || 'qfq'
+          payload.adjust_flag = minuteQuery.adjustFlag || 'qfq'
         } else {
-          payload.adjust_flag = dailyQuery.adjustFlag || 'qfq'
+          // 日线/周线没有独立复权选项，固定前复权
+          payload.adjust_flag = 'qfq'
         }
-        const resp = await quantDataAPI.computeIndicators(payload)
+        // httpClient 的响应拦截器已把 response.data 解包成业务体，这里按解包后的结构断言
+        const resp = (await quantDataAPI.computeIndicators(payload)) as unknown as {
+          success?: boolean
+          msg?: string
+          data?: { results?: Record<string, Record<string, any>> }
+        }
         if (requestId !== _computeRequestId) return
         if (resp?.success && resp?.data?.results) {
           indicatorState.result = resp.data.results
@@ -408,6 +413,14 @@ function createQuantWorkbench() {
     note: '',
     leaseSeconds: 600
   })
+
+  // 后端任务路由（fetch_now / backfill / client tasks）会读取这些字段，
+  // quantApi 的请求类型暂未覆盖，调用处显式补进请求体类型。
+  type TaskPayloadExtras = {
+    all_active?: boolean
+    frequency?: string
+    interval?: string
+  }
 
   // 策略编辑相关的状态 / 模板 / 规则配置已迁移到 composables/useStrategyIde.ts；
   // 这里只保留策略列表 + 选中态 + load 等数据访问面。
@@ -1317,7 +1330,7 @@ function createQuantWorkbench() {
       item => item.symbol === searchKey || item.symbol === symbol || item.code === symbol
     )
     stockPoolForm.selectedSymbol = matched?.symbol || searchKey
-    stockPoolForm.selectedOption = matched || normalized || { symbol, name: '' }
+    stockPoolForm.selectedOption = matched || normalized || { symbol, code: '', exchange: '', name: '' }
   }
 
   const addSelectedSymbolToPool = async () => {
@@ -1585,7 +1598,7 @@ function createQuantWorkbench() {
     }
     loading.createTask = true
     try {
-      await quantTaskAPI.create({
+      const payload: Parameters<typeof quantTaskAPI.create>[0] & TaskPayloadExtras = {
         symbols: taskForm.allActive ? [] : taskForm.symbols,
         all_active: taskForm.allActive,
         start_date: taskForm.startDate,
@@ -1596,7 +1609,8 @@ function createQuantWorkbench() {
         interval: taskForm.interval,
         note: taskForm.note,
         lease_seconds: taskForm.leaseSeconds
-      })
+      }
+      await quantTaskAPI.create(payload)
       ElMessage.success('数据同步任务已创建')
       await Promise.all([loadTasks(), loadOverview()])
     } catch (error: any) {
@@ -1613,7 +1627,7 @@ function createQuantWorkbench() {
     }
     loading.fetchNow = true
     try {
-      const response: any = await quantDataAPI.fetchNow({
+      const payload: Parameters<typeof quantDataAPI.fetchNow>[0] & TaskPayloadExtras = {
         symbols: taskForm.allActive ? [] : taskForm.symbols,
         all_active: taskForm.allActive,
         start_date: taskForm.startDate,
@@ -1622,7 +1636,8 @@ function createQuantWorkbench() {
         adjust_flag: taskForm.adjustFlag,
         frequency: taskForm.frequency,
         interval: taskForm.interval
-      })
+      }
+      const response: any = await quantDataAPI.fetchNow(payload)
       const result = response.data || {}
       const cycleLabel = taskForm.frequency === '5m' ? '分时' : '日线'
       ElMessage.success(`手动拉${cycleLabel}完成：导入 ${result.records_imported ?? result.records_total ?? 0} 条`)
@@ -1646,7 +1661,7 @@ function createQuantWorkbench() {
     }
     loading.createTask = true
     try {
-      await quantDataAPI.backfill({
+      const payload: Parameters<typeof quantDataAPI.backfill>[0] & TaskPayloadExtras = {
         symbols: backfillForm.allActive ? [] : backfillForm.symbols,
         all_active: backfillForm.allActive,
         lookback_days: backfillForm.lookbackDays,
@@ -1654,7 +1669,8 @@ function createQuantWorkbench() {
         adjust_flag: backfillForm.adjustFlag,
         note: backfillForm.note,
         lease_seconds: backfillForm.leaseSeconds
-      })
+      }
+      await quantDataAPI.backfill(payload)
       ElMessage.success('历史补数任务已创建')
       await Promise.all([loadTasks(), loadOverview()])
     } catch (error: any) {

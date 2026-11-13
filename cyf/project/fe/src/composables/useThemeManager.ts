@@ -8,7 +8,6 @@ const NIGHT_END_HOUR = 7
 const isDarkTheme = ref(false)
 
 let initialized = false
-let autoCheckTimer: number | null = null
 
 const isNightTime = () => {
   const currentHour = new Date().getHours()
@@ -83,7 +82,8 @@ const initThemeManager = () => {
   syncThemeFromRules()
   autoSwitchTheme()
 
-  autoCheckTimer = window.setInterval(autoSwitchTheme, 60_000)
+  // 每分钟按昼夜规则兜底刷新一次（定时器常驻，无需清理）
+  window.setInterval(autoSwitchTheme, 60_000)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('storage', handleStorageChange)
 }

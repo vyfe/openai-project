@@ -69,7 +69,8 @@ describe('i18n messages 结构', () => {
 
 describe('i18n key 集合对齐（zh ↔ en）', () => {
   // 列举所有命名空间，逐个对比 zh/en 的 leaf key 集合
-  const namespaces = Object.keys(messages.zh)
+  // messages.zh / messages.en 的 key 是字面量联合类型，Object.keys 得到 string，需收窄后索引
+  const namespaces = Object.keys(messages.zh) as Array<keyof typeof messages.zh>
 
   for (const ns of namespaces) {
     it(`namespace "${ns}"：zh 与 en key 集合完全一致`, () => {

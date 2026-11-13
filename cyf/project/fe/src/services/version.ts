@@ -2,6 +2,9 @@
 // 用于处理前端资源版本控制和缓存刷新
 import { ref } from 'vue';
 
+// 由 vite.config.ts 的 define 在构建期注入，取 package.json 的 version（固定值）
+declare const __APP_VERSION__: string;
+
 class VersionService {
   private static readonly VERSION_KEY = 'app_version';
   private static readonly BUILD_TIME_KEY = 'build_time';

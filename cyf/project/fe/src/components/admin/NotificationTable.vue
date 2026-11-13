@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { notificationAPI } from '@/services/adminApi'
@@ -183,8 +183,8 @@ onMounted(() => {
         :page-size="pagination.page_size"
         :current-page="pagination.page"
         :page-sizes="[10, 20, 50, 100]"
-        @current-change="(page) => handlePageChange(page).catch(() => undefined)"
-        @size-change="(size) => handlePageSizeChange(size).catch(() => undefined)"
+        @current-change="(page: number) => handlePageChange(page).catch(() => undefined)"
+        @size-change="(size: number) => handlePageSizeChange(size).catch(() => undefined)"
       />
     </div>
 

@@ -246,8 +246,8 @@ onMounted(() => {
         :page-size="pagination.page_size"
         :current-page="pagination.page"
         :page-sizes="[10, 20, 50, 100]"
-        @current-change="(page) => handlePageChange(page).catch(() => undefined)"
-        @size-change="(size) => handlePageSizeChange(size).catch(() => undefined)"
+        @current-change="(page: number) => handlePageChange(page).catch(() => undefined)"
+        @size-change="(size: number) => handlePageSizeChange(size).catch(() => undefined)"
       />
     </div>
 

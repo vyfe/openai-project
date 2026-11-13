@@ -30,8 +30,10 @@
       :meta="meta"
       :error="exprError"
       :rows="3"
+      :rule-id="rule.id"
       placeholder="例如：close > ma_5"
       @update:model-value="emitExpr"
+      @focus="onExprFocus"
     />
 
     <!-- AI 自然语言生成表达式 -->
@@ -207,6 +209,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update': [patch: Partial<RuleV2>]
   'remove': []
+  'expr-focus': [ruleId: string | null]
 }>()
 
 const localLabel = ref(props.rule.label || '')
@@ -285,7 +288,8 @@ async function onAiGenerate() {
     }
     const res: any = await quantStrategyAPI.llmGenerateExpr({
       description: desc,
-      indicator_keys: indicatorKeys,
+      // Set 不能直接序列化（JSON.stringify(new Set()) === '{}'），必须转数组。
+      indicator_keys: [...indicatorKeys],
       model: aiModel.value
     })
     const data = res.data || {}

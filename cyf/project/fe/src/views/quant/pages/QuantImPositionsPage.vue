@@ -20,7 +20,7 @@
           class="quant-table quant-table--interactive quant-table--flex"
           empty-text="暂无 IM 通道，点击「新建通道」开始"
           @row-click="workbench.hydrateImChannelForm"
-          :row-class-name="({ row }) => row.id === workbench.selectedChannelId ? 'quant-row--active' : ''"
+          :row-class-name="(scope: { row: ImChannelRecord }) => scope.row.id === workbench.selectedChannelId ? 'quant-row--active' : ''"
         >
           <el-table-column prop="name" label="名称" min-width="140" />
           <el-table-column label="状态" width="90">
@@ -168,6 +168,7 @@
 import { computed } from 'vue'
 import { RefreshRight, Setting } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import type { ImChannelRecord } from '@/composables/quant/types'
 
 const workbench = useQuantWorkbench()
 

@@ -33,7 +33,7 @@
           height="420"
           class="quant-table quant-table--interactive"
           @row-click="workbench.handleScheduleSelect"
-          :row-class-name="({ row }) => row.id === workbench.selectedScheduleId ? 'quant-row--active' : ''"
+          :row-class-name="(scope: { row: ScheduleConfigRecord }) => scope.row.id === workbench.selectedScheduleId ? 'quant-row--active' : ''"
         >
           <el-table-column prop="name" label="名称" min-width="150" />
           <el-table-column prop="task_type" label="类型" width="130" />
@@ -401,7 +401,7 @@
           height="360"
           class="quant-table quant-table--interactive"
           @row-click="selectScheduleRun"
-          :row-class-name="({ row }) => row.id === workbench.selectedScheduleRunId ? 'quant-row--active' : ''"
+          :row-class-name="(scope: { row: ScheduleRunRecord }) => scope.row.id === workbench.selectedScheduleRunId ? 'quant-row--active' : ''"
         >
         <el-table-column prop="scheduled_for" label="计划时间" min-width="176" />
         <el-table-column prop="schedule_name" label="配置" min-width="150" />
@@ -477,6 +477,7 @@
 import { RefreshRight, Setting } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { symbolLabel } from '@/composables/quant/format'
+import type { ScheduleConfigRecord, ScheduleRunRecord } from '@/composables/quant/types'
 
 const workbench = useQuantWorkbench()
 

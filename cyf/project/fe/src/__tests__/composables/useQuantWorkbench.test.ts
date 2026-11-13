@@ -16,8 +16,18 @@
  * - 初始化：initialize 调用 bootstrap
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import type { AxiosResponse } from 'axios'
 import { createMockQuantApi } from '../helpers'
+
+/**
+ * httpClient 的响应拦截器会把 response.data 解包成业务体后返回，
+ * 所以 mock 的返回值是 `{ success, data, msg }`；这里补成 AxiosResponse 形状，
+ * 避免每处 mock 手写完整的 response 字段。
+ */
+function apiBody<T>(payload: T): AxiosResponse<T> {
+  return payload as unknown as AxiosResponse<T>
+}
 
 // ─── mock 依赖 ───
 
@@ -286,7 +296,7 @@ describe('useQuantWorkbench — 表单操作', () => {
     const wb = await getWorkbench()
     const { quantPromptAPI } = await import('@/services/quantApi')
     const extraSections = wb.promptExtraSections
-    vi.mocked(quantPromptAPI.update).mockResolvedValue({ success: true, data: null, msg: '' })
+    vi.mocked(quantPromptAPI.update).mockResolvedValue(apiBody({ success: true, data: null, msg: '' }))
 
     wb.hydratePromptForm({
       id: 12,
@@ -360,7 +370,7 @@ describe('useQuantWorkbench — 核心业务', () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
     const weeklyRows = [{ trade_date: '2026-08-14', close: 100 }]
-    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue({ success: true, data: weeklyRows, msg: '' })
+    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue(apiBody({ success: true, data: weeklyRows, msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 100
 
@@ -384,7 +394,7 @@ describe('useQuantWorkbench — 核心业务', () => {
       { trade_datetime: '2024-01-02T09:35:00', open_price: 1, close_price: 1.5, high_price: 2, low_price: 0.5, volume: 100 },
       { trade_datetime: '2024-01-02T09:40:00', open_price: 1.5, close_price: 2, high_price: 2.1, low_price: 1.4, volume: 200 },
     ]
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: minuteRows, msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: minuteRows, msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     wb.minuteQuery.interval = '5m'
     wb.minuteQuery.limit = 480
@@ -409,7 +419,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('分时查询应复用 dailyQuery 起止日期（修复 tab 切换后日期条件失效）', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     // 用户在日期选择器选了 2024-01-02 ~ 2024-01-10
     wb.dailyQuery.startDate = '2024-01-02'
@@ -429,7 +439,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('分时查询当 minuteQuery 显式设了 datetime 时优先使用（不强制覆盖）', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.startDate = '2024-01-02'
     wb.dailyQuery.endDate = '2024-01-10'
@@ -449,7 +459,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('分时查询当 dailyQuery 日期为空时 start_datetime 应是 undefined', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     wb.minuteQuery.interval = '5m'
 
@@ -464,7 +474,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('响应式查询：symbol 变化应自动触发对应周期查询', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     // chartCycle 默认 'daily'，设 symbol 应触发 dailyBars
     wb.dailyQuery.symbol = '600519.SH'
     await vi.waitFor(() => expect(quantDataAPI.dailyBars).toHaveBeenCalledTimes(1))
@@ -474,7 +484,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('响应式查询：dateRange 变化应自动触发查询（deep watch）', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     await vi.waitFor(() => expect(quantDataAPI.dailyBars).toHaveBeenCalledTimes(1))
     vi.mocked(quantDataAPI.dailyBars).mockClear()
@@ -492,7 +502,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('响应式查询：minute interval 变化在 minute tab 下应触发分钟查询', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     wb.dailyQuery.symbol = '600519.SH'
     wb.switchChartCycle('minute')  // 先切到 minute tab
     wb.minuteQuery.interval = '15m'  // 再改 interval
@@ -506,7 +516,7 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('响应式查询：同一帧内 symbol+interval+chartCycle 多次变化应合并为 1 次请求', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     // 同步连续触发：symbol、interval、chartCycle
     wb.dailyQuery.symbol = '600519.SH'
     wb.minuteQuery.interval = '15m'
@@ -525,8 +535,8 @@ describe('useQuantWorkbench — 核心业务', () => {
   it('响应式查询：symbol 为空时不触发请求（避免空查询）', async () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({ success: true, data: [], msg: '' })
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: [], msg: '' })
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     // 不设 symbol，只切 tab —— 不应触发任何请求
     wb.switchChartCycle('minute')
     wb.switchChartCycle('weekly')
@@ -552,10 +562,10 @@ describe('useQuantWorkbench — 核心业务', () => {
 
   it('fetchNowFromTaskForm 应透传 frequency="5m" 与 interval', async () => {
     const wb = await getWorkbench()
-    const { quantDataAPI, quantTaskAPI } = await import('@/services/quantApi')
-    vi.mocked(quantDataAPI.fetchNow).mockResolvedValue({
+    const { quantDataAPI } = await import('@/services/quantApi')
+    vi.mocked(quantDataAPI.fetchNow).mockResolvedValue(apiBody({
       success: true, data: { records_imported: 48 }, msg: '',
-    })
+    }))
     wb.taskForm.symbols = ['600519.SH']
     wb.taskForm.allActive = false
     wb.taskForm.startDate = '2024-01-02'
@@ -628,25 +638,25 @@ describe('useQuantWorkbench — 初始化', () => {
 
     // 让关键 API 返回成功响应
     if (quantDataAPI.dashboardOverview?.mockResolvedValue) {
-      quantDataAPI.dashboardOverview.mockResolvedValue({ success: true, data: { snapshot: {} }, msg: '' })
+      quantDataAPI.dashboardOverview.mockResolvedValue(apiBody({ success: true, data: { snapshot: {} }, msg: '' }))
     }
     if (quantDataAPI.providers?.mockResolvedValue) {
-      quantDataAPI.providers.mockResolvedValue({ success: true, data: { providers: [] }, msg: '' })
+      quantDataAPI.providers.mockResolvedValue(apiBody({ success: true, data: { providers: [] }, msg: '' }))
     }
     if (quantDataAPI.symbols?.mockResolvedValue) {
-      quantDataAPI.symbols.mockResolvedValue({ success: true, data: [], msg: '' })
+      quantDataAPI.symbols.mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     }
     if (quantDataAPI.importBatches?.mockResolvedValue) {
-      quantDataAPI.importBatches.mockResolvedValue({ success: true, data: [], msg: '' })
+      quantDataAPI.importBatches.mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     }
     if (quantScheduleAPI.meta?.mockResolvedValue) {
-      quantScheduleAPI.meta.mockResolvedValue({ success: true, data: null, msg: '' })
+      quantScheduleAPI.meta.mockResolvedValue(apiBody({ success: true, data: null, msg: '' }))
     }
     if (quantScheduleAPI.configs?.mockResolvedValue) {
-      quantScheduleAPI.configs.mockResolvedValue({ success: true, data: [], msg: '' })
+      quantScheduleAPI.configs.mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     }
     if (quantScheduleAPI.runs?.mockResolvedValue) {
-      quantScheduleAPI.runs.mockResolvedValue({ success: true, data: [], msg: '' })
+      quantScheduleAPI.runs.mockResolvedValue(apiBody({ success: true, data: [], msg: '' }))
     }
 
     await wb.initialize()
@@ -688,14 +698,14 @@ describe('useQuantWorkbench — 指标计算', () => {
     const { quantDataAPI } = await import('@/services/quantApi')
 
     const dailyBars = _makeBars(10)
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({
       success: true, data: dailyBars, msg: '',
-    })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true,
       data: { results: { '2026-01-01': { ma_5: 10.0 } }, meta: { bars_count: 10 } },
       msg: '',
-    })
+    }))
 
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 10
@@ -720,10 +730,10 @@ describe('useQuantWorkbench — 指标计算', () => {
     const { quantDataAPI } = await import('@/services/quantApi')
 
     const dailyBars = _makeBars(10)
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({
       success: true, data: dailyBars, msg: '',
-    })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true,
       data: {
         results: {
@@ -732,7 +742,7 @@ describe('useQuantWorkbench — 指标计算', () => {
         meta: { bars_count: 10 },
       },
       msg: '',
-    })
+    }))
 
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 10
@@ -754,14 +764,14 @@ describe('useQuantWorkbench — 指标计算', () => {
     for (const b of bars) {
       results[b.trade_date] = { ma_5: 10.5, macd_dif: 0.1 }
     }
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({
       success: true, data: bars, msg: '',
-    })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true,
       data: { results, meta: { bars_count: 5 } },
       msg: '',
-    })
+    }))
 
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 5
@@ -784,10 +794,10 @@ describe('useQuantWorkbench — 指标计算', () => {
     const { quantDataAPI } = await import('@/services/quantApi')
 
     const bars = _makeBars(3)
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({
       success: true, data: bars, msg: '',
-    })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true,
       data: {
         results: {
@@ -798,7 +808,7 @@ describe('useQuantWorkbench — 指标计算', () => {
         meta: { bars_count: 3 },
       },
       msg: '',
-    })
+    }))
 
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 3
@@ -818,10 +828,10 @@ describe('useQuantWorkbench — 指标计算', () => {
     const { quantDataAPI } = await import('@/services/quantApi')
 
     const bars = _makeBars(3)
-    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue({
+    vi.mocked(quantDataAPI.dailyBars).mockResolvedValue(apiBody({
       success: true, data: bars, msg: '',
-    })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true,
       data: {
         results: {
@@ -832,7 +842,7 @@ describe('useQuantWorkbench — 指标计算', () => {
         meta: { bars_count: 3 },
       },
       msg: '',
-    })
+    }))
 
     wb.dailyQuery.symbol = '600519.SH'
     wb.dailyQuery.limit = 3
@@ -848,11 +858,11 @@ describe('useQuantWorkbench — 指标计算', () => {
     const wb = await getWorkbench()
     const { quantDataAPI } = await import('@/services/quantApi')
 
-    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue({ success: true, data: _makeBars(3), msg: '' })
-    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue({ success: true, data: _makeBars(3), msg: '' })
-    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue({
+    vi.mocked(quantDataAPI.weeklyBars).mockResolvedValue(apiBody({ success: true, data: _makeBars(3), msg: '' }))
+    vi.mocked(quantDataAPI.minuteBars).mockResolvedValue(apiBody({ success: true, data: _makeBars(3), msg: '' }))
+    vi.mocked(quantDataAPI.computeIndicators).mockResolvedValue(apiBody({
       success: true, data: { results: {}, meta: {} }, msg: '',
-    })
+    }))
 
     // weekly tab
     wb.dailyQuery.symbol = '600519.SH'
@@ -862,7 +872,7 @@ describe('useQuantWorkbench — 指标计算', () => {
     await wb.loadDailyBars()
     await vi.advanceTimersByTimeAsync(350)
 
-    let callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.at(-1)?.[0] as any
+    let callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.slice(-1)[0]?.[0] as any
     expect(callArg.interval).toBe('weekly')
 
     // minute tab — 应当附带 start_datetime/end_datetime
@@ -871,7 +881,7 @@ describe('useQuantWorkbench — 指标计算', () => {
     await wb.loadDailyBars()
     await vi.advanceTimersByTimeAsync(350)
 
-    callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.at(-1)?.[0] as any
+    callArg = vi.mocked(quantDataAPI.computeIndicators).mock.calls.slice(-1)[0]?.[0] as any
     expect(callArg.interval).toBe('minute')
     expect(callArg.start_datetime).toBe('2024-01-01 00:00:00')
     expect(callArg.end_datetime).toBe('2024-12-31 23:59:59')

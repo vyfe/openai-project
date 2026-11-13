@@ -191,7 +191,7 @@
           class="quant-table quant-table--interactive"
           empty-text="暂无操作记录，点击「新建登记」开始"
           @row-click="workbench.handleOperationSelect"
-          :row-class-name="({ row }) => row.id === workbench.selectedOperationId ? 'quant-row--active' : ''"
+          :row-class-name="(scope: { row: OperationRecord }) => scope.row.id === workbench.selectedOperationId ? 'quant-row--active' : ''"
         >
           <el-table-column prop="trade_date" label="交易日" width="110" />
           <el-table-column label="标的" min-width="200">
@@ -224,6 +224,7 @@ import PersonalPositions from './PersonalPositions.vue'
 import { EditPen, RefreshRight } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { symbolLabel } from '@/composables/quant/format'
+import type { OperationRecord } from '@/composables/quant/types'
 
 const workbench = useQuantWorkbench()
 

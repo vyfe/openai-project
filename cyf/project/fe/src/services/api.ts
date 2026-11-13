@@ -39,7 +39,7 @@ export const fileAPI = {
   }
 }
 
-const getAuthHeaders = async () => {
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
   const token = await getValidAccessToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }

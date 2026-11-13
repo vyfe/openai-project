@@ -19,7 +19,7 @@
         class="quant-table quant-table--interactive"
         empty-text="暂无 Prompt 模板，点击“新建模板”开始"
         @row-click="workbench.hydratePromptForm"
-        :row-class-name="({ row }) => row.id === workbench.selectedPromptId ? 'quant-row--active' : ''"
+        :row-class-name="(scope: { row: PromptTemplateRecord }) => scope.row.id === workbench.selectedPromptId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="prompt_version" label="版本" width="130" />
         <el-table-column label="策略" min-width="150">
@@ -137,7 +137,7 @@
         class="quant-table quant-table--interactive"
         empty-text="暂无报告记录，请先生成一份报告"
         @row-click="openReport"
-        :row-class-name="({ row }) => row.id === workbench.selectedReportId ? 'quant-row--active' : ''"
+        :row-class-name="(scope: { row: ReportRecord }) => scope.row.id === workbench.selectedReportId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="trade_date" label="交易日" width="110" />
         <el-table-column prop="title" label="标题" min-width="220" />
@@ -229,7 +229,7 @@
             class="quant-table quant-table--interactive"
             empty-text="暂无股票记忆，先选择标的并梳理记忆"
             @row-click="openMemory"
-            :row-class-name="({ row }) => row.symbol === workbench.selectedMemorySymbol ? 'quant-row--active' : ''"
+            :row-class-name="(scope: { row: MemoryFileRecord }) => scope.row.symbol === workbench.selectedMemorySymbol ? 'quant-row--active' : ''"
           >
             <el-table-column label="标的" min-width="200">
               <template #default="{ row }">{{ workbench.displaySymbol(row.symbol) }}</template>
@@ -278,6 +278,7 @@
 <script setup lang="ts">
 import { Delete, Plus, RefreshRight, Setting, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import type { MemoryFileRecord, PromptTemplateRecord, ReportRecord } from '@/composables/quant/types'
 import ReportPreviewIde from './ReportPreviewIde.vue'
 
 const workbench = useQuantWorkbench()

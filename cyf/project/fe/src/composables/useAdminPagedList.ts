@@ -36,12 +36,13 @@ export function useAdminPagedList<T, P extends Record<string, any> = Record<stri
   const fetchList = async () => {
     loading.value = true
     try {
+      // 通用分页参数 + 调用方扩展参数，泛型 P 由调用方决定，需显式断言
       const params = {
         page: pagination.value.page,
         page_size: pagination.value.page_size,
         keyword: keyword.value || undefined,
         ...(extraParams ? extraParams() : {})
-      } as P
+      } as unknown as P
       const response = (await fetcher(params)) as ListResponse<T>
       if (!response.success) {
         throw new Error(response.msg || '列表加载失败')

@@ -17,7 +17,7 @@
         class="quant-table quant-table--interactive"
         empty-text="暂无回测记录，请在右侧执行回测"
         @row-click="workbench.handleBacktestSelect"
-        :row-class-name="({ row }) => row.id === workbench.selectedBacktestId ? 'quant-row--active' : ''"
+        :row-class-name="(scope: { row: BacktestRunRecord }) => scope.row.id === workbench.selectedBacktestId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="strategy_name" label="策略" min-width="160" />
         <el-table-column label="状态" width="96">
@@ -244,6 +244,7 @@
 import { RefreshRight, TrendCharts } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { symbolLabel } from '@/composables/quant/format'
+import type { BacktestRunRecord } from '@/composables/quant/types'
 
 const workbench = useQuantWorkbench()
 </script>

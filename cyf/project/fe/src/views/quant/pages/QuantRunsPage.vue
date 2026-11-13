@@ -43,8 +43,8 @@
         height="560"
         class="quant-table quant-table--interactive"
         empty-text="先选择一条运行记录查看信号"
-        @row-click="(row) => workbench.handleRunSelect(row)"
-        :row-class-name="({ row }) => row.id === workbench.selectedRunId ? 'quant-row--active' : ''"
+        @row-click="(row: StrategyRunRecord) => workbench.handleRunSelect(row)"
+        :row-class-name="(scope: { row: StrategyRunRecord }) => scope.row.id === workbench.selectedRunId ? 'quant-row--active' : ''"
       >
         <el-table-column prop="trade_date" label="交易日" width="110" />
         <el-table-column label="策略" min-width="160">
@@ -124,6 +124,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { RefreshRight, VideoPlay } from '@element-plus/icons-vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
+import type { StrategyRunRecord } from '@/composables/quant/types'
 
 const reportText = ref('')
 const reportVisible = ref(false)

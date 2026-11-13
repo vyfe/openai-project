@@ -14,6 +14,13 @@ import {
 
 const { t } = useI18n()
 
+// axios 响应拦截器已把 response.data 解包成业务体，这里按实际运行时结构标注。
+type ApiResult<T = unknown> = {
+  success: boolean
+  msg?: string
+  data?: T
+}
+
 const sqlInput = ref('')
 const executing = ref(false)
 const loadingMeta = ref(false)
@@ -42,7 +49,7 @@ const executeSQL = async () => {
   columns.value = []
 
   try {
-    const response = await sqlAPI.execute(sql)
+    const response = (await sqlAPI.execute(sql)) as unknown as ApiResult
     if (response.success) {
       const normalized = normalizeSqlExecutionData(response.data)
       columns.value = normalized.columns
@@ -67,7 +74,7 @@ const executeSQL = async () => {
 const fetchSqlMeta = async () => {
   loadingMeta.value = true
   try {
-    const response = await sqlAPI.meta()
+    const response = (await sqlAPI.meta()) as unknown as ApiResult
     if (response.success) {
       const normalized = normalizeSqlMetadata(response.data)
       dbPath.value = normalized.databasePath

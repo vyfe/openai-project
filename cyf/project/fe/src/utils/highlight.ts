@@ -1,4 +1,5 @@
 import hljs from 'highlight.js/lib/core'
+import type { LanguageFn } from 'highlight.js'
 import bash from 'highlight.js/lib/languages/bash'
 import cpp from 'highlight.js/lib/languages/cpp'
 import csharp from 'highlight.js/lib/languages/csharp'
@@ -16,7 +17,9 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 
-const LANGUAGE_REGISTRY: Record<string, (hljs: typeof import('highlight.js/lib/core')) => void> = {
+// highlight.js 的语言定义统一是 LanguageFn（registerLanguage 的入参类型），
+// 不能标注成 core 模块命名空间，否则与 hljs.registerLanguage 的签名不兼容。
+const LANGUAGE_REGISTRY: Record<string, LanguageFn> = {
   bash,
   shell: bash,
   sh: bash,

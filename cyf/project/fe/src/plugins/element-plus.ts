@@ -121,7 +121,8 @@ const components = [
 
 export const installElementPlus = (app: App) => {
   components.forEach((component) => {
-    app.component(component.name, component)
+    // 组件联合类型的 name 在类型层面是可选的，运行时均已注册名称
+    if (component.name) app.component(component.name, component)
   })
   app.directive('loading', ElLoadingDirective)
 }

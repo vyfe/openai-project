@@ -431,7 +431,7 @@
                 <div class="quant-pool-row__meta">
                   <el-tag size="small" type="info" effect="plain">{{ item.exchange }}</el-tag>
                   <span class="quant-pool-row__source">{{ item.source || 'manual' }}</span>
-                  <span v-if="item.updated_at" class="quant-pool-row__time">更新 {{ formatPoolTime(item.updated_at) }}</span>
+                  <span v-if="poolItemUpdatedAt(item)" class="quant-pool-row__time">更新 {{ formatPoolTime(poolItemUpdatedAt(item)) }}</span>
                 </div>
               </div>
               <el-button
@@ -576,6 +576,7 @@ import { computed } from 'vue'
 import { useQuantWorkbench } from '@/composables/useQuantWorkbench'
 import { useThemeManager } from '@/composables/useThemeManager'
 import { symbolLabel } from '@/composables/quant/format'
+import type { SymbolOption } from '@/composables/quant/types'
 import EChartsCandlestick from '@/components/quant/EChartsCandlestick.vue'
 import QuantPoolSelect from '@/components/quant/QuantPoolSelect.vue'
 
@@ -714,6 +715,13 @@ function onPoolItemCheck(symbol: string, checked: boolean) {
 function selectAllPoolItems() {
   const all = workbench.stockPoolItems.map(item => item.symbol)
   workbench.stockPoolSelected = Array.from(new Set([...workbench.stockPoolSelected, ...all]))
+}
+
+// /quant/symbols 的 items 比 SymbolOption 多带 updated_at（后端 list_available_symbols 返回）。
+type PoolRow = SymbolOption & { updated_at?: string | null }
+
+function poolItemUpdatedAt(item: SymbolOption): string | null {
+  return (item as PoolRow).updated_at ?? null
 }
 
 function formatPoolTime(value: string | null | undefined): string {
