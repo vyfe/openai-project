@@ -67,8 +67,7 @@ def quant_client_task_reset():
 
 @bp.route("/client/tasks/claim", methods=["POST"])
 @require_admin_auth
-def quant_client_task_claim(user, password):
-    del user, password
+def quant_client_task_claim():
     try:
         data = get_request_data()
         client_id = str(data.get("client_id", "")).strip()
@@ -83,8 +82,7 @@ def quant_client_task_claim(user, password):
 
 @bp.route("/client/tasks/report", methods=["POST"])
 @require_admin_auth
-def quant_client_task_report(user, password):
-    del user, password
+def quant_client_task_report():
     import_result = None
     try:
         data = get_request_data()

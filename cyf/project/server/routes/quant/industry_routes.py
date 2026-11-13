@@ -22,16 +22,14 @@ bp = Blueprint("quant_industry_routes", __name__, url_prefix="/never_guess_my_us
 
 @bp.route("/industry/boards", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_boards(user, password):
-    del user, password
+def quant_industry_boards():
     status = str(request.args.get("status", "")).strip() or None
     return success_response(data=list_industry_boards(status=status))
 
 
 @bp.route("/industry/defaults", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_defaults(user, password):
-    del user, password
+def quant_industry_defaults():
     return success_response(data=ensure_default_industry_boards(), msg="默认行业板块已初始化")
 
 
@@ -59,8 +57,7 @@ def quant_industry_board_save():
 
 @bp.route("/industry/collect", methods=["POST"])
 @require_admin_auth
-def quant_industry_collect(user, password):
-    del user, password
+def quant_industry_collect():
     try:
         data = get_request_data()
         targets = parse_json_list(data.get("targets"))
@@ -77,8 +74,7 @@ def quant_industry_collect(user, password):
 
 @bp.route("/industry/dashboard", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_dashboard(user, password):
-    del user, password
+def quant_industry_dashboard():
     try:
         board_id = request.args.get("board_id", type=int)
         board_key = str(request.args.get("board_key", "")).strip()
@@ -90,8 +86,7 @@ def quant_industry_dashboard(user, password):
 
 @bp.route("/industry/news", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_news(user, password):
-    del user, password
+def quant_industry_news():
     board_id = request.args.get("board_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip()
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -100,8 +95,7 @@ def quant_industry_news(user, password):
 
 @bp.route("/industry/research_reports", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_research_reports(user, password):
-    del user, password
+def quant_industry_research_reports():
     board_id = request.args.get("board_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip()
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -110,8 +104,7 @@ def quant_industry_research_reports(user, password):
 
 @bp.route("/industry/report/preview", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_industry_report_preview(user, password):
-    del user, password
+def quant_industry_report_preview():
     try:
         board_id = request.args.get("board_id", type=int)
         board_key = str(request.args.get("board_key", "")).strip()

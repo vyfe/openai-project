@@ -51,8 +51,7 @@ bp = Blueprint("quant_strategy_routes", __name__, url_prefix="/never_guess_my_us
 
 @bp.route("/strategy/list", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_list(user, password):
-    del user, password
+def quant_strategy_list():
     status = str(request.args.get("status", "")).strip() or None
     owner_user_id, is_admin = current_owner_scope()
     return success_response(data=list_strategies(status=status, owner_user_id=owner_user_id, is_admin=is_admin))
@@ -60,8 +59,7 @@ def quant_strategy_list(user, password):
 
 @bp.route("/strategy/get/<int:strategy_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_get(user, password, strategy_id):
-    del user, password
+def quant_strategy_get(strategy_id):
     owner_user_id, is_admin = current_owner_scope()
     try:
         return success_response(data=get_strategy(strategy_id, owner_user_id=owner_user_id, is_admin=is_admin))
@@ -165,8 +163,7 @@ def quant_strategy_run():
 
 @bp.route("/strategy/runs", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_runs(user, password):
-    del user, password
+def quant_strategy_runs():
     strategy_id = request.args.get("strategy_id", type=int)
     limit = request.args.get("limit", default=50, type=int) or 50
     owner_user_id, is_admin = current_owner_scope()
@@ -178,8 +175,7 @@ def quant_strategy_runs(user, password):
 
 @bp.route("/strategy/signals", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_signals(user, password):
-    del user, password
+def quant_strategy_signals():
     strategy_id = request.args.get("strategy_id", type=int)
     run_id = request.args.get("run_id", type=int)
     passed_only = str(request.args.get("passed_only", "false")).lower() in ("true", "1", "yes")
@@ -200,8 +196,7 @@ def quant_strategy_signals(user, password):
 
 @bp.route("/symbols", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_symbols(user, password):
-    del user, password
+def quant_symbols():
     limit = request.args.get("limit", default=100, type=int) or 100
     limit = max(1, min(limit, 500))
     offset = request.args.get("offset", default=0, type=int) or 0
@@ -249,8 +244,7 @@ def quant_symbol_batch_delete():
 
 @bp.route("/symbols/search", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_symbol_search(user, password):
-    del user, password
+def quant_symbol_search():
     keyword = str(request.args.get("keyword", "")).strip()
     limit = request.args.get("limit", default=20, type=int) or 20
     try:
@@ -262,8 +256,7 @@ def quant_symbol_search(user, password):
 
 @bp.route("/prompt_templates", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_prompt_templates(user, password):
-    del user, password
+def quant_prompt_templates():
     strategy_id = request.args.get("strategy_id", type=int)
     report_type = str(request.args.get("report_type", "")).strip() or None
     owner_user_id, is_admin = current_owner_scope()
@@ -272,8 +265,7 @@ def quant_prompt_templates(user, password):
 
 @bp.route("/prompt_template/<int:template_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_prompt_template_get(user, password, template_id):
-    del user, password
+def quant_prompt_template_get(template_id):
     try:
         owner_user_id, is_admin = current_owner_scope()
         return success_response(data=get_prompt_template(template_id, owner_user_id=owner_user_id, is_admin=is_admin))
@@ -330,8 +322,7 @@ def quant_prompt_template_delete():
 
 @bp.route("/reports", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_reports(user, password):
-    del user, password
+def quant_reports():
     strategy_id = request.args.get("strategy_id", type=int)
     run_id = request.args.get("run_id", type=int)
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -348,8 +339,7 @@ def quant_reports(user, password):
 
 @bp.route("/report/<int:report_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_report_get(user, password, report_id):
-    del user, password
+def quant_report_get(report_id):
     owner_user_id, is_admin = current_owner_scope()
     try:
         return success_response(data=get_report(report_id, owner_user_id=owner_user_id, is_admin=is_admin))
@@ -434,23 +424,21 @@ def quant_report_preview():
 
 @bp.route("/meta/indicators", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_meta_indicators(user, password):
+def quant_meta_indicators():
     """指标 catalog：前端据此渲染指标面板 + 参数表单。
 
     返回 [{key, label, category, base_lookback, params: [...], outputs: [...]}, ...]
     """
-    del user, password
     return success_response(data=catalog_payload())
 
 
 @bp.route("/meta/expression_functions", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_meta_expression_functions(user, password):
+def quant_meta_expression_functions():
     """表达式沙箱允许的函数 + bar 字段；前端用来做变量/函数自动补全。
 
     返回 {bar_fields: [...], functions: [...]}，每个 function 给出签名。
     """
-    del user, password
     functions = [
         {"name": "prev", "signature": "prev(x)", "desc": "x 的前 1 根（与 ref(x, 1) 等价）"},
         {"name": "ref", "signature": "ref(x, n)", "desc": "x 的前 n 根"},
@@ -468,21 +456,19 @@ def quant_meta_expression_functions(user, password):
 
 @bp.route("/meta/strategy_templates", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_meta_strategy_templates(user, password):
+def quant_meta_strategy_templates():
     """预设策略模板（v2 形态）；前端"模板"按钮据此渲染。"""
-    del user, password
     return success_response(data=STRATEGY_TEMPLATES)
 
 
 @bp.route("/strategy/validate", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_validate(user, password):
+def quant_strategy_validate():
     """校验 rule_config 各条 expr 的语法与变量合法性，不落库、不打数据库。
 
     body: {rule_config: {...}} 或直接传 v2 配置。
     返回 {ok, rules: [{id, label, expr, ok, error}]}。
     """
-    del user, password
     try:
         data = get_request_data() or {}
         cfg = data.get("rule_config") or {}
@@ -539,9 +525,8 @@ def quant_strategy_validate(user, password):
 
 @bp.route("/strategy/llm_generate_expr", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_llm_generate_expr(user, password):
+def quant_strategy_llm_generate_expr(user):
     """调大模型把自然语言描述生成 expr。不入库；不需要 admin。"""
-    del password
     try:
         data = get_request_data() or {}
         description = str(data.get("description") or "").strip()
@@ -564,14 +549,13 @@ def quant_strategy_llm_generate_expr(user, password):
 
 @bp.route("/strategy/dry_run", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_strategy_dry_run(user, password):
+def quant_strategy_dry_run():
     """不落库试算：按 symbol 跑日线 evaluate_series，返回逐日结果。
 
     body: {rule_config, symbol, start_date, end_date, adjust_flag?}
     返回 {rule_config, symbol, bars: [...], results: [{date, passed, score, signal_type,
            reasons, rule_results: [{id, label, passed, value}]}], meta: {...}}
     """
-    del user, password
     try:
         data = get_request_data() or {}
         cfg = data.get("rule_config") or {}

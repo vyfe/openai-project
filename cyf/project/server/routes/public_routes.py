@@ -99,7 +99,7 @@ def refresh_token():
 
 @public_bp.route("/auth/me", methods=["GET", "POST"])
 @require_auth
-def auth_me(user, password):
+def auth_me():
     """返回当前账号快照；不返回密码、API Key 或 token 明文。"""
     return {"success": True, "msg": "ok", "data": current_auth_context().to_snapshot()}, 200
 
@@ -128,7 +128,7 @@ def register():
 
 @public_bp.route("/set_info")
 @require_admin_auth
-def data_check(user, password):
+def data_check():
     data = get_request_data()
     llm_logger.info("set_info invoked has_param=%s query=%s", bool(data.get("param")), str(data.get("info", ""))[:32])
     try:
@@ -146,7 +146,7 @@ def allowed_file(filename):
 
 @public_bp.route("/download", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def upload(user, password):
+def upload():
     if "file" not in request.files:
         return {"msg": "no file"}, 200
     file = request.files["file"]
@@ -165,14 +165,14 @@ def upload(user, password):
 
 @public_bp.route("/split", methods=["POST", "GET"])
 @require_module_auth(ROLE_CHAT)
-def dialog(user, password):
+def dialog(user):
     payload = ChatRequest.from_data(get_request_data(as_text=True))
     return run_chat_completion(user, payload, llm_logger)
 
 
 @public_bp.route("/split_stream", methods=["POST", "GET"])
 @require_module_auth(ROLE_CHAT)
-def dialog_stream(user, password):
+def dialog_stream(user):
     payload = StreamChatRequest.from_data(get_request_data(as_text=True))
     try:
         return stream_chat(user, payload, llm_logger)
@@ -187,7 +187,7 @@ def dialog_stream(user, password):
 
 @public_bp.route("/split_stream_cancel", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_stream_cancel(user, password):
+def dialog_stream_cancel():
     payload = StreamCancelRequest.from_data(get_request_data(as_text=True))
     if not payload.request_id:
         return {"success": False, "msg": "missing request_id"}, 200
@@ -197,14 +197,14 @@ def dialog_stream_cancel(user, password):
 
 @public_bp.route("/split_pic", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_pic(user, password):
+def dialog_pic(user):
     payload = ImageChatRequest.from_data(get_request_data(as_text=True))
     return generate_or_edit_image(user, payload, llm_logger)
 
 
 @public_bp.route("/handoff", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_handoff(user, password):
+def dialog_handoff(user):
     try:
         payload = HandoffRequest.from_data(get_request_data(as_text=True))
         return create_handoff_dialog(user, payload.dialog_id, payload.model, llm_logger)
@@ -215,7 +215,7 @@ def dialog_handoff(user, password):
 
 @public_bp.route("/split_his", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_his(user, password):
+def dialog_his(user):
     llm_logger.info("dialog_history requested")
     data = get_request_data() or {}
     raw_days = data.get("days")
@@ -230,7 +230,7 @@ def dialog_his(user, password):
 
 @public_bp.route("/split_his_content", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_content(user, password):
+def dialog_content(user):
     try:
         req = DialogContentRequest.from_data(get_request_data(as_text=True))
         result = get_dialog_content(user, req.dialog_id)
@@ -241,7 +241,7 @@ def dialog_content(user, password):
 
 @public_bp.route("/usage", methods=["GET", "POST"])
 @require_module_auth(ROLE_CHAT)
-def get_usage(user, password):
+def get_usage(user):
     try:
         return get_usage_summary(user), 200
     except requests.exceptions.RequestException as exc:
@@ -251,7 +251,7 @@ def get_usage(user, password):
 
 @public_bp.route("/browser_conf/get", methods=["GET", "POST"])
 @require_auth
-def get_browser_conf(user, password):
+def get_browser_conf(user):
     try:
         browser_conf = get_user_browser_conf(user) or ""
         return {"success": True, "data": browser_conf}, 200
@@ -262,7 +262,7 @@ def get_browser_conf(user, password):
 
 @public_bp.route("/browser_conf/save", methods=["POST"])
 @require_auth
-def save_browser_conf(user, password):
+def save_browser_conf(user):
     try:
         data = request.get_json(silent=True) or request.values
         browser_conf = data.get("browser_conf", "")
@@ -275,14 +275,14 @@ def save_browser_conf(user, password):
 
 @public_bp.route("/split_his_delete", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def dialog_delete(user, password):
+def dialog_delete(user):
     req = DialogDeleteRequest.from_data(get_request_data(as_text=True))
     return {"success": True, "deleted_count": delete_user_dialogs(user, req.dialog_ids)}
 
 
 @public_bp.route("/update_dialog_title", methods=["POST"])
 @require_module_auth(ROLE_CHAT)
-def update_dialog_title(user, password):
+def update_dialog_title(user):
     req = DialogTitleUpdateRequest.from_data(get_request_data(as_text=True))
     if req.dialog_id is None or not req.new_title:
         return {"success": False, "msg": "dialog_id 和 new_title 参数不能为空"}, 200
@@ -294,7 +294,7 @@ def update_dialog_title(user, password):
 
 @public_bp.route("/system_prompt", methods=["GET"])
 @require_module_auth(ROLE_CHAT)
-def system_prompt(user, password):
+def system_prompt():
     return {"msg": "api return content not ok"}, 200
 
 
@@ -310,7 +310,7 @@ def get_system_prompts_by_group():
 
 @public_bp.route("/notifications", methods=["GET"])
 @require_auth
-def get_notifications(user, password):
+def get_notifications():
     try:
         page = request.args.get("page", 1, type=int)
         page_size = request.args.get("page_size", 10, type=int)
@@ -341,7 +341,7 @@ def get_notifications(user, password):
 
 @public_bp.route("/del_password", methods=["POST"])
 @require_auth
-def user_reset_password(user, password):
+def user_reset_password(user):
     try:
         req = ResetPasswordRequest.from_data(get_request_data(as_text=True))
         if not req.current_password:

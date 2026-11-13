@@ -34,8 +34,7 @@ bp = Blueprint("quant_scheduler_routes", __name__, url_prefix="/never_guess_my_u
 
 @bp.route("/scheduler/meta", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_meta(user, password):
-    del user, password
+def quant_scheduler_meta():
     return success_response(
         data={
             "task_types": [TASK_TYPE_DATA_SYNC, TASK_TYPE_ANALYSIS, TASK_TYPE_MEMORY_DIGEST, TASK_TYPE_INDUSTRY_COLLECT, TASK_TYPE_INDUSTRY_REPORT],
@@ -49,15 +48,13 @@ def quant_scheduler_meta(user, password):
 
 @bp.route("/scheduler/overview", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_overview(user, password):
-    del user, password
+def quant_scheduler_overview():
     return success_response(data=get_scheduler_overview())
 
 
 @bp.route("/scheduler/configs", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_configs(user, password):
-    del user, password
+def quant_scheduler_configs():
     status = str(request.args.get("status", "")).strip() or None
     task_type = str(request.args.get("task_type", "")).strip() or None
     return success_response(data=list_schedule_configs(status=status, task_type=task_type))
@@ -65,8 +62,7 @@ def quant_scheduler_configs(user, password):
 
 @bp.route("/scheduler/config/<int:schedule_id>", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_config_get(user, password, schedule_id):
-    del user, password
+def quant_scheduler_config_get(schedule_id):
     try:
         return success_response(data=get_schedule_config(schedule_id))
     except Exception as exc:
@@ -133,8 +129,7 @@ def quant_scheduler_config_delete():
 
 @bp.route("/scheduler/runs", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_runs(user, password):
-    del user, password
+def quant_scheduler_runs():
     schedule_id = request.args.get("schedule_id", type=int)
     status = str(request.args.get("status", "")).strip() or None
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -144,8 +139,7 @@ def quant_scheduler_runs(user, password):
 
 @bp.route("/scheduler/run/<int:run_id>", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_run_get(user, password, run_id):
-    del user, password
+def quant_scheduler_run_get(run_id):
     try:
         record = get_schedule_run(run_id)
         record["log_tail"] = read_schedule_run_log_tail(record.get("log_file", ""), limit_lines=200)
@@ -156,8 +150,7 @@ def quant_scheduler_run_get(user, password, run_id):
 
 @bp.route("/scheduler/run/<int:run_id>/log", methods=["GET"])
 @require_admin_auth
-def quant_scheduler_run_log(user, password, run_id):
-    del user, password
+def quant_scheduler_run_log(run_id):
     try:
         limit_lines = request.args.get("limit", default=200, type=int) or 200
         record = get_schedule_run(run_id)

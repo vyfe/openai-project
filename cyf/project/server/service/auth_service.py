@@ -254,8 +254,13 @@ def _resolve_auth_context():
 def _bind_context(func, context, kwargs):
     """把认证主体注入到处理函数；只注入其签名里显式声明的参数。
 
-    管理端路由多数是无参函数，若无条件注入 ``user`` / ``password`` 会直接 TypeError；
+    管理端路由多数是无参函数，若无条件注入 ``user`` 会直接 TypeError；
     带 ``**kwargs`` 的包装器同样不注入，避免把参数透传给业务函数。
+
+    只注入 ``user``（用户名字符串），供需要按用户取 API Key / 记归属的 handler 使用。
+    ``password`` 不再注入：token 认证下没有密码可传，历史版本注入的空字符串
+    已随 handler 的僵尸参数一并清理；请求体里的 user/password 凭据在
+    ``_resolve_auth_context`` 中单独解析，不依赖视图签名。
     """
     try:
         parameters = inspect.signature(func, follow_wrapped=False).parameters
@@ -263,8 +268,6 @@ def _bind_context(func, context, kwargs):
         parameters = {}
     if "user" in parameters:
         kwargs["user"] = context.username
-    if "password" in parameters:
-        kwargs["password"] = ""
     set_log_user(context.username)
     return kwargs
 

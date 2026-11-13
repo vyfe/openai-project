@@ -24,8 +24,7 @@ def _not_found(msg="资源不存在"):
 
 @bp.route("/positions/summary", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_positions_summary(user, password):
-    del user, password
+def quant_positions_summary():
     owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     return success_response(data=list_position_summary(
@@ -37,8 +36,7 @@ def quant_positions_summary(user, password):
 
 @bp.route("/positions/journal", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_positions_journal(user, password):
-    del user, password
+def quant_positions_journal():
     owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
@@ -57,8 +55,7 @@ def quant_positions_journal(user, password):
 
 @bp.route("/positions/journal/<int:entry_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_position_get(user, password, entry_id):
-    del user, password
+def quant_position_get(entry_id):
     owner_user_id, is_admin = current_owner_scope()
     try:
         return success_response(data=get_position_entry(
@@ -74,8 +71,7 @@ def quant_position_get(user, password, entry_id):
 
 @bp.route("/positions/create", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_position_create(user, password):
-    del password
+def quant_position_create(user):
     owner_user_id, _is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -103,8 +99,7 @@ def quant_position_create(user, password):
 
 @bp.route("/positions/update", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_position_update(user, password):
-    del user, password
+def quant_position_update():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -124,8 +119,7 @@ def quant_position_update(user, password):
 
 @bp.route("/positions/delete", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_position_delete(user, password):
-    del user, password
+def quant_position_delete():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -143,8 +137,7 @@ def quant_position_delete(user, password):
 
 @bp.route("/operations/list", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_operations_list(user, password):
-    del user, password
+def quant_operations_list():
     owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     symbol = str(request.args.get("symbol", "")).strip() or None
@@ -176,8 +169,7 @@ def quant_operations_list(user, password):
 
 @bp.route("/operations/get/<int:record_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_operations_get(user, password, record_id):
-    del user, password
+def quant_operations_get(record_id):
     owner_user_id, is_admin = current_owner_scope()
     try:
         return success_response(data=get_operation_record(
@@ -193,8 +185,7 @@ def quant_operations_get(user, password, record_id):
 
 @bp.route("/operations/create", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_operations_create(user, password):
-    del password
+def quant_operations_create(user):
     owner_user_id, _is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -233,8 +224,7 @@ def quant_operations_create(user, password):
 
 @bp.route("/operations/update", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_operations_update(user, password):
-    del user, password
+def quant_operations_update():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -278,8 +268,7 @@ def quant_operations_update(user, password):
 
 @bp.route("/operations/delete", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_operations_delete(user, password):
-    del user, password
+def quant_operations_delete():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -298,8 +287,7 @@ def quant_operations_delete(user, password):
 
 @bp.route("/backtest/list", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_backtest_list(user, password):
-    del user, password
+def quant_backtest_list():
     owner_user_id, is_admin = current_owner_scope()
     strategy_id = request.args.get("strategy_id", type=int)
     status = str(request.args.get("status", "")).strip() or None
@@ -316,8 +304,7 @@ def quant_backtest_list(user, password):
 
 @bp.route("/backtest/get/<int:backtest_id>", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_backtest_get(user, password, backtest_id):
-    del user, password
+def quant_backtest_get(backtest_id):
     owner_user_id, is_admin = current_owner_scope()
     try:
         return success_response(data=get_backtest_run(
@@ -333,8 +320,7 @@ def quant_backtest_get(user, password, backtest_id):
 
 @bp.route("/backtest/run", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_backtest_run(user, password):
-    del user, password
+def quant_backtest_run():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()
@@ -366,8 +352,7 @@ def quant_backtest_run(user, password):
 
 @bp.route("/backtest/delete", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_backtest_delete(user, password):
-    del user, password
+def quant_backtest_delete():
     owner_user_id, is_admin = current_owner_scope()
     try:
         data = get_request_data()

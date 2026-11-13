@@ -23,8 +23,7 @@ bp = Blueprint("quant_im_memory_routes", __name__, url_prefix="/never_guess_my_u
 
 @bp.route("/im/channels", methods=["GET"])
 @require_admin_auth
-def quant_im_channels(user, password):
-    del user, password
+def quant_im_channels():
     status = str(request.args.get("status", "")).strip() or None
     channel_type = str(request.args.get("channel_type", "")).strip() or None
     return success_response(data=list_im_channels(status=status, channel_type=channel_type))
@@ -32,8 +31,7 @@ def quant_im_channels(user, password):
 
 @bp.route("/im/channel/<int:channel_id>", methods=["GET"])
 @require_admin_auth
-def quant_im_channel_get(user, password, channel_id):
-    del user, password
+def quant_im_channel_get(channel_id):
     try:
         return success_response(data=get_im_channel(channel_id))
     except Exception as exc:
@@ -82,8 +80,7 @@ def quant_im_channel_delete():
 
 @bp.route("/im/deliveries", methods=["GET"])
 @require_admin_auth
-def quant_im_deliveries(user, password):
-    del user, password
+def quant_im_deliveries():
     report_id = request.args.get("report_id", type=int)
     channel_id = request.args.get("channel_id", type=int)
     status = str(request.args.get("status", "")).strip() or None
@@ -94,8 +91,7 @@ def quant_im_deliveries(user, password):
 
 @bp.route("/im/inbound_events", methods=["GET"])
 @require_admin_auth
-def quant_im_inbound_events(user, password):
-    del user, password
+def quant_im_inbound_events():
     channel_id = request.args.get("channel_id", type=int)
     status = str(request.args.get("status", "")).strip() or None
     limit = request.args.get("limit", default=100, type=int) or 100
@@ -155,8 +151,7 @@ def quant_im_test():
 
 @bp.route("/memory/files", methods=["GET"])
 @require_admin_auth
-def quant_memory_files(user, password):
-    del user, password
+def quant_memory_files():
     limit = request.args.get("limit", default=100, type=int) or 100
     limit = max(1, min(limit, 300))
     return success_response(data=list_memory_files(limit=limit))
@@ -164,8 +159,7 @@ def quant_memory_files(user, password):
 
 @bp.route("/memory/<symbol>", methods=["GET"])
 @require_admin_auth
-def quant_memory_get(user, password, symbol):
-    del user, password
+def quant_memory_get(symbol):
     try:
         return success_response(data=read_symbol_memory(symbol))
     except Exception as exc:

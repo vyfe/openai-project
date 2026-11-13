@@ -43,16 +43,14 @@ bp = Blueprint("quant_data_routes", __name__, url_prefix="/never_guess_my_usage/
 
 @bp.route("/dashboard/overview", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_dashboard_overview(user, password):
-    del password
+def quant_dashboard_overview():
     owner_user_id, is_admin = current_owner_scope()
     return success_response(data=get_dashboard_overview(owner_user_id=owner_user_id, is_admin=is_admin))
 
 
 @bp.route("/providers", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_providers(user, password):
-    del user, password
+def quant_providers():
     return success_response(data={"market": "A_SHARE", "providers": list_supported_providers()})
 
 
@@ -93,8 +91,7 @@ def quant_import_batches():
 
 @bp.route("/data/backfill", methods=["POST"])
 @require_admin_auth
-def quant_data_backfill(user, password):
-    del password
+def quant_data_backfill(user):
     try:
         data = get_request_data()
         symbols = parse_json_list(data.get("symbols"))
@@ -204,7 +201,7 @@ def quant_data_fetch_now():
 
 @bp.route("/data/daily_bars", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_daily_bars(user, password):
+def quant_daily_bars():
     try:
         symbol = str(request.args.get("symbol", "")).strip()
         if not symbol:
@@ -224,7 +221,7 @@ def quant_daily_bars(user, password):
 
 @bp.route("/data/weekly_bars", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_weekly_bars(user, password):
+def quant_weekly_bars():
     try:
         symbol = str(request.args.get("symbol", "")).strip()
         if not symbol:
@@ -244,7 +241,7 @@ def quant_weekly_bars(user, password):
 
 @bp.route("/data/minute_bars", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_minute_bars(user, password):
+def quant_minute_bars():
     try:
         symbol = str(request.args.get("symbol", "")).strip()
         if not symbol:
@@ -287,7 +284,7 @@ def quant_symbols_refresh_names():
 
 @bp.route("/instruments", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_instruments_list(user, password):
+def quant_instruments_list():
     """列出量化标的（带显示名），供前端"数据中心股票池"管理 UI 用。
 
     query params:
@@ -296,7 +293,6 @@ def quant_instruments_list(user, password):
     - only_with_custom: true/false，是否只列出自定义名非空的
     - limit: 1..500，默认 200
     """
-    del password
     try:
         keyword = str(request.args.get("keyword") or "").strip()
         exchange = str(request.args.get("exchange") or "").strip().upper()
@@ -397,7 +393,7 @@ class _Bar:
 
 @bp.route("/data/indicators/compute", methods=["POST"])
 @require_module_auth(ROLE_QUANT)
-def quant_indicators_compute(user, password):
+def quant_indicators_compute():
     """无状态指标计算。
 
     支持两种请求形态：
@@ -405,7 +401,6 @@ def quant_indicators_compute(user, password):
        后端根据 indicator_names 算 lookback，自动往前多拉数据；返回结果 trim 到请求区间。
     2. 旧形态（向后兼容）：{bars, indicator_names, params}，调用方自行提供 bars。
     """
-    del user, password
     try:
         data = get_request_data() or {}
         if not isinstance(data, dict):
@@ -596,9 +591,8 @@ def _compute_indicators_by_range(data):
 
 @bp.route("/data/indicators", methods=["GET"])
 @require_module_auth(ROLE_QUANT)
-def quant_indicators_list(user, password):
+def quant_indicators_list():
     """持久层读取：按 symbol + 可选 names + 日期范围返回 QuantDailyIndicator 记录。"""
-    del user, password
     try:
         symbol = str(request.args.get("symbol", "")).strip()
         if not symbol:
