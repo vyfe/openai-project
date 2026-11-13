@@ -30,8 +30,9 @@
 
 ### 0.3 修改后必做
 
-- 后端改动：在 `cyf/project/server/` 下运行 `python -m pytest -m "not api"`（最快路径）。
-- 前端改动：在 `cyf/project/fe/` 下运行 `npm run test`。
+- 后端改动：在 `cyf/project/server/` 下运行 `python -m pytest`（全量，含 API；更快可用 `-m "not api"`）。
+- 前端改动：在 `cyf/project/fe/` 下运行 `npm run test` 与 `npm run typecheck`。
+- 推送前确认 `.github/workflows/ci.yml` 的三类门禁（pytest / vitest / vue-tsc + build）在本地等价通过。
 - 任何触及路由/配置/启动脚本的改动，必须手动跑一次对应启动脚本验证。
 
 ---
@@ -42,7 +43,7 @@
 
 | 模块 | 路径 | 技术栈 |
 | --- | --- | --- |
-| **后端 Web** | `cyf/project/server/` | Flask + `openai` SDK + peewee(SQLite) + JWT |
+| **后端 Web** | `cyf/project/server/` | Flask + `openai` SDK + peewee(SQLite) + 随机 Token（DB 存储） |
 | **量化子系统** | `cyf/project/server/quant/`、`quant_client/`、`worker/`、`routes/quant/`、`service/quant/` | 自研：调度器 + 多 provider 数据采集 + 飞书 IM |
 | **多 LLM Provider** | `cyf/project/server/service/{chat_service,claude_service,message_normalizer}.py` | OpenAI / Anthropic Claude / Gemini（按 `model_grp` 路由） |
 | **前端 Web** | `cyf/project/fe/` | Vue 3 + TS + Vite + Pinia + Element Plus + TailwindCSS + Vue I18n + highlight.js + KaTeX + marked |
@@ -60,6 +61,7 @@ openai-project/
 ├── README.md                    # 面向用户/部署者
 ├── CLAUDE.md                    # Claude Code 指针（指向 AGENTS.md）
 ├── requirements.txt             # 后端 Python 依赖
+├── .github/workflows/ci.yml     # GitHub Actions 门禁（pytest / vitest / vue-tsc / build）
 │
 ├── start-dev.sh                 # 一键启动前后端（开发）
 ├── start-prod.sh                # 一键启动前后端（生产）
@@ -68,16 +70,19 @@ openai-project/
 ├── pack-prod.sh                 # 生产分包（生成 dist/server.tar.gz + fe.tar.gz）
 ├── full-pack-prod.sh            # 生产整包（生成 openai-full-prod.tar.gz）
 │
-├── doc/                         # 项目级专题文档
-│   ├── frontend-claude-gpt-style-refactor-playbook.md
-│   ├── multi-provider-refactoring-plan.md
-│   └── quant/                   # 量化子系统设计/runbook
-│       ├── quant-mvp-runbook.md
-│       ├── a-share-data-integration-module.md
-│       ├── strategy-rule-module.md
-│       ├── lightweight-ai-quant-design-evaluation.md
-│       ├── quant-data-collection-deploy.md
-│       └── feishu-setup-guide.md
+├── doc/                         # 项目级专题文档（索引见 §10.1）
+│   ├── frontend-edgeone-deployment-plan.md
+│   ├── huiliao-login-permissions-development-plan.md
+│   ├── huiliao-permission-route-matrix.md
+│   ├── huiliao-permissions-acceptance-report.md
+│   ├── minimax-voice-management.md
+│   ├── minimax-music-management.md
+│   ├── web-search-tool.md
+│   ├── screenshots/
+│   └── quant/
+│       ├── data-sources-overview.md
+│       ├── indicator-extension-playbook.md
+│       └── report-feishu-delivery.md
 │
 ├── cyf/project/
 │   ├── client/                  # ⚠️ 旧版 Tkinter 客户端，已弃用
@@ -86,17 +91,16 @@ openai-project/
 │   │   └── client_pack.py
 │   │
 │   ├── server/                  # 后端（分层架构 + 量化子系统）
-│   │   ├── server.py            # 应用入口（注册 10 个 Blueprint）
-│   │   ├── server_admin.py      # 旧 admin 入口（保留兼容）
+│   │   ├── server.py            # 应用入口（注册 11 个 Blueprint）
+│   │   ├── server_admin.py      # 旧 admin 单页入口（仅 admin_bp，端口 39998，无引用）
 │   │   ├── server_pack.py       # 后端打包脚本
-│   │   ├── sqlitelog.py         # 旧版 SQLite 日志兼容层
+│   │   ├── sqlitelog.py         # 旧 SQLite 访问层（public/admin 路由仍在使用）
 │   │   ├── conftest.py          # pytest 全局 fixture
 │   │   ├── pytest.ini           # pytest 配置
 │   │   ├── local-run.sh         # 后端本地启动
 │   │   ├── deploy.sh            # 旧版部署脚本
-│   │   ├── app.log              # 运行日志（轮转归档）
 │   │   ├── logs.db / quant.db   # SQLite（log、quant 各自独立）
-│   │   ├── backup/ dist/ logs/ run/ quant_bundles/ quant_memory/  # 运行时目录
+│   │   ├── backup/ ddl/ dist/ docs/ logs/ quant_bundles/ quant_memory/ voice_data/  # 运行时目录
 │   │   │
 │   │   ├── conf/                # 配置层
 │   │   │   ├── app_factory.py   # Flask 应用工厂（含 CORS、50MB 上限）
@@ -108,13 +112,12 @@ openai-project/
 │   │   │   ├── conf.ini.tpl     # 配置模板（提交）
 │   │   │   └── conf.ini         # ⚠️ 实际配置（被 .gitignore）
 │   │   │
-│   │   ├── routes/              # 路由层（10 个 Blueprint，全部 `/never_guess_my_usage` 前缀）
+│   │   ├── routes/              # 路由层（11 个 Blueprint，全部 `/never_guess_my_usage` 前缀）
 │   │   │   ├── public_routes.py        # 公共接口
 │   │   │   ├── admin_routes.py         # 管理后台 CRUD（部分端点用 _crud_factory.py）
 │   │   │   ├── _crud_factory.py       # @crud_list/@crud_get/@crud_create/@crud_update/@crud_delete 装饰器
-│   │   │   ├── quant_routes.py         # 量化聚合入口
 │   │   │   └── quant/
-│   │   │       ├── _shared.py          # 共享鉴权/装饰器
+│   │   │       ├── _shared.py          # 共享 import 聚合（当前无引用）
 │   │   │       ├── data_routes.py      # dashboard / providers / 数据导入
 │   │   │       ├── industry_routes.py  # 板块采集
 │   │   │       ├── strategy_routes.py  # 策略 + Prompt 模板 + 报告
@@ -147,11 +150,11 @@ openai-project/
 │   │   │       ├── indicator_service.py
 │   │   │       ├── industry_common.py / industry_board_service.py
 │   │   │       ├── industry_quote_service.py / industry_news_service.py / industry_indicator_service.py
-│   │   │       └── （原 industry_service.py 已拆为上 5 个 + re-export）
+│   │   │       ├── industry_service.py（60 行 re-export）
 │   │   │       ├── symbol_search_service.py / task_dispatch_service.py
 │   │   │       ├── query_service.py / trade_calendar_service.py / dashboard_service.py
 │   │   │       ├── import_service.py / common.py
-│   │   │       └── provider_{base,factory,akshare,baostock,tencent}.py
+│   │   │       └── provider_{base,factory,akshare,baostock,tencent}.py  # 3 行 re-export → quant_client/
 │   │   │
 │   │   ├── model/               # 数据访问层
 │   │   │   ├── db.py                    # 平台 SQLite（peewee）
@@ -159,6 +162,7 @@ openai-project/
 │   │   │   └── repositories/
 │   │   │       ├── log_repository.py    # 对话历史、上下文、日志
 │   │   │       ├── model_meta_repository.py
+│   │   │       ├── minimax_repository.py  # 音色/音乐台账
 │   │   │       └── user_repository.py
 │   │   │
 │   │   ├── quant/               # 量化独立数据库
@@ -171,7 +175,7 @@ openai-project/
 │   │   ├── quant_client/        # 量化 Agent 端 SDK（被 worker 复用）
 │   │   │   ├── cli.py / common.py / constants.py / http_client.py
 │   │   │   ├── bundle_builder.py / eastmoney_patch.py
-│   │   │   └── provider_{base,factory,akshare,baostock,eastmoney,sina,tencent}.py
+│   │   │   └── provider_{base,factory,akshare,baostock,eastmoney,sina,tencent,ths,yahoo}.py
 │   │   │
 │   │   ├── worker/              # 量化独立进程（与 Web 解耦）
 │   │   │   ├── quant_data_agent.py           # 数据采集 Agent（run-once 子命令）
@@ -185,20 +189,14 @@ openai-project/
 │   │   │   ├── init_model_meta.py        # 从 vveai.com 拉取模型元数据
 │   │   │   └── init_user_data.py         # 配置文件用户 → 数据库迁移
 │   │   │
-│   │   ├── tools/               # 运维脚本（check_quant_sources.py 等）
+│   │   ├── tools/               # check_quant_sources / gen_permission_matrix / quant_db_migrate
+│   │   │                        # platform_permissions_migrate / dialog_backup 等 9 个 + ddl/
 │   │   │
-│   │   ├── tests/               # pytest 测试（unit/service/api 三层）
-│   │   │
-│   │   ├── archive_logs.py / restore_logs.py *(已删除 — 数据归档改由 runtime_logging 滚动处理)*
-│   │   ├── backup/ dist/ logs/ run/ quant_bundles/ quant_memory/  # 运行时目录
-│   │   │   ├── unit/    test_common.py / test_claude_service.py
-│   │   │   │            test_message_normalizer.py / test_cron_utils.py / test_rule_engine.py
-│   │   │   ├── service/ test_binding_service.py / test_position_service.py
-│   │   │   │            test_strategy_service.py / test_industry_service.py
-│   │   │   │            test_schedule_log_service.py / test_schedule_query_service.py
-│   │   │   └── api/     test_data_routes.py / test_trade_routes.py
-│   │   │                test_strategy_routes.py / test_scheduler_routes.py
-│   │   │                test_industry_routes.py / test_handoff_routes.py
+│   │   ├── archive_logs.py / restore_logs.py  # 对话归档/恢复 CLI（仍存在，当前无引用）
+│   │   ├── tests/               # pytest：unit 27 / service 35 / api 15 个 test_*.py
+│   │   │   ├── unit/            # 纯函数 / provider / 规则引擎
+│   │   │   ├── service/         # 业务集成（临时 SQLite）
+│   │   │   └── api/             # Flask test client
 │   │   │
 │   │   └── docs/                # 后端专题文档
 │   │       ├── notification_api_docs.md
@@ -216,27 +214,36 @@ openai-project/
 │           ├── main.ts / App.vue / i18n.ts / env.d.ts
 │           ├── locales/                       # i18n 多语言包（按域拆分）
 │           │   ├── index.ts                   # 聚合 zh/en 各域
-│           │   ├── zh/{chat,admin,login,validation}.ts
-│           │   └── en/{chat,admin,login,validation}.ts
-│           ├── router/index.ts                  # /login、/chat、/admin、/quant/*
+│           │   ├── zh/{chat,admin,login,validation,apps}.ts
+│           │   └── en/{chat,admin,login,validation,apps}.ts
+│           ├── router/index.ts                  # /login、/chat、/studio、/admin、/quant/*（meta.requiredRole）
 │           ├── services/                        # API 客户端
-│           │   ├── httpClient.ts                # axios + JWT 自动刷新 + 401 重试
+│           │   ├── httpClient.ts                # axios + Token 自动刷新 + 401 重试
 │           │   ├── api.ts / adminApi.ts / quantApi.ts
 │           │   └── version.ts
-│           ├── stores/auth.ts                   # 唯一 Pinia store（JWT 凭据）
+│           ├── stores/auth.ts                   # 唯一 Pinia store（access/refresh token）
 │           ├── composables/
-│           │   ├── useQuantWorkbench.ts         # 量化工作台 facade（~1954 行）
+│           │   ├── useQuantWorkbench.ts         # 量化工作台 facade（~2583 行，仍需拆分）
 │           │   ├── quant/                       # 量化子模块
 │           │   │   ├── types.ts                  # 17 个 type/interface（~225 行）
 │           │   │   └── format.ts                 # 纯函数（formatRate/formatNumber/strategyStatusTag/buildSchedulePayload）
+│           │   ├── chat/                        # 聊天子模块（ChatContent v2 拆分）
+│           │   │   ├── chatMarkdown.ts            # Markdown/公式渲染
+│           │   │   ├── messageUtils.ts            # 消息纯函数
+│           │   │   ├── types.ts                   # ChatMessage / RoleSetting
+│           │   │   ├── useChatExport.ts           # 截图/选中导出
+│           │   │   ├── useChatMermaid.ts          # mermaid 渲染 + observer
+│           │   │   ├── useChatMessageActions.ts   # 勾选/复制/删除
+│           │   │   ├── useChatScroll.ts           # 滚动
+│           │   │   └── useChatStream.ts           # 发送/流式/取消/重试/续写
 │           │   ├── useThemeManager.ts           # 明暗主题
 │           │   ├── useNotifications.ts          # 通知轮询
 │           │   └── useAdminAction.ts / useAdminCrudDialog.ts / useAdminPagedList.ts
 │           ├── components/
 │           │   ├── NotificationPanel.vue
 │           │   ├── chat/                        # 聊天视图
-│           │   │   ├── ChatContent.vue           # 2533 行，🔴
-│           │   │   ├── ChatSidebar.vue           # 1288 行，🟡
+│           │   │   ├── ChatContent.vue           # 938 行，✅ v2 已拆分
+│           │   │   ├── ChatSidebar.vue           # 1308 行，🟡
 │           │   │   ├── ChatToolbar.vue
 │           │   │   ├── InputArea.vue
 │           │   │   ├── UserSettings.vue
@@ -247,7 +254,7 @@ openai-project/
 │           │       ├── TestLimitTable.vue / RuntimeOverview.vue
 │           │       └── SqlExecutor.vue
 │           ├── views/
-│           │   ├── Login.vue / Chat.vue / Chat-New.vue / Admin.vue
+│           │   ├── Login.vue / Chat-New.vue / Admin.vue / Quant.vue
 │           │   └── quant/
 │           │       ├── QuantLayout.vue
 │           │       └── pages/
@@ -257,14 +264,14 @@ openai-project/
 │           │           ├── QuantBacktestPage.vue / QuantSchedulerPage.vue
 │           │           ├── QuantAiMemoryPage.vue / QuantImPositionsPage.vue
 │           ├── plugins/element-plus.ts
-│           ├── styles/                          # 16 个 CSS（含暗/亮主题、响应式）
-│           ├── utils/                           # highlight.ts 及其示例/库
+│           ├── styles/                          # 20 个 CSS（含暗/亮主题、响应式）
+│           ├── utils/                           # highlight / mermaid / mermaidExtract / media / adminData / main
 │           └── __tests__/                       # vitest
-│               ├── setup.ts / helpers.ts
-│               ├── composables/useQuantWorkbench.test.ts
-│               └── services/quantApi.test.ts
+│               ├── setup.ts / helpers.ts（24 个 *.test.ts）
+│               ├── auth/ 2 · components/ 7 · composables/ 5 · locales/ 1
+│               └── services/ 3 · stores/ 1 · utils/ 4 · views/ 1
 │
-├── .claude/                     # Claude Code 本地配置（gitignore，仅保留 settings.local.json）
+├── .claude/                     # Claude Code 本地配置（gitignore）
 │   └── settings.local.json
 │
 ├── .codex/ environments/        # Codex 环境元数据（自动生成）
@@ -290,8 +297,8 @@ HTTP ──► routes/  (Flask Blueprint)
 ```
 
 - **配置唯一来源**：`conf/settings.py` 的 `Settings` dataclass（frozen）。运行时单例在 `conf/runtime.py` 的 `runtime_state`，含 `clients`、`api_host_blacklist`、`allowed_extensions`、`use_db_auth` 等可变状态。
-- **应用工厂**：`conf/app_factory.py` 的 `create_app()` 启用 CORS（`*`，含凭据）、`MAX_CONTENT_LENGTH=50MB`、`@app.route("/")` 健康检查。
-- **入口**：`server.py` 调用 `create_app()` 后注册 10 个 Blueprint，并执行 `bootstrap_runtime()`（DB 初始化、目录创建、黑名单清理线程、模型元数据定时刷新）。
+- **应用工厂**：`conf/app_factory.py` 的 `create_app()` 启用 CORS（`*`，含凭据）、`MAX_CONTENT_LENGTH=50MB`、`/` 返回 200 空体、`/health` 探针 `quant.db`（异常返回 503 `degraded`）。
+- **入口**：`server.py` 调用 `create_app()` 后注册 11 个 Blueprint，并执行 `bootstrap_runtime()`（DB 初始化、目录创建、`build_clients()`、黑名单清理线程、模型元数据定时刷新、音色保活定时器、飞书 WS 线程）。
 
 ### 3.2 接口前缀与蓝图清单
 
@@ -299,9 +306,10 @@ HTTP ──► routes/  (Flask Blueprint)
 
 | Blueprint | 文件 | 主要端点 |
 | --- | --- | --- |
-| `public_bp` | `routes/public_routes.py` | `login`、`register`、`token/refresh`、`split`、`split_stream`、`split_stream_cancel`、`split_pic`、`handoff`、`split_his{,_content,_delete}`、`update_dialog_title`、`system_prompt{,_by_group}`、`notifications`、`del_password`、`browser_conf/{get,save}`、`download`、`models`、`models/grouped`、`usage`、`test`、`set_info` |
+| `public_bp` | `routes/public_routes.py` | `login`、`register`、`token/refresh`、`split`、`split_stream`、`split_stream_cancel`、`split_pic`、`handoff`、`split_his{,_content,_delete}`、`update_dialog_title`、`system_prompt`、`system_prompts_by_group`、`auth/me`、`notifications`、`del_password`、`browser_conf/{get,save}`、`download`、`models`、`models/grouped`、`usage`、`test`、`set_info` |
 | `admin_bp` | `routes/admin_routes.py` | `model_meta/*`、`system_prompt/*`、`test_limit/*`、`user/*`、`notification/*`、`sql_execute`（受 `enable_sql_execute` 开关保护）、`runtime/overview`、`sql/meta` |
-| `quant_bp` | `routes/quant_routes.py` *(已删除 — server.py 直接注册各子蓝图)* | 量化根级（dashboard、行情、Provider 等汇总） |
+| `voice_bp` | `routes/voice_routes.py`（前缀 `/voice`） | `state`、`sync`、`clone`、`preference`、`delete`、`synthesize`、`reading/*`、`audio/*`、`profile`、`keepalive{,/run}` |
+| `music_bp` | `routes/music_routes.py`（前缀 `/music`） | `state`、`generate`、`cover/preprocess`、`cover/generate`、`track/*`、`audio/*`、`delete` |
 | `quant_strategy_bp` | `routes/quant/strategy_routes.py` | `strategy/*`、`symbols`、`prompt_template/*`、`reports`、`report/*` |
 | `quant_trade_bp` | `routes/quant/trade_routes.py` | `positions/*`、`operations/*`、`backtest/*` |
 | `quant_data_bp` | `routes/quant/data_routes.py` | `dashboard/overview`、`providers`、`data/*`、`symbols/upsert` |
@@ -309,6 +317,8 @@ HTTP ──► routes/  (Flask Blueprint)
 | `quant_client_bp` | `routes/quant/client_routes.py` | `client/tasks/*`（Agent 上报） |
 | `quant_industry_bp` | `routes/quant/industry_routes.py` | `industry/*` |
 | `quant_im_memory_bp` | `routes/quant/im_memory_routes.py` | `im/*`、`memory/*` |
+
+> 共 11 个 Blueprint、175 个端点（`tools/gen_permission_matrix.py` 口径）。`routes/quant_routes.py` 已删除（提交 `d3df675`），`_shared.py` 目前只是共享 import 聚合、无实际引用。
 
 ### 3.3 多 LLM Provider 路由
 
@@ -321,14 +331,14 @@ HTTP ──► routes/  (Flask Blueprint)
 | Gemini 模型 | `message_normalizer` 把 `[FILE_URL:...]` 文本标记转 `{type: "file_url"}` | 兼容 Gemini 多模态入参 |
 | 多模态入参 | `message_normalizer.build_parts_from_message` + base64 内联图片 | `model_type=3` 触发 |
 
-`service/handoff_service.py` + `/handoff` 端点用 Claude（默认模型 `claude-…-haiku`）将长会话压缩成可粘贴的交接摘要。
+`service/handoff_service.py` + `/handoff` 端点把长会话压缩成可粘贴的交接摘要；模型取 `model_override` 或源对话 `modelname`（无固定默认），Claude 模型走 Claude 客户端，其余走 OpenAI 客户端。
 
 ### 3.4 关键机制
 
 - **Host 轮询 + 黑名单**：`host_service.random_client()` 在 `api_host_blacklist` 中选可用 host；失败后通过 `blacklist_lock` 加锁写入黑名单，`blacklist_duration = 5 * 60` 秒，后台线程到期清理。
 - **模型缓存与过滤**：`model_service.get_cached_models()` 用 `runtime_state.cache_expiry_time["models"]`（默认 3600s）；`filter_models()` 只使用 `model_filter.exclude_keywords`（大小写不敏感子串匹配），按模型元数据补充 `recommend/allow_net/model_desc/model_type/model_grp` 并按 `recommend desc, meta.id desc` 排序。
 - **流式 + 取消**：SSE 通过 `split_stream` 输出，`runtime_state.stream_cancel_registry` 记录可取消的会话，`split_stream_cancel` 通过 `stream_cancel_lock` 触发取消。
-- **认证与权限**：默认 `use_db_auth=True`，登录走 `users` 表；JWT `access_token_ttl_seconds=1800`、`refresh_token_ttl_seconds=604800`。`/admin` 与 `/quant` 路由需要 `role=admin`（前端路由守卫 + 后端装饰器双重校验）。
+- **认证与权限**：默认 `use_db_auth=True`，登录走 `users` 表；Token 为 **随机 opaque 串**（`secrets.token_urlsafe`，存 `users.token` JSON，不是 JWT）：`access_token_ttl_seconds=1800`、`refresh_token_ttl_seconds=604800`。模块权限由 `require_module_auth(role)` 按 `user_role` 表裁决：`/admin` 需 `admin`，`/quant` 需 `quant`，`/studio` 需 `sound`；前端路由守卫与后端装饰器双重校验。
 - **SQL 后门**：`admin.enable_sql_execute=true` 时开启 `/sql_execute`，**生产务必保持 false**。
 - **运行日志分流**：`runtime_logging.build_runtime_log_path("platform"|"quant"|"ops", ...)` 按模块分目录；普通保留 7 天，压缩保留 30 天（`runtime_log.{plain,archive}_retention_days`）。
 
@@ -340,14 +350,16 @@ HTTP ──► routes/  (Flask Blueprint)
 2. **数据采集 Agent**（`worker/quant_data_agent.py`）—— `run-once` 子命令向 `/client/tasks/claim` 轮询拉取任务，向 `/client/tasks/report` 上报；`start-dev-quant` / `start-prod-quant` 启动，每 15s 一次。
 3. **定时调度 Worker**（`worker/quant_scheduler_worker.py`）—— 后台扫描调度表执行回测/报告生成；`≤30s` 轮询。
 
-**Provider 多源适配**：`quant_client/provider_{tencent,sina,baostock,akshare,eastmoney}.py` 通过 `provider_factory` 选择，bash 端另有 `tools/check_quant_sources.py` 做连通性探测。
+**Provider 多源适配**：`quant_client/provider_{base,factory,akshare,baostock,eastmoney,sina,tencent,ths,yahoo}.py` 通过 `provider_factory` 选择；`service/quant/provider_*.py` 只是 3 行 re-export。另有 `tools/check_quant_sources.py` 做连通性探测。
 
-- **默认 auto 链**（2026-08-18 起）：`baostock` → `tencent` → `sina`，按字段完整度降序排列。`eastmoney` / `akshare` 已从 auto 链移除，**仅保留显式调用兼容**，会触发 `DeprecationWarning`。
-- 字段完整度（13 项核心字段可填充数）：Baostock 9 > 腾讯 7 > 新浪 5。
+- **日线 auto 链**（2026-09-23 起）：`ths` → `baostock` → `tencent` → `sina` → `yahoo`；上游已覆盖的 symbol 不再请求下游。`ths` 需 `[quant].ths_api_key` 或 `THS_API_KEY`，缺失时跳过并降级。
+- **分钟线 auto 链**：`baostock` → `eastmoney` → `sina`。
+- `eastmoney` / `akshare` 已从 auto 链移除，**仅保留显式调用兼容**，会触发 `DeprecationWarning`。
+- 字段完整度（13 项核心字段可填充数）：Baostock 9 > 腾讯 7 > 新浪 5；`ths` 仅日线（OHLCV + 成交额 6 项直传）。
 
 **飞书 IM**：唯一支持的 IM 通道，配置见 `[quant].feishu_*`。回调地址 `/never_guess_my_usage/quant/im/feishu/events`。
 
-**数据流参考**：`doc/quant/quant-mvp-runbook.md`、`a-share-data-integration-module.md`、`strategy-rule-module.md`、`quant-data-collection-deploy.md`、`feishu-setup-guide.md`、`lightweight-ai-quant-design-evaluation.md`。
+**数据流参考**：`doc/quant/data-sources-overview.md`、`doc/quant/indicator-extension-playbook.md`、`doc/quant/report-feishu-delivery.md`。
 
 #### 3.5.1 量化 DB schema 变更流程（必须遵守）
 
@@ -358,44 +370,44 @@ HTTP ──► routes/  (Flask Blueprint)
 1. **改 entity**：`cyf/project/server/quant/quant_entities_*.py` 修改 `Field` 定义（`null` / `default` / 类型）。
 2. **生成 ALTER SQL**：在 `cyf/project/server/` 目录跑：
    ```bash
-   .venv/bin/python tools/quant_db_migrate.py \
+   ../../.venv/bin/python tools/quant_db_migrate.py \
      --mode dry-run \
-     --output server/ddl/<YYYY-MM-DD>_<change_name>.sql \
+     --output ddl/<YYYY-MM-DD>_<change_name>.sql \
      --change-name <change_name>
    ```
-   会自动扫描所有 `QUANT_MODELS`，列出缺列；落档到 `server/ddl/` 作为审计 / 回滚参考。
+   会自动扫描所有 `QUANT_MODELS`，列出缺列；落档到 `cyf/project/server/ddl/` 作为审计 / 回滚参考。
 3. **应用 ALTER**（区分模式）：
    - **dev / 测试环境**：直接 `--mode hard`（无备份，假定可重置 DB）。
    - **生产环境**：必须 `--mode soft`（自动 `CREATE TABLE ... AS SELECT *` 备份 → ALTER → 提交）。
    - **线上 SQLite（生产 DB 文件）**：先 scp 备份到 `cyf/project/server/quant.db` 旁，再 `--db <线上 DB 路径> --mode soft`。
 4. **跑回归**：`pytest tests/service tests/unit` 确认 entity 字段与 DB 对齐后代码能 INSERT/SELECT 成功。
-5. **commit 改动**：entity 改动 + `server/ddl/<change_name>.sql` 一起提交；commit message 注明"需 ALTER"。
+5. **commit 改动**：entity 改动 + `ddl/<change_name>.sql` 一起提交；commit message 注明"需 ALTER"。
 
 **关键约束**：
 
 - `NOT NULL` 列必须有 `default`，否则 SQLite `ADD COLUMN` 会被拒；工具会自动检测并 fallback 为 `NULL`，并在日志里 warn。
 - 备份表命名 `<原表>_backup_<YYYYMMDD_HHMMSS>_<字段名>`；运行一周无异常后手动 `DROP TABLE ...` 清理。
-- 备份目录 `cyf/project/server/ddl/` 应 `.gitignore`（本地审计文件）— 至少**commit 一份带字段语义的 SQL**作为变更证据。
+- `cyf/project/server/ddl/` 下的 SQL 入库作为变更证据（当前 4 份）。
 - 工具支持的 entity 字段类型：`CharField / TextField / IntegerField / FloatField / BooleanField / DateTimeField / DateField / BigIntegerField`；其它类型 fallback 为 TEXT。
 
 **工具命令总览**：
 
 ```bash
 # dry-run：扫缺列并打印（默认 stdout）
-.venv/bin/python tools/quant_db_migrate.py --mode dry-run
+../../.venv/bin/python tools/quant_db_migrate.py --mode dry-run
 
 # dry-run + 落档
-.venv/bin/python tools/quant_db_migrate.py \
-  --mode dry-run --output server/ddl/2026-XX-XX_<name>.sql
+../../.venv/bin/python tools/quant_db_migrate.py \
+  --mode dry-run --output ddl/2026-XX-XX_<name>.sql
 
 # 软模式（生产）：先备份再 ALTER
-.venv/bin/python tools/quant_db_migrate.py --mode soft
+../../.venv/bin/python tools/quant_db_migrate.py --mode soft
 
 # 硬模式（dev）：直接 ALTER
-.venv/bin/python tools/quant_db_migrate.py --mode hard
+../../.venv/bin/python tools/quant_db_migrate.py --mode hard
 
 # 覆盖 DB 路径（线上 / 临时 DB）
-.venv/bin/python tools/quant_db_migrate.py --db /path/to/quant.db --mode soft
+../../.venv/bin/python tools/quant_db_migrate.py --db /path/to/quant.db --mode soft
 ```
 
 ---
@@ -413,7 +425,7 @@ HTTP ──► routes/  (Flask Blueprint)
   ```python
   yield f"data: {json.dumps({'content': msg, 'done': True, 'error': error_response})}\n\n"
   ```
-- 前端解析（`services/api.ts` 与 `Chat.vue`/`Chat-New.vue`）：遇到 `parsedData.error` 必须 `throw new Error(parsedData.error.msg)`，由上层统一弹错误提示，**不能**继续追加内容。
+- 前端解析（`services/api.ts` 与 `Chat-New.vue`）：遇到 `parsedData.error` 必须 `throw new Error(parsedData.error.msg)`，由上层统一弹错误提示，**不能**继续追加内容。
 
 #### 3.6.2 API 异常分类
 
@@ -465,7 +477,7 @@ HTTP ──► routes/  (Flask Blueprint)
 | 401 | 凭据缺失 / 失效 / 账号停用或软删除 | `UNAUTHENTICATED` |
 | 403 | 已认证但缺少模块或操作权限（可附 `required_role`） | `PERMISSION_DENIED` |
 | 404 | 资源不存在，或跨用户私有资源（统一按不存在处理） | `RESOURCE_NOT_FOUND` |
-| 400 | 参数非法（含未知 / 空角色、与兼容 role 矛盾） | `VALIDATION_ERROR` |
+| 400 | 参数非法（含未知 / 空角色、与兼容 role 矛盾） | `VALIDATION_ERROR`（⚠️ 常量已定义但当前 400 响应未附 `error_type`） |
 
 - 显式携带无效 bearer 时返回 401，**不**回退到请求体里的另一账号身份。
 - 跨用户私有资源统一返回 404，避免暴露资源存在性。
@@ -485,10 +497,10 @@ HTTP ──► routes/  (Flask Blueprint)
 
   ```bash
   # 平台库（先备份再写）
-  .venv/bin/python tools/platform_permissions_migrate.py --db <平台库绝对路径> --mode soft \
+  ../../.venv/bin/python tools/platform_permissions_migrate.py --db <平台库绝对路径> --mode soft \
       --output ddl/2026-11-08_platform_permissions.sql
   # 量化库（补 owner 列 + 重建策略唯一约束）
-  .venv/bin/python tools/quant_db_migrate.py --db <量化库绝对路径> --mode soft \
+  ../../.venv/bin/python tools/quant_db_migrate.py --db <量化库绝对路径> --mode soft \
       --change-name user_ownership --output ddl/2026-11-08_user_ownership.sql
   ```
 
@@ -502,16 +514,17 @@ HTTP ──► routes/  (Flask Blueprint)
 ```
 /            → /login
 /login       Login.vue                  公开
-/chat        Chat-New.vue               需登录
+/chat        Chat-New.vue               需 chat
 /admin       Admin.vue                  需 admin（7 个 Tab）
-/studio      StudioLayout.vue + 子页面   需 admin
+/studio      StudioLayout.vue + 子页面   需 sound
   ├ voice（音色与语音） / music（音乐创作）
-/quant       QuantLayout.vue + 子页面    需 admin
+/quant       QuantLayout.vue + 子页面    需 quant
   ├ overview / data / industry / strategy / runs / operations
   ├ backtest / scheduler / ai-memory / im-positions
+  └ scheduler / ai-memory / im-positions 子页仍要求 admin
 ```
 
-`Chat.vue` 是旧入口保留兼容；`Chat-New.vue` 是当前默认。
+`Chat-New.vue` 是聊天页唯一入口（旧 `Chat.vue` 已移除）。
 
 ### 4.2 模块拆分
 
@@ -519,18 +532,18 @@ HTTP ──► routes/  (Flask Blueprint)
 - **音色管理**：`/studio/voice`，面板 `components/studio/VoiceStudio.vue`，子组件在 `components/studio/voice/`，API 客户端为 `services/voiceApi.ts`。后端 `routes/voice_routes.py` 注册 `voice_bp`，前缀 `/never_guess_my_usage/voice`；两个蓝图共用 `routes/minimax_endpoint.py` 的鉴权与错误封装，`service/minimax_client.py` 调官方接口，`service/minimax_voice_service.py` 管理台账与音频，`service/minimax_audio.py` 落盘音频，`model/repositories/minimax_repository.py` 存台账与记录。`Settings.minimax_*` 为唯一配置来源，读取 `[minimax]`；`MINIMAX_API_KEY` 优先，不回退到聊天凭据。复用平台 SQLite 的 `voice_account_state`、`voice_reading`，保存音色台账、故事正文、生成参数及临时音频链接/24 小时过期时间；MP3 备份在被忽略的 `voice_data/`，按密钥和区域隔离。付费调用禁止自动重试，未激活音色需保留本地台账；备份失败仅重试下载，不能自动重新合成。**两套凭据**：复刻/音色查询/删除走 `[minimax_music]` 的计费密钥（Token Plan 无复刻权限），T2A 合成走 `[minimax]` 的语音密钥；`MiniMaxVoiceService` 持有 `client`（合成）与 `clone_client`（复刻）两个客户端，音色台账按复刻凭据指纹分组。**音色保活**：复刻音色 7 天未正式调用会被官方删除，`service/minimax_keepalive.py` 的每日定时器在到期前 1 天用 `clone_client` 合成一句日期播报续期（只取链接、不落本地音频、不进合成记录），保活设置存在 `voice_account_state` 台账。**音色费用**：复刻音色首次使用一次性收「音色费用」，只走账户余额、不走订阅额度（Token Plan 余额为 0 时报官方 1008）；`synthesize` 对台账中未激活的自定义音色改用 `clone_client`，遇到 1008 再换 `clone_client` 重试一次。
 
 - **音乐创作**：`/studio/music`，面板 `components/studio/MusicStudio.vue`，子组件 `components/studio/music/MusicComposer.vue`，API 客户端为 `services/musicApi.ts`。后端 `routes/music_routes.py` 注册 `music_bp`，前缀 `/never_guess_my_usage/music`，复用管理员鉴权；`service/minimax_music_service.py` 调 `/v1/music_generation`（文本生音乐 `music-3.0`、`music-2.6`；参考音频翻唱 `music-cover` 走 `/v1/music_cover_preprocess` 两步流程），生成参数、临时音频链接/24 小时过期时间和本地 MP3 备份写入 SQLite 的 `music_track`，文件落在被忽略的 `voice_data/<凭据指纹>/music/`。风格描述必填（纯音乐时），带人声时需歌词或开启自动写词；翻唱需 6 秒–6 分钟参考音频（≤20 MB），先提取 ASR 歌词再改词生成。付费调用同样禁止自动重试，备份失败仅重试下载，不自动重新生成。共用的凭据目录与文件锁在 `service/minimax_store.py`。音乐走独立的 `[minimax_music]` 配置段（`MINIMAX_MUSIC_API_KEY` 优先），`api_key` 留空则沿用 `[minimax]` 的语音凭据；独立密钥按凭据指纹单独隔离记录与音频。新用户密钥调用音乐接口会返回官方业务码 `2153`（音乐接口不再面向新用户提供），需使用历史付费账号密钥。
-- **聊天**：`components/chat/` 下 5 个组件（`ChatContent`、`ChatSidebar`、`ChatToolbar`、`InputArea`、`UserSettings`）+ `types.ts`。
+- **聊天**：`components/chat/` 下 5 个组件（`ChatContent`、`ChatSidebar`、`ChatToolbar`、`InputArea`、`UserSettings`）+ `types.ts`。`ChatContent.vue` 已从 2758 行拆到 938 行：Markdown 渲染、消息纯函数、截图导出、mermaid、勾选/复制/删除、滚动、流式请求分别落在 `composables/chat/` 下 7 个模块，发送/流式/重试/续写由 `useChatStream` 统一承载。
 - **Admin**：`components/admin/` 下 7 个表格组件 + `views/Admin.vue` 用 Tab 切换。
 - **量化**：`views/quant/pages/` 下 10 个独立页面 + `QuantLayout.vue` 公共壳。
 - **状态**：仅 `stores/auth.ts`（Pinia），其余状态用 composable 内部 `ref/reactive`。
-- **Composables**：`useQuantWorkbench`（2201 行 🔴 需拆分）、`useThemeManager`、`useNotifications`、`useAdminAction`、`useAdminCrudDialog`、`useAdminPagedList`。
+- **Composables**：`useQuantWorkbench`（2583 行 🔴 仍超硬上限）、`composables/chat/*`（聊天链路，已拆）、`useThemeManager`、`useNotifications`、`useAdminAction`、`useAdminCrudDialog`、`useAdminPagedList`。
 
 ### 4.3 API 与认证
 
-- `services/httpClient.ts` 提供 `createApiClient({ requireAuthByDefault, publicPathPrefixes })`。
+- `services/httpClient.ts` 提供 `createApiClient({ requireAuthByDefault, publicPathPrefixes, retryAuthOnFailure })`（`minimaxApi.ts` 显式传 `retryAuthOnFailure: false`）。
 - `API_BASE_URL`：优先读取 `VITE_API_BASE_URL`；默认开发 `http://localhost:39997`、生产 `window.location.origin`。独立托管文件入口由 `VITE_FILE_BASE_URL` 指定，地址处理统一在 `services/backendUrl.ts`。
 - **自动刷新**：拦截器在请求前调用 `getValidAccessToken()`，剩 30s 内提前刷新；401 后 `originalRequest._retry` 标记再重试一次。
-- **公开路径白名单**：通过 `publicPathPrefixes`（如 `login`、`token/refresh`、`test`）跳过鉴权。
+- **公开路径白名单**：`api.ts` 只白名单 `login`、`register`；`token/refresh` 走拦截器之外的裸 `axios.post`。
 - **401 / 403 分流**：401 走刷新重试（至多一次）；403 **不**刷新 token、**不**重放业务请求，只触发 `onPermissionDenied` 事件，由上层同步角色并展示权限引导。
 - **会话版本**：`stores/auth.ts` 的 `sessionVersion` 在登录 / 退出 / 切换账号时自增；请求与刷新期间若版本变化，说明账号已变，直接放弃响应，避免跨账号串数据。
 - **角色同步**：`auth/sync.ts::syncCurrentRoles()` 调 `/auth/me` 拉取服务端角色快照；并发调用复用同一个进行中请求。localStorage 里的 roles 只是恢复线索，受保护导航前必须完成服务端确认。
@@ -548,7 +561,7 @@ HTTP ──► routes/  (Flask Blueprint)
 
 ### 4.5 渲染
 
-- `marked` + `highlight.js` + KaTeX 三件套做 Markdown/代码/公式渲染。
+- `marked` + `highlight.js` + KaTeX + `mermaid` 做 Markdown/代码/公式/图渲染；`DOMPurify` 负责最终 HTML 清洗。
 - `html-to-image` 用于对话分享导出图片。
 
 ### 4.6 构建产物必须可复现
@@ -620,7 +633,7 @@ HTTP ──► routes/  (Flask Blueprint)
 ./start-dev-quant --scheduler         # 仅调度 Worker
 ```
 
-`start-dev.sh` 使用 `.venv/bin/python`（不存在则回退 `python3`）。首次启动会自动 `pip install` / `npm install`。
+`start-dev.sh` 直接使用 `.venv/bin/python`（不存在则回退 `python3`）运行 `server.py` 与 `npm run dev`，**不会安装依赖**；首次准备请先跑 `local-run.sh`。开发默认使用 `conf/conf.dev.ini`（由 `QUANT_CONF_PATH` 指定，已被 gitignore）。
 
 ### 5.2 生产环境
 
@@ -644,7 +657,7 @@ HTTP ──► routes/  (Flask Blueprint)
 
 ### 5.3 首次运行前
 
-- `start-prod.sh` 默认无执行权限：先 `chmod +x start-prod.sh start-prod-quant`。
+- `start-prod.sh` 默认无执行权限：先 `chmod +x start-prod.sh`（`start-prod-quant` 已带可执行位）。
 - `cyf/project/server/conf/conf.ini` 从 `conf.ini.tpl` 拷贝后填实际 `api_key` / `api_host` / `quant.ths_api_key` / `quant.feishu_*` 等。
 - `start-prod-quant` 的 Agent 登录凭据不再内置于脚本：优先读环境变量 `QUANT_LOGIN_USER` / `QUANT_LOGIN_PASSWORD`，其次读服务器受控文件 `$HOME/openai-project/.quant-credentials`（每行 `KEY=VALUE`，权限 600）；两者都缺失时脚本明确报错退出。首次切换需在服务器创建该文件，调度 Worker 不需要凭据。
 - 该文件同样走「模板 → 复制 → 填值」模式：仓库根目录 [`.quant-credentials.tpl`](.quant-credentials.tpl) 是只有占位符的模板，部署时 `cp .quant-credentials.tpl .quant-credentials` 后填入实际账号并 `chmod 600`。与 `conf.ini.tpl` 一样，模板入库、实际文件由 `.gitignore` 拦截。
@@ -662,18 +675,22 @@ HTTP ──► routes/  (Flask Blueprint)
 | `log` | `sqlite3_file` | 平台 SQLite |
 | `quant` | `sqlite3_file` / `bundle_dir` / `memory_dir` | 量化独立 SQLite 与目录（不要与 log 共用） |
 | `quant` | `schedule_log_dir` / `schedule_log_retention_days` | 调度执行日志 |
+| `quant` | `ths_api_key` | 同花顺数据 API Key（留空用 `THS_API_KEY`；auto 链首选） |
 | `quant` | `feishu_app_id` / `feishu_app_secret` / `feishu_verification_token` / `feishu_encrypt_key` / `feishu_debug_suffix` | 飞书自建应用 |
 | `runtime_log` | `root_dir` / `level` / `plain_retention_days` / `archive_retention_days` / `compress_backups` | 滚动日志策略 |
 | `admin` | `enable_sql_execute` | 是否开启 SQL 后门（生产务必 `false`） |
 | `api` | `api_key` / `api_host` | OpenAI Key 与 Host（`api_host` 可逗号分隔多值） |
 | `api` | `usd_to_cny_rate` | 美元→人民币换算 |
 | `api` | `api_param_mode` | `default`（日期字符串）或 `timestamp`（毫秒） |
-| `auth` | `access_token_ttl_seconds` / `refresh_token_ttl_seconds` | JWT TTL |
+| `auth` | `access_token_ttl_seconds` / `refresh_token_ttl_seconds` | 访问 / 刷新 Token TTL（opaque token，非 JWT；`conf.ini.tpl` 未提供该段，默认 1800 / 604800） |
 | `model_filter` | `cache_ttl` | 模型列表缓存秒数 |
 | `model_filter` | `exclude_keywords` | **唯一生效**的过滤：子串匹配排除（大小写不敏感） |
 | `model_filter` | `include_prefixes` | ⚠️ **配置项保留但代码未读取**（`settings.py` 不解析，`model_service.filter_models` 不使用）。改动它不会影响过滤行为——要改模型筛选请编辑 `exclude_keywords` 或在元数据表里维护 |
 | `model_filter` | `meta_refresh_hour` / `meta_refresh_minute` / `meta_refresh_on_startup` | 模型元数据定时刷新 |
-| `claude` | `api_key` / `api_host` / `api_version` | Claude SDK 独立配置，留空回退 `[api]` |
+| `claude` | `api_key` / `api_host` / `api_version` | Claude SDK 独立配置，留空回退 `[api]`；`conf.ini.tpl` 未提供该段，需自加 |
+| `tools` | `web_search_*`（8 键） | 服务端本地网络搜索 |
+| `minimax` | `api_key` / `region` / `key_kind` / `model` / `timeout_seconds` / `storage_dir` | 语音凭据（`MINIMAX_API_KEY` 优先，不回退聊天凭据） |
+| `minimax_music` | `api_key` / `region` / `key_kind` / `model` / `timeout_seconds` | 音乐/复刻凭据（留空回退 `[minimax]`） |
 
 > `runtime_state.allowed_extensions = {txt,pdf,png,jpg,jpeg,gif,ppt,pptx,md}`（在 `conf/runtime.py` 硬编码，与 `[common]` 段无关）。
 > `runtime_state.use_db_auth = True`（同上，硬编码）。
@@ -712,7 +729,20 @@ npm run test:coverage                  # 覆盖率
 ```
 
 - 配置：`vitest.config.ts`（`happy-dom`，`src/__tests__/**/*.test.ts`，覆盖率范围 `composables/` + `services/`）。
+- 当前 24 个测试文件 / 210 个用例（含 `components/ChatContent.test.ts` 与 `composables/chat*` / `useChat*` 单测）。
 - 新增 composable → `src/__tests__/composables/*.test.ts`；新增 API 服务函数 → `src/__tests__/services/*.test.ts`。
+
+### 7.3 CI 门禁（GitHub Actions）
+
+`.github/workflows/ci.yml` 在每次 push / pull_request 触发，两个 job：
+
+| Job | 内容 |
+| --- | --- |
+| `backend` | Python 3.9 + `requirements.txt`，`python -m pytest -q`（全量，含 API） |
+| `frontend` | Node 20 + `npm ci`，依次跑 `npm run typecheck`（`vue-tsc --noEmit`）、`npm run test`（vitest）、`npm run build` |
+
+- `npm run build` 本身**不做类型检查**，类型门禁只有 `typecheck`；本地改完前端必须自己先跑一遍。
+- CI 与生产部署解耦：EdgeOne 仍从生产分支构建前端，CI 只负责拦截回归。
 
 ---
 
@@ -730,13 +760,15 @@ npm run test:coverage                  # 覆盖率
 
 | 文件 | 行数 | 状态 |
 | --- | --- | --- |
-| `fe/src/components/chat/ChatContent.vue` | ~2533 | 🔴 已超标，v2 候选（本次仅标注，未物理拆分） |
-| `fe/src/composables/useQuantWorkbench.ts` | 1954 | ✅ v1 已拆分 types.ts + format.ts |
-| `fe/src/components/chat/ChatSidebar.vue` | 1288 | 🟡 接近阈值，v2 候选 |
-| `fe/src/i18n.ts` | 16 | ✅ v1 已拆为 locales/{zh,en}/{chat,admin,login,validation}.ts |
+| `fe/src/components/chat/ChatContent.vue` | 938 | ✅ v2 已拆为 `composables/chat/*`（原 2758 行） |
+| `fe/src/composables/useQuantWorkbench.ts` | 2583 | 🔴 仍超硬上限，v2 候选 |
+| `fe/src/components/chat/ChatSidebar.vue` | 1308 | 🟡 接近阈值，v2 候选 |
+| `fe/src/views/Login.vue` | 1227 | 🟡 接近阈值 |
+| `fe/src/styles/chat-sidebar.css` | 1224 | 🟡 纯样式，可按域拆分 |
+| `fe/src/i18n.ts` | 18 | ✅ v1 已拆为 locales/{zh,en}/{chat,admin,login,validation,apps}.ts |
 | `cyf/project/server/service/quant/industry_service.py` | 60 | ✅ v1 已拆为 5 个子 service（re-export 兼容） |
-| `cyf/project/server/quant/entities.py` | 70 | ✅ v1 已拆为 3 个 quant_entities_*.py（re-export 兼容） |
-| `cyf/project/server/routes/admin_routes.py` | 603 | ✅ v1 用 _crud_factory.py 统一部分端点 |
+| `cyf/project/server/quant/entities.py` | 74 | ✅ v1 已拆为 3 个 quant_entities_*.py（re-export 兼容） |
+| `cyf/project/server/routes/admin_routes.py` | 747 | ✅ v1 用 _crud_factory.py 统一部分端点 |
 
 > 行数随时间变动，以 `wc -l <file>` 为准。
 
@@ -744,14 +776,14 @@ npm run test:coverage                  # 覆盖率
 
 ## 9. 关键运行注意事项
 
-- 服务端**必须在** `cyf/project/server/` 目录运行（`conf/settings.py` 用相对路径加载 `conf/conf.ini`）。
+- 服务端**建议**在 `cyf/project/server/` 目录运行（uWSGI 与相对 DB 路径按此约定）；`conf/settings.py` 实际用 `BASE_DIR=__file__` 定位配置，cwd 不影响读取，可用 `QUANT_CONF_PATH` 覆盖（`start-dev.sh` 指向 `conf/conf.dev.ini`）。
 - 多进程 uWSGI 部署时，`runtime_state` 是模块级单例——黑名单、缓存、客户端列表等共享状态须注意并发安全（已用 `blacklist_lock`、`stream_cancel_lock`、`model_meta_timer_lock` 保护）。
 - `start-dev.sh` 预检端口绑定权限，在受限沙箱/容器里会直接报错退出——遇到"permission:"提示说明环境不允许本地端口监听。
 - 生产部署时 `admin.enable_sql_execute` 必须保持 `false`，否则暴露 SQL 后门。
 - 飞书回调地址变更时同时更新 `quant.feishu_*` 与 `routes/quant/im_memory_routes.py` 中注册的路径。
 - 量化子系统 DB schema 变更必须走 `tools/quant_db_migrate.py`（见 §3.5.1）；禁止靠 peewee 自动建表补缺列。
 - **禁止把生产密钥写进仓库**：`conf/conf.ini.tpl` 只放占位符，同花顺 / MiniMax / 飞书 / OpenAI 等 Key 一律留在服务器 `conf/conf.ini` 或环境变量；量化数据库备份（`*.db.bak*`）、`.priv` 私钥文件不得提交（已在 `.gitignore` 中拦截）。历史提交里出现过的明文密码，**必须轮换密码**，仅删除文件无效。
-- `doc/` 与 `cyf/project/server/docs/` 下的 markdown 文件**不被** `.gitignore`，是有意保留的专题文档；改动时同步更新本文件"参考文档索引"小节。`.claude/` 已被 `.gitignore` 排除，本地仅保留 `settings.local.json`。
+- `doc/` 与 `cyf/project/server/docs/` 下的 markdown 文件**不被** `.gitignore`，是有意保留的专题文档；改动时同步更新本文件"参考文档索引"小节。`.claude/` 已被 `.gitignore` 排除，本地含 `settings.local.json`、`launch.json`、`plans/`。
 
 ---
 

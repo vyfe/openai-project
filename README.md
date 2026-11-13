@@ -17,7 +17,7 @@
 - 多用户、多 Key、模型过滤与缓存
 - SSE 流式输出 + 浏览器 AbortController 取消
 - 文件上传（`txt/pdf/png/jpg/jpeg/gif/ppt/pptx/md`，单文件最大 50MB）
-- JWT 双 Token 鉴权 + 401 自动刷新
+- 双 Token（opaque access/refresh）鉴权 + 401 自动刷新
 - Gemini `[FILE_URL:...]` 文本标记自动转多模态入参
 - 长会话 `/handoff` 上下文压缩（Claude 驱动）
 
@@ -41,7 +41,7 @@
 
 | 层 | 技术 |
 | --- | --- |
-| 后端 Web | Python 3 · Flask · `openai` SDK · peewee (SQLite) · JWT |
+| 后端 Web | Python 3 · Flask · `openai` SDK · peewee (SQLite) · 双 Token 鉴权 |
 | 量化 | 自研多 provider · APScheduler 风格调度 · 飞书 SDK |
 | 前端 | Vue 3 · TypeScript · Vite · Pinia · Element Plus · TailwindCSS v4 · Vue I18n · highlight.js · KaTeX · marked |
 
@@ -189,7 +189,7 @@ server {
 | `runtime_log` | `root_dir` / `level` / `*_retention_days` / `compress_backups` | 滚动日志策略 |
 | `admin` | `enable_sql_execute` | SQL 后门开关（**生产务必 `false`**） |
 | `api` | `api_key` / `api_host` / `usd_to_cny_rate` / `api_param_mode` | OpenAI Key / Host（多值逗号分隔）/ 汇率 / 时间格式 |
-| `auth` | `access_token_ttl_seconds` / `refresh_token_ttl_seconds` | JWT TTL |
+| `auth` | `access_token_ttl_seconds` / `refresh_token_ttl_seconds` | Token TTL（秒） |
 | `model_filter` | `cache_ttl` / `exclude_keywords` / `meta_refresh_*` | 实际生效的过滤仅 `exclude_keywords`（`include_prefixes` 已废弃，未被代码读取） |
 | `claude` | `api_key` / `api_host` / `api_version` | Claude 独立配置；留空回退 `[api]` |
 
@@ -233,7 +233,7 @@ QUANT_LOGIN_PASSWORD=<平台登录密码>
 ## 7. 安全
 
 - 用户认证默认走数据库（`use_db_auth=True`），`users` 段是单一来源。
-- JWT 双 Token：`Authorization: Bearer <access_token>`，刷新走 `POST /never_guess_my_usage/token/refresh`。
+- 双 Token（access/refresh 均为随机不透明串，存库）：`Authorization: Bearer <access_token>`，刷新走 `POST /never_guess_my_usage/token/refresh`。
 - 文件上传白名单硬编码在 `conf/runtime.py::RuntimeState.allowed_extensions`。
 - SQL 后门必须保持关闭（生产由运维侧审计 `enable_sql_execute` 配置）。
 - `cyf/project/*/conf/conf.ini` 与 `cyf/project/*/conf/key.*` 已在 `.gitignore` 内，禁止提交。
