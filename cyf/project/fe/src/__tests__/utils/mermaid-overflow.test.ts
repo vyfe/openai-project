@@ -9,7 +9,6 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-import { renderMermaidPlaceholders } from '@/utils/mermaid'
 import { extractMermaidBlocks } from '@/utils/mermaidExtract'
 
 
@@ -22,11 +21,20 @@ async function waitFor(predicate: () => boolean, timeoutMs = 3000): Promise<void
 }
 
 describe('v-html 重渲染覆盖场景', () => {
-  beforeEach(async () => {
-    const mod = await import('@/utils/mermaid')
-    mod._clearMermaidCacheForTest()
+  beforeEach(() => {
     document.body.innerHTML = ''
   })
+
+  // 只验证 observer → 重新渲染的接线；mermaid 本身在 happy-dom 下渲染不稳定，
+  // 真正的渲染由 src/__tests__/utils/mermaid.test.ts 覆盖。
+  const fakeRender = (root: HTMLElement) => {
+    root.querySelectorAll<HTMLElement>('.mermaid-diagram[data-source]').forEach((el) => {
+      if (el.dataset.rendered === '1') return
+      el.innerHTML = '<svg class="mermaid-test-svg"></svg>'
+      el.dataset.rendered = '1'
+      el.classList.add('mermaid-rendered')
+    })
+  }
 
   it('新插入的占位 div 应被 MutationObserver 捕获并重新渲染', async () => {
     document.body.innerHTML = `<div class="messages-container"></div>`
@@ -37,7 +45,7 @@ describe('v-html 重渲染覆盖场景', () => {
       for (const mutation of mutations) {
         for (const node of Array.from(mutation.addedNodes)) {
           if (node.nodeType === 1 && (node as Element).classList?.contains('mermaid-diagram')) {
-            renderMermaidPlaceholders(container).catch(() => {})
+            fakeRender(container)
             return
           }
         }

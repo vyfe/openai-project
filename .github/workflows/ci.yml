@@ -52,6 +52,8 @@ jobs:
               tail -120 /tmp/pytest.log
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+            # 无日志权限时也能从 job annotation 看到失败原因
+            echo "::error::pytest exit $code: $(tail -12 /tmp/pytest.log | tr '\n' ' ' | cut -c1-800)"
           fi
           exit "$code"
 
